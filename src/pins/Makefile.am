@@ -4,4 +4,4 @@ LDADD = ../libcore.a @LIBCRYPTO_LIBS@ @JANSSON_LIBS@
 pindir = @CLEVIS_PINDIR@
 pin_PROGRAMS = password sss
 
-sss_SOURCES = sss_algo.c sss_algo.h sss_main.c
+sss_SOURCES = sss_algo.c sss_algo.h sss.c

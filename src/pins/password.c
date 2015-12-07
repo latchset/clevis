@@ -52,18 +52,13 @@ main(int argc, char *argv[])
   buf_auto_t *key = NULL;
   json_error_t err = {};
 
-  json_set_alloc_funcs(mem_malloc, mem_free);
-  OpenSSL_add_all_algorithms();
-
-  for (int c; (c = getopt(argc, argv, "hd:")) != -1; ) {
-    switch (c) {
-    case 'd': break;
-    default: goto usage;
-    }
+  if (argc != 3) {
+    fprintf(stderr, "Usage: %s COMMAND BRANCH\n", argv[0]);
+    return EXIT_FAILURE;
   }
 
-  if (argc - optind != 2)
-    goto usage;
+  json_set_alloc_funcs(mem_malloc, mem_free);
+  OpenSSL_add_all_algorithms();
 
   command = argv[1];
   branch = argv[2];
@@ -131,9 +126,4 @@ main(int argc, char *argv[])
 
   EVP_cleanup();
   return EXIT_SUCCESS;
-
-usage:
-  fprintf(stderr, "Usage: %s [-h] [-d pindir] COMMAND BRANCH\n", argv[0]);
-  EVP_cleanup();
-  return EXIT_FAILURE;
 }

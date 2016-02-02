@@ -13,6 +13,7 @@
 .cproject
 .deps
 .dirstamp
+.libs/
 .project
 .settings
 aclocal.m4
@@ -33,5 +34,6 @@ ltmain.sh
 Makefile.in
 Makefile
 missing
+src/clevis
 tags
 test-driver

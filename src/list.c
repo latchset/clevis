@@ -16,16 +16,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "list.h"
+#include <stddef.h>
 
-#include "json.h"
-#include "pin.h"
+void
+list_add_after(list_t *list, list_t *item)
+{
+    item->next = list->next;
+    item->prev = list;
+    list->next->prev = item;
+    list->next = item;
+}
 
-json_t *
-ops_provision(const char *branch, const json_t *cfg, const buf_t *key);
+list_t *
+list_pop(list_t *item)
+{
+    if (item == NULL)
+        return NULL;
 
-pin_t *
-ops_acquire_start(const char *branch, const json_t *data);
-
-buf_t *
-ops_acquire_finish(pin_t **pin, const json_t *data);
+    item->prev->next = item->next;
+    item->next->prev = item->prev;
+    return item;
+}

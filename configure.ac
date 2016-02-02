@@ -3,12 +3,12 @@ AC_INIT(clevis, 1)
 AC_CONFIG_MACRO_DIRS([m4])
 AC_CANONICAL_SYSTEM
 AC_PROG_CC_C99
-AC_PROG_RANLIB
 
 AM_INIT_AUTOMAKE([subdir-objects foreign no-dist-gzip dist-bzip2 parallel-tests])
 AM_SILENT_RULES([yes])
 AM_PROG_CC_C_O
-AM_PROG_AR
+
+LT_INIT([disable-static])
 
 PKG_PROG_PKG_CONFIG([0.25])
 
@@ -35,7 +35,7 @@ CLEVIS_CFLAGS="\
 "
 AC_SUBST([CLEVIS_CFLAGS])
 
-AC_SUBST([CLEVIS_PINDIR], [${libexecdir}/${PACKAGE_NAME}])
+AC_SUBST([CLEVIS_PINDIR], [${libdir}/${PACKAGE_NAME}])
 AX_DEFINE_DIR(CLEVIS_PINDIR, CLEVIS_PINDIR, [Location of pins (plugins)])
 
 AC_CONFIG_FILES([Makefile src/Makefile src/pins/Makefile])

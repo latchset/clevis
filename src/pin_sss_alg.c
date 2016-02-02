@@ -16,16 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "sss_algo.h"
-#include "../mem.h"
+#include "pin_sss_alg.h"
 
 #include <openssl/bn.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #define BIGNUM_auto __attribute__((cleanup(BN_cleanup))) BIGNUM
 
-struct sss {
+struct sss_t {
   size_t threshold;
   BIGNUM *p;
   BIGNUM *e[];
@@ -38,10 +38,10 @@ BN_cleanup(BIGNUM **bnp)
     BN_clear_free(*bnp);
 }
 
-static inline buf_t *
+static inline clevis_buf_t *
 bn2buf(const BIGNUM *bn, size_t size)
 {
-  buf_auto_t *buf = NULL;
+  clevis_buf_t *buf = NULL;
   size_t off = 0;
   int r;
 
@@ -52,108 +52,73 @@ bn2buf(const BIGNUM *bn, size_t size)
   if ((size_t) r < size)
     off = size - r;
 
-  buf = buf_new(NULL, size);
+  buf = clevis_buf_make(size, NULL);
   if (!buf)
     return NULL;
 
   r = BN_bn2bin(bn, &buf->buf[off]);
-  if (r < 0)
+  if (r < 0) {
+    clevis_buf_free(buf);
     return NULL;
+  }
 
-  return buf_auto_steal(buf);
-}
-
-static inline json_t *
-buf2json_new(buf_t *buf)
-{
-  buf_auto_t *scope = buf;
-  return json_binary(scope);
+  return buf;
 }
 
 static inline bool
-json2bn(const json_t *json, BIGNUM *bn)
+buf2bn(const clevis_buf_t *buf, BIGNUM *bn)
 {
-  buf_auto_t *buf = NULL;
-
-  if (!json)
-    return false;
-
-  switch (json->type) {
-  case JSON_INTEGER:
-    return BN_set_word(bn, json_integer_value(json)) > 0;
-
-  case JSON_STRING:
-    buf = json_binary_value(json);
-    if (!buf)
-      return false;
-
-    return BN_bin2bn(buf->buf, buf->len, bn) == bn;
-
-  default:
-    return false;
-  }
+  return BN_bin2bn(buf->buf, buf->len, bn) == bn;
 }
 
 sss_t *
-sss_generate(json_t *key_bytes, json_t *threshold)
+sss_generate(size_t key_bytes, size_t threshold)
 {
-  sss_auto_t *sss = NULL;
-  json_int_t key = 0;
-  json_int_t thr = 0;
+  sss_t *sss = NULL;
 
-  if (!json_is_integer(key_bytes) || !json_is_integer(threshold))
+  if (key_bytes == 0 || threshold < 1)
     return NULL;
 
-  key = json_integer_value(key_bytes);
-  thr = json_integer_value(threshold);
-  if (key < 16 || thr < 1)
-    return NULL;
-
-  sss = mem_malloc(offsetof(sss_t, e) + sizeof(BIGNUM *) * thr);
+  sss = malloc(offsetof(sss_t, e) + sizeof(BIGNUM *) * threshold);
   if (!sss)
     return NULL;
-  sss->threshold = thr;
+  sss->threshold = threshold;
 
   sss->p = BN_new();
   if (!sss->p)
-    return NULL;
+    goto error;
 
-  if (!BN_generate_prime(sss->p, key * 8, 1, NULL, NULL, NULL, NULL))
-    return NULL;
+  if (!BN_generate_prime(sss->p, key_bytes * 8, 1, NULL, NULL, NULL, NULL))
+    goto error;
 
-  for (json_int_t i = 0; i < thr; i++) {
+  for (size_t i = 0; i < threshold; i++) {
     sss->e[i] = BN_new();
     if (!sss->e[i])
-      return NULL;
+      goto error;
 
     if (BN_rand_range(sss->e[i], sss->p) <= 0)
-      return NULL;
+      goto error;
   }
 
-  return sss_auto_steal(sss);
+  return sss;
+
+error:
+  sss_free(sss);
+  return NULL;
 }
 
-json_t *
-sss_k(const sss_t *sss)
-{
-  return buf2json_new(bn2buf(sss->e[0], BN_num_bytes(sss->p)));
-}
-
-json_t *
+clevis_buf_t *
 sss_p(const sss_t *sss)
 {
-  return buf2json_new(bn2buf(sss->p, BN_num_bytes(sss->p)));
+  return bn2buf(sss->p, BN_num_bytes(sss->p));
 }
 
-buf_t *
-sss_y(const sss_t *sss, uint64_t x, BN_CTX *ctx)
+clevis_buf_t *
+sss_y(const sss_t *sss, size_t x, BN_CTX *ctx)
 {
   BIGNUM_auto *tmp = NULL;
   BIGNUM_auto *xx = NULL;
   BIGNUM_auto *yy = NULL;
-
-  if (x == 0)
-    return NULL;
 
   for (unsigned long i = 0; i < sss->threshold; i++) {
     if (BN_cmp(sss->p, sss->e[i]) <= 0)
@@ -201,74 +166,57 @@ sss_free(sss_t *sss)
       BN_clear_free(sss->e[i]);
   }
 
-  mem_free(sss);
+  free(sss);
 }
 
-void
-sss_cleanup(sss_t **sssp)
+clevis_buf_t *
+sss_recover(const clevis_buf_t *p, const list_t *points, BN_CTX *ctx)
 {
-  if (sssp)
-    sss_free(*sssp);
-}
+  BIGNUM_auto *acc = BN_new();
+  BIGNUM_auto *tmp = BN_new();
+  BIGNUM_auto *pp = BN_new();
+  BIGNUM_auto *xo = BN_new(); /* Outer X */
+  BIGNUM_auto *yo = BN_new(); /* Outer Y */
+  BIGNUM_auto *xi = BN_new(); /* Inner X */
+  BIGNUM_auto *k = BN_new();
 
-json_t *
-sss_recover(const json_t *p, const json_t *points, BN_CTX *ctx)
-{
-  BIGNUM_auto *acc = NULL;
-  BIGNUM_auto *tmp = NULL;
-  BIGNUM_auto *pp = NULL;
-  BIGNUM_auto *xi = NULL;
-  BIGNUM_auto *xj = NULL;
-  BIGNUM_auto *yi = NULL;
-  BIGNUM_auto *k = NULL;
-
-  if (!json_is_array(points))
+  if (!acc || !tmp || !pp || !xo || !yo || !xi || !k)
     return NULL;
 
-  acc = BN_new();
-  tmp = BN_new();
-  pp = BN_new();
-  xi = BN_new();
-  xj = BN_new();
-  yi = BN_new();
-  k = BN_new();
-  if (!acc || !tmp || !pp || !xi || !xj || !yi || !k)
-    return NULL;
-
-  if (!json2bn(p, pp))
+  if (!buf2bn(p, pp))
     return NULL;
 
   if (BN_zero(k) <= 0)
     return NULL;
 
-  for (unsigned long i = 0; i < json_array_size(points); i++) {
+  LIST_FOREACH(points, sss_point_t, pnto, list) {
     if (BN_one(acc) <= 0)
       return NULL;
 
-    if (!json2bn(json_array_get(json_array_get(points, i), 0), xi))
+    if (BN_set_word(xo, pnto->x) <= 0)
       return NULL;
-    if (!json2bn(json_array_get(json_array_get(points, i), 1), yi))
+    if (!buf2bn(pnto->y, yo))
       return NULL;
 
-    for (unsigned long j = 0; j < json_array_size(points); j++) {
-      if (j == i)
+    LIST_FOREACH(points, sss_point_t, pnti, list) {
+      if (pnto == pnti)
         continue;
 
-      if (!json2bn(json_array_get(json_array_get(points, j), 0), xj))
-        return NULL;
+      if (BN_set_word(xi, pnti->x) <= 0)
+            return NULL;
 
-      /* acc *= (0 - x[j]) / (x[i] - x[j]) */
+      /* acc *= (0 - xi) / (xo - xi) */
 
       if (BN_zero(tmp) <= 0)
         return NULL;
 
-      if (BN_mod_sub(tmp, tmp, xj, pp, ctx) <= 0)
+      if (BN_mod_sub(tmp, tmp, xi, pp, ctx) <= 0)
        	return NULL;
 
       if (BN_mod_mul(acc, acc, tmp, pp, ctx) <= 0)
         return NULL;
 
-      if (BN_mod_sub(tmp, xi, xj, pp, ctx) <= 0)
+      if (BN_mod_sub(tmp, xo, xi, pp, ctx) <= 0)
         return NULL;
 
       if (BN_mod_inverse(tmp, tmp, pp, ctx) != tmp)
@@ -280,12 +228,12 @@ sss_recover(const json_t *p, const json_t *points, BN_CTX *ctx)
 
     /* k += acc * y[i] */
 
-    if (BN_mod_mul(acc, acc, yi, pp, ctx) <= 0)
+    if (BN_mod_mul(acc, acc, yo, pp, ctx) <= 0)
       return NULL;
 
     if (BN_mod_add(k, k, acc, pp, ctx) <= 0)
       return NULL;
   }
 
-  return buf2json_new(bn2buf(k, BN_num_bytes(pp)));
+  return bn2buf(k, BN_num_bytes(pp));
 }

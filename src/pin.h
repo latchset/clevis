@@ -18,19 +18,18 @@
 
 #pragma once
 
-#include "json.h"
+#include "clevis.h"
 
-typedef struct pin pin_t;
+typedef struct {
+  clevis_pin_f *pin;
+  void *dll;
+} pin_t;
+
+bool
+pin_name(json_t *layout);
 
 pin_t *
-pin_start(const char *name, const char *command, const char *branch,
-	  const json_t *req);
-
-int
-pin_fd(const pin_t *pin);
+pin_load(const char *type);
 
 void
-pin_cancel(pin_t **pin);
-
-json_t *
-pin_finish(pin_t **pin);
+pin_free(pin_t *pin);

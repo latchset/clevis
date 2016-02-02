@@ -16,32 +16,30 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "mem.h"
-#include "buf.h"
+#pragma once
 
-static inline buf_t *
-hdr(void *mem)
-{
-  intptr_t addr = (intptr_t) mem;
-  addr -= offsetof(buf_t, buf);
-  return (buf_t *) addr;
-}
+#include "clevis.h"
+#include "list.h"
+#include <openssl/bn.h>
 
-void *
-mem_malloc(size_t size)
-{
-  buf_t *buf;
+typedef struct sss_t sss_t;
+typedef struct {
+  list_t list;
+  size_t x;
+  clevis_buf_t *y;
+} sss_point_t;
 
-  buf = buf_new(NULL, size);
-  if (!buf)
-    return NULL;
+sss_t *
+sss_generate(size_t key_bytes, size_t threshold);
 
-  return buf->buf;
-}
+clevis_buf_t *
+sss_p(const sss_t *sss);
+
+clevis_buf_t *
+sss_y(const sss_t *sss, size_t x, BN_CTX *ctx);
 
 void
-mem_free(void *mem)
-{
-  if (mem)
-    buf_free(hdr(mem));
-}
+sss_free(sss_t *sss);
+
+clevis_buf_t *
+sss_recover(const clevis_buf_t *p, const list_t *points, BN_CTX *ctx);

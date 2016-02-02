@@ -18,14 +18,16 @@
 
 #pragma once
 
-#include <stdbool.h>
-#include "json.h"
+#include "clevis.h"
 
 size_t
-wrap_defaults(json_t *data, size_t key_len);
+crypto_set_cipher(const char *str);
 
-buf_t *
-wrap_enc(const json_t *data, buf_t *key, const char *aad, const buf_t *pt);
+bool
+crypto_set_kdf_time(const char *str);
 
-buf_t *
-wrap_dec(const json_t *data, buf_t *key, const char *aad, const buf_t *ct);
+json_t *
+crypto_encrypt(const clevis_buf_t *key, const clevis_buf_t *pt);
+
+clevis_buf_t *
+crypto_decrypt(const clevis_buf_t *key, const json_t *ct);

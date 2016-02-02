@@ -16,134 +16,144 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include "pin.h"
-#include "mem.h"
+#include "list.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <dirent.h>
-#include <signal.h>
+#include <pthread.h>
+
+#include <dlfcn.h>
+#include <limits.h>
 #include <string.h>
-#include <unistd.h>
 
-struct pin {
-  pid_t pid;
-  FILE *out;
-};
+#define _STR(s) # s
+#define STR(s) _STR(s)
+
+typedef struct {
+  list_t list;
+  char name[];
+} entry_t;
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static list_t names = LIST_INIT(names);
+
+static const entry_t *
+find(const char *name)
+{
+  LIST_FOREACH(&names, entry_t, e, list) {
+    if (strcmp(name, e->name) == 0)
+      return e;
+  }
+
+  return NULL;
+}
+
+static const char *
+propose(const char *name, bool iter)
+{
+  unsigned char i = 0;
+  entry_t *tmp = NULL;
+
+  tmp = calloc(1, offsetof(entry_t, name) + strlen(name) + 4);
+  if (!tmp)
+    return NULL;
+
+  strcpy(tmp->name, name);
+
+  pthread_mutex_lock(&mutex);
+
+  while (iter && i < UCHAR_MAX && find(tmp->name))
+    snprintf(tmp->name, strlen(name) + 3, "%s%hhu", name, ++i);
+
+  if (find(tmp->name)) {
+    free(tmp);
+    tmp = NULL;
+  } else {
+    list_add_after(&names, &tmp->list);
+  }
+
+  pthread_mutex_unlock(&mutex);
+  return tmp ? tmp->name : NULL;
+}
+
+bool
+pin_name(json_t *layout)
+{
+  json_t *name = NULL;
+
+  name = json_incref(json_object_get(layout, "name"));
+  if (name) {
+    if (!json_is_string(name))
+      return false;
+
+    if (!propose(json_string_value(name), false))
+      return false;
+  } else {
+    name = json_object_get(layout, "type");
+    if (!json_is_string(name))
+      return false;
+
+    name = json_string(propose(json_string_value(name), true));
+    if (!name)
+      return false;
+  }
+
+  return json_object_set_new(layout, "name", name) >= 0;
+}
 
 pin_t *
-pin_start(const char *name, const char *command, const char *branch,
-          const json_t *req)
+pin_load(const char *type)
 {
   const char *pindir = NULL;
-  int out[2] = { -1, -1 };
-  int in[2] = { -1, -1 };
-  char *json = NULL;
+  char path[PATH_MAX] = {};
   pin_t *pin = NULL;
-  pid_t pid = -1;
+  int r;
 
   pindir = getenv("CLEVIS_PINDIR");
   if (!pindir)
     pindir = CLEVIS_PINDIR;
 
-  if (strlen(pindir) + strlen(name) + 2 >= PATH_MAX)
+  r = snprintf(path, PATH_MAX, "%s/%s.so", pindir, type);
+  if (r < (int) strlen(type) + 4 || r == PATH_MAX)
     return NULL;
 
-  json = json_dumps(req, JSON_COMPACT);
-  if (!json)
-    return NULL;
-
-  if (pipe(out) != 0)
-    goto error;
-
-  if (pipe(in) != 0)
-    goto error;
-
-  pid = fork();
-  if (pid < 0)
-    goto error;
-
-  if (pid == 0) {
-    char path[PATH_MAX];
-
-    dup2(out[0], STDIN_FILENO);
-    dup2(in[1], STDOUT_FILENO);
-    close(out[1]);
-    close(in[0]);
-
-    strcpy(path, pindir);
-    strcat(path, "/");
-    strcat(path, name);
-
-    exit(execl(path, path, command, branch, NULL));
-  }
-
-  if (write(out[1], json, strlen(json)) != (ssize_t) strlen(json))
-    goto error;
-
-  pin = calloc(1, sizeof(*pin));
+  pin = malloc(sizeof(*pin));
   if (!pin)
-    goto error;
-  pin->pid = pid;
-  pin->out = fdopen(in[0], "r");
-  if (!pin->out) {
+    return NULL;
+
+  pthread_mutex_lock(&mutex);
+  pin->dll = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+  pthread_mutex_unlock(&mutex);
+  if (!pin->dll) {
+    if (getenv("CLEVIS_DEBUG"))
+      fprintf(stderr, "%s\n", dlerror());
+
     free(pin);
-    goto error;
+    return NULL;
   }
 
-  close(out[0]);
-  close(out[1]);
-  close(in[1]);
-  mem_free(json);
+  pthread_mutex_lock(&mutex);
+  pin->pin = dlsym(pin->dll, STR(CLEVIS_PIN));
+  pthread_mutex_unlock(&mutex);
+  if (!pin->pin) {
+    if (getenv("CLEVIS_DEBUG"))
+      fprintf(stderr, "Symbol not found in %s!\n", path);
+
+    dlclose(pin->pin);
+    free(pin);
+    return NULL;
+  }
+
   return pin;
-
-error:
-  if (pid >= 0) {
-    kill(pid, SIGTERM);
-    waitpid(pid, NULL, 0);
-  }
-
-  close(out[0]);
-  close(out[1]);
-  close(in[0]);
-  close(in[1]);
-  mem_free(json);
-  return NULL;
-}
-
-int
-pin_fd(const pin_t *pin)
-{
-  return pin ? fileno(pin->out) : -1;
 }
 
 void
-pin_cancel(pin_t **pin)
+pin_free(pin_t *pin)
 {
-  if (!pin || !*pin)
-    return;
+  if (pin) {
+    pthread_mutex_lock(&mutex);
+    dlclose(pin->dll);
+    pthread_mutex_unlock(&mutex);
+  }
 
-  kill((*pin)->pid, SIGTERM);
-  waitpid((*pin)->pid, NULL, 0);
-  fclose((*pin)->out);
-  free(*pin);
-  *pin = NULL;
-}
-
-json_t *
-pin_finish(pin_t **pin)
-{
-  json_error_t err = {};
-  json_t *rep = NULL;
-
-  rep = json_loadf((*pin)->out, JSON_DECODE_ANY, &err);
-  if (!rep)
-    kill((*pin)->pid, SIGTERM);
-
-  waitpid((*pin)->pid, NULL, 0);
-  fclose((*pin)->out);
-  free(*pin);
-  *pin = NULL;
-  return rep;
+  free(pin);
 }

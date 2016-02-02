@@ -18,27 +18,7 @@
 
 #pragma once
 
-#include <alloca.h>
-#include <stdalign.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "clevis.h"
 
-#define buf_auto_t __attribute__((cleanup(buf_cleanup))) buf_t
-#define buf_auto_steal(p) ({ buf_t *__tmp = p; p = NULL; __tmp; })
-
-typedef struct {
-  size_t len;
-  alignas(16) uint8_t buf[];
-} buf_t;
-
-buf_t *
-buf_new(const uint8_t *data, size_t len);
-
-void
-buf_free(buf_t *buf);
-
-void
-buf_cleanup(buf_t **bufp);
-
-buf_t *
-buf_random(size_t len);
+bool
+pwd(bool lcl, clevis_pwd_vfy *vfy, clevis_pwd_t *misc);

@@ -36,6 +36,14 @@ typedef struct {
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static list_t names = LIST_INIT(names);
 
+__attribute__((destructor))
+static void
+cleanup(void)
+{
+  LIST_FOREACH(&names, entry_t, e, list)
+    free(e);
+}
+
 static const entry_t *
 find(const char *name)
 {

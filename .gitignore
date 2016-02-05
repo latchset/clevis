@@ -20,6 +20,7 @@ aclocal.m4
 ar-lib
 autom4te.cache
 build
+clevis.pc
 compile
 config.guess
 config.log

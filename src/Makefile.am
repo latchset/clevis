@@ -1,4 +1,4 @@
-AM_CFLAGS = @CLEVIS_CFLAGS@ @LIBCRYPTO_CFLAGS@ @JANSSON_CFLAGS@
+AM_CFLAGS = @CLEVIS_CFLAGS@ @LIBCRYPTO_CFLAGS@ @JANSSON_CFLAGS@ @CURL_CFLAGS@
 
 include_HEADERS = clevis.h
 
@@ -16,7 +16,7 @@ clevis_LDADD = libcore.la
 clevis_SOURCES = clevis.c crypto.c crypto.h pwd.c pwd.h
 
 pindir = @CLEVIS_PINDIR@
-pin_LTLIBRARIES = pwd.la sss.la
+pin_LTLIBRARIES = pwd.la sss.la http.la
 
 pwd_la_SOURCES = pin_pwd.c
 pwd_la_LDFLAGS = -module -avoid-version
@@ -25,3 +25,7 @@ pwd_la_LIBADD = libclevis.la
 sss_la_SOURCES = pin_sss_alg.c pin_sss_alg.h pin_sss.c
 sss_la_LDFLAGS = -module -avoid-version
 sss_la_LIBADD = libcore.la
+
+http_la_SOURCES = pin_http.c
+http_la_LDFLAGS = -module -avoid-version
+http_la_LIBADD = libclevis.la @CURL_LIBS@

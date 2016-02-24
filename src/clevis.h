@@ -30,17 +30,29 @@ typedef struct clevis_acquire_f clevis_acquire_f;
 typedef struct clevis_buf_f clevis_buf_f;
 typedef struct clevis_pin_f clevis_pin_f;
 
+typedef struct clevis_decrypt_result_t clevis_decrypt_result_t;
 typedef struct clevis_pwd_t clevis_pwd_t;
 typedef struct clevis_buf_t clevis_buf_t;
 
 typedef bool clevis_pwd_vfy(const clevis_buf_t *pwd, clevis_pwd_t *misc);
+
+enum decrypt_result {
+  DECRYPT_SUCCESS,
+  DECRYPT_FAIL_STOP,
+  DECRYPT_FAIL_TRYAGAIN
+};
+
+struct clevis_decrypt_result_t {
+  enum decrypt_result result;
+  clevis_buf_t *pt;
+};
 
 struct clevis_provision_f {
   json_t *(*encrypt)(const clevis_buf_t *key, const clevis_buf_t *pt);
 };
 
 struct clevis_acquire_f {
-  clevis_buf_t *(*decrypt)(const clevis_buf_t *key, const json_t *ct);
+  clevis_decrypt_result_t (*decrypt)(const clevis_buf_t *key, const json_t *ct);
   bool (*password)(bool lcl, clevis_pwd_vfy *vfy, clevis_pwd_t *misc);
 };
 

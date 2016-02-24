@@ -205,17 +205,15 @@ egress:
 }
 
 static clevis_buf_t *
-decrypt(const EVP_CIPHER *cphr, const clevis_buf_t *key, const json_t *ct)
+decrypt(const EVP_CIPHER *cphr, const clevis_buf_t *key, const clevis_buf_t *buf)
 {
   EVP_CIPHER_CTX *ctx = NULL;
   clevis_buf_t *out = NULL;
-  clevis_buf_t *buf = NULL;
   clevis_buf_t *pt = NULL;
   int ivlen = 0;
   int outl = 0;
   int len = 0;
 
-  buf = clevis_buf_decode(ct);
   if (!buf)
     return NULL;
 
@@ -255,7 +253,6 @@ decrypt(const EVP_CIPHER *cphr, const clevis_buf_t *key, const json_t *ct)
 
 egress:
   EVP_CIPHER_CTX_free(ctx);
-  clevis_buf_free(buf);
   clevis_buf_free(pt);
   return out;
 }
@@ -355,7 +352,7 @@ error:
   return NULL;
 }
 
-clevis_buf_t *
+clevis_decrypt_result_t
 crypto_decrypt(const clevis_buf_t *key, const json_t *ct)
 {
   const EVP_CIPHER *cphr = NULL;
@@ -363,24 +360,30 @@ crypto_decrypt(const clevis_buf_t *key, const json_t *ct)
   const EVP_MD *md = NULL;
   clevis_buf_t *dkey = NULL;
   clevis_buf_t *salt = NULL;
-  clevis_buf_t *pt = NULL;
+  clevis_buf_t *ct_decoded = NULL;
+  clevis_decrypt_result_t result = { DECRYPT_FAIL_STOP, NULL };
 
   cphr = json2cipher(json_object_get(ct, "cipher"));
   if (!cphr)
-    return NULL;
+    return result;
 
   md = json2md(json_object_get(ct, "kdf"));
   if (!md)
-    return NULL;
+    return result;
 
   iter = json_object_get(ct, "iter");
   if (!json_is_integer(iter) || json_integer_value(iter) <= 0)
-    return NULL;
+    return result;
 
   salt = clevis_buf_decode(json_object_get(ct, "salt"));
   if (!salt)
-    return NULL;
+    return result;
 
+  ct_decoded = clevis_buf_decode(json_object_get(ct, "ct"));
+  if (!ct_decoded)
+    goto egress;
+
+  result.result = DECRYPT_FAIL_TRYAGAIN;
   dkey = clevis_buf_make(EVP_CIPHER_key_length(cphr), NULL);
   if (!dkey)
     goto egress;
@@ -388,10 +391,13 @@ crypto_decrypt(const clevis_buf_t *key, const json_t *ct)
   if (!pbkdf2(md, json_integer_value(iter), key, salt, dkey))
     goto egress;
 
-  pt = decrypt(cphr, dkey, json_object_get(ct, "ct"));
+  result.pt = decrypt(cphr, dkey, ct_decoded);
+  if (result.pt != NULL)
+    result.result = DECRYPT_SUCCESS;
 
 egress:
   clevis_buf_free(dkey);
   clevis_buf_free(salt);
-  return pt;
+  clevis_buf_free(ct_decoded);
+  return result;
 }

@@ -259,7 +259,7 @@ acquire(const clevis_acquire_f *funcs, const json_t *data)
   if (!okey)
     goto error;
 
-  ikey = funcs->decrypt(okey, json_object_get(data, "ct"));
+  ikey = funcs->decrypt(okey, json_object_get(data, "ct")).pt;
 
 error:
   curl_slist_free_all(headers);

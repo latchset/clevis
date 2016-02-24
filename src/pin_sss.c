@@ -429,10 +429,10 @@ egress:
     acq_free(acq);
 
   if (key) {
-    clevis_buf_t *tmp = NULL;
-    tmp = funcs->decrypt(key, json_object_get(data, "ct"));
+    clevis_decrypt_result_t result =
+      funcs->decrypt(key, json_object_get(data, "ct"));
     clevis_buf_free(key);
-    key = tmp;
+    key = result.pt;
   }
 
   clevis_buf_free(prime);

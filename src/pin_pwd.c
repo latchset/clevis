@@ -32,8 +32,10 @@ struct clevis_pwd_t {
 static bool
 verify(const clevis_buf_t *pwd, clevis_pwd_t *arg)
 {
-  arg->out = arg->funcs->decrypt(pwd, arg->data);
-  return arg->out != NULL;
+  clevis_decrypt_result_t result = arg->funcs->decrypt(pwd, arg->data);
+  if (result.result == DECRYPT_SUCCESS)
+    arg->out = result.pt;
+  return result.result != DECRYPT_FAIL_TRYAGAIN;
 }
 
 static json_t *

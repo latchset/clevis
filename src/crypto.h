@@ -29,5 +29,5 @@ crypto_set_kdf_time(const char *str);
 json_t *
 crypto_encrypt(const clevis_buf_t *key, const clevis_buf_t *pt);
 
-clevis_buf_t *
+clevis_decrypt_result_t
 crypto_decrypt(const clevis_buf_t *key, const json_t *ct);

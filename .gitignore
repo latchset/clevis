@@ -20,7 +20,6 @@ aclocal.m4
 ar-lib
 autom4te.cache
 build
-clevis.pc
 compile
 config.guess
 config.log
@@ -35,6 +34,12 @@ ltmain.sh
 Makefile.in
 Makefile
 missing
-src/clevis
+src/clevis-pin
+src/clevis-pin-http
+src/clevis-pin-sss
+src/clevis-pin-tang
+src/clevis-pin-test
 tags
 test-driver
+udisks2/clevis-luks-udisks2
+udisks2/clevis-luks-udisks2.desktop

@@ -1,3 +1,4 @@
+/* vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80: */
 /*
  * Copyright (c) 2015 Red Hat, Inc.
  * Author: Nathaniel McCallum <npmccallum@redhat.com>
@@ -16,25 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "list.h"
-#include <stddef.h>
+#include <jose/jose.h>
 
-void
-list_add_after(list_t *list, list_t *item)
-{
-    item->next = list->next;
-    item->prev = list;
-    list->next->prev = item;
-    list->next = item;
-}
-
-list_t *
-list_pop(list_t *item)
-{
-    if (item == NULL)
-        return NULL;
-
-    item->prev->next = item->next;
-    item->next->prev = item->prev;
-    return item;
-}
+jose_buf_t *
+readall(FILE *file);

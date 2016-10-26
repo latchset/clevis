@@ -1,31 +1,27 @@
-AM_CFLAGS = @CLEVIS_CFLAGS@ @LIBCRYPTO_CFLAGS@ @JANSSON_CFLAGS@ @CURL_CFLAGS@
+AM_CFLAGS = @CLEVIS_CFLAGS@ @jose_CFLAGS@
+LDADD = @jose_LIBS@ libreadall.la
 
-include_HEADERS = clevis.h
+EXTRA_DIST = clevis.in clevis-decrypt.in clevis-encrypt.in clevis-bind-luks.in
+CLEANFILES = $(bin_SCRIPTS)
 
-lib_LTLIBRARIES = libclevis.la
-libclevis_la_LDFLAGS = -export-symbols-regex '^clevis_'
-libclevis_la_LIBADD = @LIBCRYPTO_LIBS@ @JANSSON_LIBS@
-libclevis_la_SOURCES = buf.c clevis.h
+bin_PROGRAMS = clevis-pin clevis-pin-http clevis-pin-sss clevis-pin-tang
+bin_SCRIPTS = clevis clevis-decrypt clevis-encrypt clevis-bind-luks
+noinst_LTLIBRARIES = libhttp.la libreadall.la
+check_PROGRAMS = clevis-pin-test
 
-noinst_LTLIBRARIES = libcore.la
-libcore_la_LIBADD = -ldl -lpthread libclevis.la
-libcore_la_SOURCES = list.c list.h pin.c pin.h
+libreadall_la_SOURCES = readall.c readall.h
 
-bin_PROGRAMS = clevis
-clevis_LDADD = libcore.la
-clevis_SOURCES = clevis.c crypto.c crypto.h pwd.c pwd.h
+libhttp_la_SOURCES = http.c http.h
+libhttp_la_LIBADD = -lhttp_parser
 
-pindir = @CLEVIS_PINDIR@
-pin_LTLIBRARIES = pwd.la sss.la http.la
+clevis_pin_sss_SOURCES = clevis-pin-sss.c sss.c sss.h
+clevis_pin_sss_LDADD = $(LDADD) @libcrypto_LIBS@
 
-pwd_la_SOURCES = pin_pwd.c
-pwd_la_LDFLAGS = -module -avoid-version
-pwd_la_LIBADD = libclevis.la
+clevis_pin_http_LDADD = $(LDADD) libhttp.la
 
-sss_la_SOURCES = pin_sss_alg.c pin_sss_alg.h pin_sss.c
-sss_la_LDFLAGS = -module -avoid-version
-sss_la_LIBADD = libcore.la
+clevis_pin_tang_SOURCES = tang.c tang.h clevis-pin-tang.c
+clevis_pin_tang_LDADD = $(LDADD) @libcrypto_LIBS@ libhttp.la
 
-http_la_SOURCES = pin_http.c
-http_la_LDFLAGS = -module -avoid-version
-http_la_LIBADD = libclevis.la @CURL_LIBS@
+
+%: %.in
+	$(AM_V_GEN)cp $(srcdir)/$@.in $@

@@ -1,5 +1,6 @@
+/* vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80: */
 /*
- * Copyright (c) 2015 Red Hat, Inc.
+ * Copyright (c) 2016 Red Hat, Inc.
  * Author: Nathaniel McCallum <npmccallum@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,16 +19,22 @@
 
 #pragma once
 
-#include "clevis.h"
+#include <http_parser.h>
 
-size_t
-crypto_set_cipher(const char *str);
+struct http_head {
+    char *key;
+    char *val;
+};
 
-bool
-crypto_set_kdf_time(const char *str);
+struct http_msg {
+    struct http_head *head;
+    uint8_t          *body;
+    size_t            size;
+};
 
-json_t *
-crypto_encrypt(const clevis_buf_t *key, const clevis_buf_t *pt);
+void
+http_msg_free(struct http_msg *msg);
 
-clevis_buf_t *
-crypto_decrypt(const clevis_buf_t *key, const json_t *ct);
+int
+http(const char *url, enum http_method m,
+     const struct http_msg *req, struct http_msg **rep);

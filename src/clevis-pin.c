@@ -1,3 +1,4 @@
+/* vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80: */
 /*
  * Copyright (c) 2015 Red Hat, Inc.
  * Author: Nathaniel McCallum <npmccallum@redhat.com>
@@ -16,30 +17,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <jose/jose.h>
 
-#include "clevis.h"
-#include "list.h"
-#include <openssl/bn.h>
+int
+main(int argc, char *argv[])
+{
+    json_auto_t *jwe = NULL;
+    json_auto_t *hdr = NULL;
+    const char *pin = NULL;
 
-typedef struct sss_t sss_t;
-typedef struct {
-  list_t list;
-  size_t x;
-  clevis_buf_t *y;
-} sss_point_t;
+    jwe = json_loadf(stdin, 0, NULL);
+    if (!jwe)
+        return EXIT_FAILURE;
 
-sss_t *
-sss_generate(size_t key_bytes, size_t threshold);
+    hdr = jose_jwe_merge_header(jwe, NULL);
+    if (!hdr)
+        return EXIT_FAILURE;
 
-clevis_buf_t *
-sss_p(const sss_t *sss);
+    if (json_unpack(hdr, "{s:s}", "clevis.pin", &pin) != 0)
+        return EXIT_FAILURE;
 
-clevis_buf_t *
-sss_y(const sss_t *sss, size_t x, BN_CTX *ctx);
-
-void
-sss_free(sss_t *sss);
-
-clevis_buf_t *
-sss_recover(const clevis_buf_t *p, const list_t *points, BN_CTX *ctx);
+    return fprintf(stdout, "%s\n", pin) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+}

@@ -1,0 +1,28 @@
+#!/bin/sh -x
+
+trap 'exit' ERR
+
+PORT=`shuf -i 1024-65535 -n 1`
+
+python ${srcdir:-.}/tests/httpd.py $PORT &
+export PID=$!
+sleep 0.25
+
+function onerr() {
+    kill -9 $PID
+    ! wait $PID
+    exit 1
+}
+
+trap 'onerr' ERR
+
+e=`echo hi | src/clevis-encrypt http "{\"url\": \"http://localhost:${PORT}/foo\"}"`
+d=`echo $e | src/clevis-decrypt`
+test "$d" == "hi"
+
+kill -9 $PID
+! wait $PID
+
+trap 'exit' ERR
+
+! echo $e | src/clevis-decrypt

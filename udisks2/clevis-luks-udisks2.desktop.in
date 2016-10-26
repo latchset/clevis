@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=clevis-luks-udisks2
+Exec=@libexecdir@/clevis-luks-udisks2
+NoDisplay=true

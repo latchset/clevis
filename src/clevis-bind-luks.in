@@ -1,0 +1,58 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2016 Red Hat, Inc.
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+
+if [ $# -ne 3 ]; then
+    echo "Usage: clevis luks-bind DEVICE PIN CONFIG" >&2
+    exit 1
+fi
+
+export device=$1
+
+# Generate a key with the same size as the LUKS Master Key
+dump=`cryptsetup luksDump $device`
+bits=`echo -e "$dump" | sed -r -n 's|MK bits:[ \t]*([0-9]+)|\1|p'`
+bytes=$(($bits / 8))
+new=`od -An -N $bytes -t x8 /dev/urandom | tr -d '\n '`
+
+# Encrypt the key
+jwe=`echo -n $new | "${0%%-*}-encrypt" "$2" "$3"`
+
+# If necessary, initialize the LUKS volume
+if ! luksmeta test -d $device; then
+    luksmeta init -d $device
+fi
+
+# Write the JWE to the first slot unused by both LUKS and LUKSMeta
+export slot=`echo -n $jwe | luksmeta save -d $device -u $UUID`
+
+# Now, if anything fails, we remove the LUKSMeta slot we just created
+function onerr() {
+    luksmeta wipe -f -d $device -u $UUID -s $slot
+}
+
+trap 'onerr' ERR
+
+# Add the new key to the LUKS slot that matches the LUKSMeta slot
+read -s -p "Enter existing LUKS password: " old
+echo
+echo -e "$old\n$new" | cryptsetup luksAddKey -S $slot $device

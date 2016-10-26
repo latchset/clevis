@@ -1,0 +1,67 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2016 Red Hat, Inc.
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+function on_exit() {
+    if [ "$PID" ]; then kill $PID; wait $PID || true; fi
+    [ -d "$TMP" ] && rm -rf $TMP
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+for cmd in systemd-socket-activate \
+    `pkg-config --variable=systemdutildir systemd`/systemd-activate; do
+    if SD_ACTIVATE=`which $cmd`; then
+        if $SD_ACTIVATE --help | grep -q inetd; then
+            SD_ACTIVATE="$SD_ACTIVATE --inetd"
+        fi
+        break
+    fi
+done
+
+[ ! "$SD_ACTIVATE" ] && exit 1
+
+export TMP=`mktemp -d`
+mkdir -p $TMP/db
+mkdir -p $TMP/cache
+
+# Generate the server keys
+jose gen -t '{"alg": "ES256"}' -o $TMP/db/sig.jwk
+jose gen -t '{"kty": "EC", "crv": "P-256", "key_ops": ["deriveKey"] }' -o $TMP/db/exc.jwk
+/usr/libexec/tangd-update $TMP/db $TMP/cache
+
+# Start the server
+port=`shuf -i 1024-65536 -n 1`
+$SD_ACTIVATE -l 127.0.0.1:$port -a /usr/libexec/tangd $TMP/cache &
+export PID=$!
+sleep 0.25
+
+adv="$TMP/cache/default.jws"
+url="http://localhost:${port}"
+cfg=`printf '{"url":"%s","adv":"%s"}' "$url" "$adv"`
+enc=`echo hi | src/clevis-encrypt tang "$cfg"`
+dec=`echo $enc | src/clevis-decrypt`
+test "$dec" == "hi"
+
+kill -9 $PID
+! wait $PID
+unset PID
+
+! echo $enc | src/clevis-decrypt

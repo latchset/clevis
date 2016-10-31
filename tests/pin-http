@@ -4,7 +4,7 @@ trap 'exit' ERR
 
 PORT=`shuf -i 1024-65535 -n 1`
 
-python ${srcdir:-.}/tests/httpd.py $PORT &
+tests/httpd $PORT &
 export PID=$!
 sleep 0.25
 

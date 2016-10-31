@@ -56,12 +56,12 @@ sleep 0.25
 adv="$TMP/cache/default.jws"
 url="http://localhost:${port}"
 cfg=`printf '{"url":"%s","adv":"%s"}' "$url" "$adv"`
-enc=`echo hi | src/clevis-encrypt tang "$cfg"`
-dec=`echo $enc | src/clevis-decrypt`
+enc=`echo hi | ./clevis-encrypt tang "$cfg"`
+dec=`echo $enc | ./clevis-decrypt`
 test "$dec" == "hi"
 
 kill -9 $PID
 ! wait $PID
 unset PID
 
-! echo $enc | src/clevis-decrypt
+! echo $enc | ./clevis-decrypt

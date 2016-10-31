@@ -1,0 +1,30 @@
+#!/bin/sh -ex
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 1, "pins": {"test": [{"fail": false}, {"fail": false}]}}'`
+d=`echo $e | ./clevis-decrypt`
+test "$d" == "hi"
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 1, "pins": {"test": [{"fail": true}, {"fail": false}]}}'`
+d=`echo $e | ./clevis-decrypt`
+test "$d" == "hi"
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 1, "pins": {"test": [{"fail": false}, {"fail": true}]}}'`
+d=`echo $e | ./clevis-decrypt`
+test "$d" == "hi"
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 1, "pins": {"test": [{"fail": true}, {"fail": true}]}}'`
+! echo $e | ./clevis-decrypt
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 2, "pins": {"test": [{"fail": false}, {"fail": false}]}}'`
+d=`echo $e | ./clevis-decrypt`
+test "$d" == "hi"
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 2, "pins": {"test": [{"fail": true}, {"fail": false}]}}'`
+! echo $e | ./clevis-decrypt
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 2, "pins": {"test": [{"fail": false}, {"fail": true}]}}'`
+! echo $e | ./clevis-decrypt
+
+e=`echo hi | ./clevis-encrypt sss '{"t": 2, "pins": {"test": [{"fail": true}, {"fail": true}]}}'`
+! echo $e | ./clevis-decrypt
+

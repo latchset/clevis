@@ -219,7 +219,7 @@ url_free_contents(struct url *url)
 static int
 url_parse(const char *url, struct url *out)
 {
-    const uint16_t mask = (1 << UF_SCHEMA) | (1 << UF_HOST) | (1 << UF_PATH);
+    static const uint16_t mask = (1 << UF_SCHEMA) | (1 << UF_HOST);
     struct http_parser_url purl = {};
 
     if (http_parser_parse_url(url, strlen(url), false, &purl) != 0)
@@ -237,8 +237,12 @@ url_parse(const char *url, struct url *out)
     out->host = strndup(&url[purl.field_data[UF_HOST].off],
                         purl.field_data[UF_HOST].len);
 
-    out->path = strndup(&url[purl.field_data[UF_PATH].off],
-                        purl.field_data[UF_PATH].len);
+    if (purl.field_set & (1 << UF_PATH)) {
+        out->path = strndup(&url[purl.field_data[UF_PATH].off],
+                            purl.field_data[UF_PATH].len);
+    } else {
+        out->path = strdup("/");
+    }
 
     if (purl.field_set & (1 << UF_PORT)) {
         out->srvc = strndup(&url[purl.field_data[UF_PORT].off],

@@ -53,11 +53,15 @@ encrypt(int argc, char *argv[])
         return EXIT_FAILURE;
 
     cfg = json_loads(argv[2], 0, NULL);
-    if (!cfg)
+    if (!cfg) {
+        fprintf(stderr, "Configuration is invalid JSON!\n");
         goto egress;
+    }
 
-    if (json_unpack(cfg, "{s:s}", "url", &url) != 0)
+    if (json_unpack(cfg, "{s:s}", "url", &url) != 0) {
+        fprintf(stderr, "Configuration missing 'url' key!\n");
         goto egress;
+    }
 
     cek = json_pack("{s:s,s:i}", "kty", "oct", "bytes", sizeof(ky));
     if (!cek)
@@ -82,8 +86,13 @@ encrypt(int argc, char *argv[])
         goto egress;
 
     r = http(url, HTTP_PUT, &req, &rep);
-    if (r != 200)
+    if (r < 0) {
+        fprintf(stderr, "Error during HTTP request: %s!\n", strerror(-r));
         goto egress;
+    } else if (r != 200) {
+        fprintf(stderr, "HTTP server returned status %d!\n", r);
+        goto egress;
+    }
 
     json_dumpf(jwe, stdout, JSON_SORT_KEYS | JSON_COMPACT);
     fprintf(stdout, "\n");
@@ -125,8 +134,13 @@ decrypt(int argc, char *argv[])
         goto egress;
 
     r = http(url, HTTP_GET, &req, &rep);
-    if (r != 200)
+    if (r < 0) {
+        fprintf(stderr, "Error during HTTP request: %s!\n", strerror(-r));
         goto egress;
+    } else if (r != 200) {
+        fprintf(stderr, "HTTP server returned status %d!\n", r);
+        goto egress;
+    }
 
     if (!rep->body || rep->size != 32)
         goto egress;

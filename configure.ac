@@ -3,6 +3,7 @@ AC_INIT(clevis, 1)
 AC_CANONICAL_SYSTEM
 AC_PROG_CC_C99
 AC_PROG_RANLIB
+AC_PROG_SED
 
 AM_INIT_AUTOMAKE([subdir-objects foreign no-dist-gzip dist-bzip2 parallel-tests])
 AM_SILENT_RULES([yes])

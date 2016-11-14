@@ -155,7 +155,17 @@ on_message_complete(http_parser *parser)
                     "Content-Type: %s\r\n"
                     "\r\n", d->blen,
                     d->type[0] ? d->type : "application/octet-stream");
-            write(state->s, d->body, d->blen);
+
+            for (size_t wrtn = 0; wrtn < d->blen; ) {
+                ssize_t w = 0;
+
+                w = write(state->s, &d->body[wrtn], d->blen - wrtn);
+                if (w < 0)
+                    break;
+
+                wrtn += w;
+            }
+
             free(state->d);
             state->d = NULL;
             return 0;

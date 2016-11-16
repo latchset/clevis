@@ -18,8 +18,8 @@
  */
 
 #define _GNU_SOURCE
-#include "readall.h"
-#include "sss.h"
+#include "libreadall.h"
+#include "libsss.h"
 
 #include <jose/b64.h>
 #include <jose/jwe.h>
@@ -38,29 +38,26 @@
 #include <stdint.h>
 #include <string.h>
 
+#define _str(x) # x
+#define str(x) _str(x)
+
 enum {
     PIPE_RD = 0,
     PIPE_WR = 1
 };
 
 static bool
-mkcmd(const char *name, char *out, size_t len)
+mkcmd(const char *pin, char *out, size_t len)
 {
-    char tmp[PATH_MAX] = {};
-    char *end = NULL;
+    const char *cmd = NULL;
+    int r = 0;
 
-    if (readlink("/proc/self/exe", tmp, sizeof(tmp) - 1) < 0)
-        return false;
+    cmd = secure_getenv("CLEVIS_CMD_DIR");
+    if (!cmd)
+        cmd = str(CLEVIS_CMD_DIR);
 
-    end = strrchr(tmp, '-');
-    if (!end)
-        return false;
-    *end = 0;
-
-    if (snprintf(out, len, "%s-%s", tmp, name) < 0)
-        return false;
-
-    return true;
+    r = snprintf(out, len, "%s/pins/%s", cmd, pin);
+    return r > 0 && (size_t) r < len;
 }
 
 static FILE *

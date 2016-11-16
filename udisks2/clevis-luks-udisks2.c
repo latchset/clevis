@@ -32,8 +32,18 @@
 #include <stdio.h>
 
 #define MAX_UDP 65507
+#define _str(x) # x
+#define str(x) _str(x)
 
-typedef char pkt_t[MAX_UDP];
+typedef struct {
+    ssize_t used;
+    char data[MAX_UDP];
+} pkt_t;
+
+enum {
+    PIPE_RD = 0,
+    PIPE_WR = 1
+};
 
 struct context {
     UDisksClient *clt;
@@ -51,80 +61,6 @@ remove_path(GList **lst, const char *path)
         g_free(i->data);
         *lst = g_list_remove(*lst, i->data);
     }
-}
-
-#include <libgen.h>
-
-static bool
-get_decrypt_path(char *path, size_t pathl)
-{
-    char tmp[pathl];
-
-    memset(tmp, 0, pathl);
-    if (readlink("/proc/self/exe", tmp, sizeof(tmp) - 1) < 0)
-        return false;
-
-    if (snprintf(path, pathl, "%s/../bin/clevis-decrypt", dirname(tmp)) < 0)
-        return false;
-
-    return true;
-}
-
-static char *
-unlock_device_slot(struct context *ctx, const char *dev, int slot)
-{
-    ssize_t len = strlen(dev) + 2;
-    char path[PATH_MAX] = {};
-    pkt_t pkt = {};
-    gint out = -1;
-    gint in = -1;
-
-    if (len > (ssize_t) sizeof(pkt) || !get_decrypt_path(path, sizeof(path)))
-        return NULL;
-
-    pkt[0] = slot;
-    memcpy(&pkt[1], dev, len - 1);
-
-    fprintf(stderr, "%s\tSLOT\t%d\n", dev, slot);
-
-    if (send(ctx->sock, pkt, len, 0) != len) {
-        g_main_loop_quit(ctx->loop);
-        return NULL;
-    }
-
-    len = recv(ctx->sock, pkt, sizeof(pkt), 0);
-    if (len < 0) {
-        g_main_loop_quit(ctx->loop);
-        return NULL;
-    }
-
-    fprintf(stderr, "%s\tMETA\t%d\n", dev, (int) len);
-    if (len < 0)
-        return NULL;
-
-    if (!g_spawn_async_with_pipes(NULL, (gchar *[]) { path, NULL }, NULL,
-                                  G_SPAWN_DEFAULT, NULL, NULL, NULL,
-                                  &in, &out, NULL, NULL)) {
-        fprintf(stderr, "%s\tCHLD\tspawn failure\n", dev);
-        return NULL;
-    }
-
-    if (write(in, pkt, len) != len) {
-        fprintf(stderr, "%s\tCHLD\twrite failure\n", dev);
-        close(out);
-        close(in);
-        return NULL;
-    }
-
-    close(in);
-    len = read(out, pkt, sizeof(pkt));
-    close(out);
-    fprintf(stderr, "%s\tCHLD\t%s\n", dev,
-            len < 0 ? "read failure" : "success");
-    if (len < 0)
-        return NULL;
-
-    return strndup(pkt, len);
 }
 
 static gboolean
@@ -146,6 +82,7 @@ idle(gpointer misc)
         UDisksObject *uobj = NULL;
         UDisksBlock *block = NULL;
         const char *dev = NULL;
+        pkt_t pkt = {};
 
         uobj = udisks_client_peek_object(ctx->clt, path);
         if (!uobj)
@@ -165,16 +102,34 @@ idle(gpointer misc)
 
         for (int slot = 0; slot < crypt_keyslot_max(CRYPT_LUKS1); slot++) {
             gboolean success = FALSE;
-            char *key = NULL;
 
-            key = unlock_device_slot(ctx, dev, slot);
-            if (!key)
+            pkt.used = strlen(dev) + 2;
+            if ((size_t) pkt.used > sizeof(pkt.data))
                 continue;
 
-            success = udisks_encrypted_call_unlock_sync(enc, key, options,
+            pkt.data[0] = slot;
+            strcpy(&pkt.data[1], dev);
+
+            if (send(ctx->sock, pkt.data, pkt.used, 0) != pkt.used) {
+                g_main_loop_quit(ctx->loop);
+                break;
+            }
+
+            memset(&pkt, 0, sizeof(pkt));
+
+            pkt.used = recv(ctx->sock, pkt.data, sizeof(pkt.data), 0);
+            if (pkt.used == 0)
+                continue;
+            else if (pkt.used < 0 || (size_t) pkt.used >= sizeof(pkt.data)) {
+                g_main_loop_quit(ctx->loop);
+                break;
+            }
+
+            /* NOTE: pkt.data is now implicitly NULL terminated */
+
+            success = udisks_encrypted_call_unlock_sync(enc, pkt.data, options,
                                                         NULL, NULL, NULL);
-            memset(key, 0, strlen(key));
-            free(key);
+            memset(&pkt, 0, sizeof(pkt));
             if (success)
                 break;
         }
@@ -323,8 +278,8 @@ on_signal(int sig)
     safeclose(&pair[0]);
 }
 
-static int
-load(const char *dev, int slot, pkt_t pkt)
+static ssize_t
+load_jwe(const pkt_t *req, uint8_t *out, size_t max)
 {
     static const luksmeta_uuid_t CLEVIS_LUKS_UUID = {
         0xcb, 0x6e, 0x89, 0x04, 0x81, 0xff, 0x40, 0xda,
@@ -333,9 +288,9 @@ load(const char *dev, int slot, pkt_t pkt)
 
     struct crypt_device *cd = NULL;
     luksmeta_uuid_t uuid = {};
-    int r = 0;
+    ssize_t r = 0;
 
-    r = crypt_init(&cd, dev);
+    r = crypt_init(&cd, &req->data[1]);
     if (r < 0)
         goto egress;
 
@@ -343,7 +298,7 @@ load(const char *dev, int slot, pkt_t pkt)
     if (r < 0)
         goto egress;
 
-    switch (crypt_keyslot_status(cd, slot)) {
+    switch (crypt_keyslot_status(cd, req->data[0])) {
     case CRYPT_SLOT_ACTIVE:
     case CRYPT_SLOT_ACTIVE_LAST:
         break;
@@ -352,13 +307,90 @@ load(const char *dev, int slot, pkt_t pkt)
         goto egress;
     }
 
-    r = luksmeta_load(cd, slot, uuid, (uint8_t *) pkt, sizeof(pkt_t));
-    if (r >= 0 && memcmp(uuid, CLEVIS_LUKS_UUID, sizeof(uuid)) != 0)
-        r = -EBADSLT;
+    r = luksmeta_load(cd, req->data[0], uuid, out, max);
+    if (r < 0)
+        goto egress;
+
+    if (memcmp(uuid, CLEVIS_LUKS_UUID, sizeof(uuid)) == 0)
+        return r;
+
+    r = -EBADSLT;
 
 egress:
     crypt_free(cd);
     return r;
+}
+
+static ssize_t
+recover_key(const pkt_t *jwe, char *out, size_t max)
+{
+    int push[2] = { -1, -1 };
+    int pull[2] = { -1, -1 };
+    ssize_t bytes = 0;
+    pid_t pid = 0;
+
+    if (pipe(push) != 0)
+        goto error;
+
+    if (pipe(pull) != 0)
+        goto error;
+
+    pid = fork();
+    if (pid < 0)
+        goto error;
+
+    if (pid == 0) {
+        const char *cmd = str(CLEVIS_CMD_DIR) "/decrypt";
+        int r = 0;
+
+        r = dup2(push[PIPE_RD], STDIN_FILENO);
+        if (r != STDIN_FILENO)
+            return EXIT_FAILURE;
+
+        r = dup2(pull[PIPE_WR], STDOUT_FILENO);
+        if (r != STDOUT_FILENO)
+            return EXIT_FAILURE;
+
+        safeclose(&push[PIPE_RD]);
+        safeclose(&push[PIPE_WR]);
+        safeclose(&pull[PIPE_RD]);
+        safeclose(&pull[PIPE_WR]);
+
+        execle(cmd, cmd, NULL, (char * const[]) { NULL });
+        return EXIT_FAILURE;
+    }
+
+    safeclose(&push[PIPE_RD]);
+    safeclose(&pull[PIPE_WR]);
+
+    bytes = write(push[PIPE_WR], jwe->data, jwe->used);
+    safeclose(&push[PIPE_WR]);
+    if (bytes < 0 || bytes != jwe->used) {
+        errno = errno == 0 ? EIO : errno;
+        kill(pid, SIGTERM);
+        waitpid(pid, NULL, 0);
+        goto error;
+    }
+
+    for (ssize_t block = bytes = 0; block > 0; bytes += block) {
+        block = read(pull[PIPE_RD], &out[bytes], max - bytes);
+        if (block < 0) {
+            kill(pid, SIGTERM);
+            waitpid(pid, NULL, 0);
+            goto error;
+        }
+    }
+
+    safeclose(&pull[PIPE_RD]);
+    waitpid(pid, NULL, 0);
+    return bytes;
+
+error:
+    safeclose(&push[PIPE_RD]);
+    safeclose(&push[PIPE_WR]);
+    safeclose(&pull[PIPE_RD]);
+    safeclose(&pull[PIPE_WR]);
+    return -errno;
 }
 
 int
@@ -401,23 +433,34 @@ main(int argc, char *argv[])
     if (setuid(geteuid()) == -1)
         goto error;
 
-    pkt_t pkt = {};
-    int len = 0;
-    while (true) {
-        len = recv(pair[0], pkt, sizeof(pkt), 0);
-        if (len < 2)
+    for (pkt_t key = {}, jwe = {}, req = {}; ; key = jwe = req = (pkt_t) {}) {
+        /* Receive a request. Ensure that it is null terminated. */
+        req.used = recv(pair[0], req.data, sizeof(req.data), 0);
+        if (req.used < 2 || req.data[req.used - 1])
             goto error;
 
-        len = load((const char *) &pkt[1], pkt[0], pkt);
-        if (len >= 0) {
-            len = send(pair[0], pkt, len, 0);
-            memset(pkt, 0, sizeof(pkt));
-            if (len > 0)
-                continue;
+        fprintf(stderr, "%s\tSLOT\t%hhu\n", &req.data[1], req.data[0]);
+
+        /* Load the JWE for the request. */
+        jwe.used = load_jwe(&req, (uint8_t *) jwe.data, sizeof(jwe.data));
+        fprintf(stderr, "%s\tMETA\t%s\n", &req.data[1],
+                jwe.used < 0 ? strerror(-jwe.used) : "success");
+
+        /* Recover the key from the JWE. */
+        if (jwe.used > 0) {
+            key.used = recover_key(&jwe, key.data, sizeof(key.data));
+            fprintf(stderr, "%s\tRCVR\t%s\n", &req.data[1],
+                    key.used < 0 ? strerror(-key.used) : "success");
+
+            if (key.used < 0)
+                key.used = 0;
         }
 
-        if (send(pair[0], "", 0, 0) != 0)
+        /* Send the key as a reply. */
+        if (send(pair[0], key.data, key.used, 0) != key.used) {
+            memset(&key, 0, sizeof(key));
             goto error;
+        }
     }
 
 error:

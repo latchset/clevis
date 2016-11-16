@@ -19,9 +19,9 @@
 
 #define _GNU_SOURCE
 
-#include "readall.h"
-#include "http.h"
-#include "tang.h"
+#include "libreadall.h"
+#include "libhttp.h"
+#include "libtang.h"
 
 #include <jose/b64.h>
 #include <jose/jwk.h>

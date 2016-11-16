@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "tang.h"
+#include "libtang.h"
 #include <jose/jose.h>
 #include <jose/openssl.h>
 

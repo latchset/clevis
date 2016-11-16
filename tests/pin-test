@@ -1,0 +1,11 @@
+#!/bin/sh -x
+
+trap 'exit' ERR
+
+e=`echo hi | ${top_builddir:-.}/clevis encrypt test '{"fail": false}'`
+d=`echo $e | ${top_builddir:-.}/clevis decrypt`
+test "$d" == "hi"
+
+e=`echo hi | ${top_builddir:-.}/clevis encrypt test '{"fail": true}'`
+! echo $e | ${top_builddir:-.}/clevis decrypt
+

@@ -17,31 +17,51 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#define _str(x) # x
+#define str(x) _str(x)
+
 int
 main(int argc, char *argv[])
 {
     char path[PATH_MAX] = {};
+    char *cmd = NULL;
     char *args[argc];
+    int r = 0;
+
+    cmd = secure_getenv("CLEVIS_CMD_DIR");
+    if (!cmd)
+        cmd = str(CLEVIS_CMD_DIR);
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s COMMAND ...\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    if (readlink("/proc/self/exe", path, sizeof(path) - 1) < 0)
-        return EXIT_FAILURE;
+    for (size_t i = 0; argv[1][i]; i++) {
+        if (!isalnum(argv[1][i]) && argv[1][i] != '-') {
+            fprintf(stderr, "Invalid command name: %s\n", argv[1]);
+            return EXIT_FAILURE;
+        }
+    }
 
-    if (strlen(path) + strlen(argv[1]) + 2 > sizeof(path))
+    if (!argv[1][0]) {
+        fprintf(stderr, "Empty command name\n");
         return EXIT_FAILURE;
+    }
 
-    strcat(path, "-");
-    strcat(path, argv[1]);
+    r = snprintf(path, sizeof(path), "%s/%s", cmd, argv[1]);
+    if (r < 0 || (size_t) r >= sizeof(path)) {
+        fprintf(stderr, "Command name too long: %s\n", argv[1]);
+        return EXIT_FAILURE;
+    }
 
     args[0] = path;
     for (int i = 2; i < argc; i++)

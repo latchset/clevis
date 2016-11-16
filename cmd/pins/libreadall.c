@@ -17,25 +17,36 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <jose/jose.h>
+#include "libreadall.h"
+#include <string.h>
 
-int
-main(int argc, char *argv[])
+jose_buf_t *
+readall(FILE *file)
 {
-    json_auto_t *jwe = NULL;
-    json_auto_t *hdr = NULL;
-    const char *pin = NULL;
+    jose_buf_auto_t *out = NULL;
 
-    jwe = json_loadf(stdin, 0, NULL);
-    if (!jwe)
-        return EXIT_FAILURE;
+    out = jose_buf(0, JOSE_BUF_FLAG_WIPE);
+    if (!out)
+        return NULL;
 
-    hdr = jose_jwe_merge_header(jwe, NULL);
-    if (!hdr)
-        return EXIT_FAILURE;
+    while (!feof(file)) {
+        jose_buf_t *tmp = NULL;
+        uint8_t buf[4096];
+        size_t r = 0;
 
-    if (json_unpack(hdr, "{s:s}", "clevis.pin", &pin) != 0)
-        return EXIT_FAILURE;
+        r = fread(buf, 1, sizeof(buf), file);
+        if (ferror(file))
+            return NULL;
 
-    return fprintf(stdout, "%s\n", pin) < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+        tmp = jose_buf(out->size + r, JOSE_BUF_FLAG_WIPE);
+        if (!tmp)
+            return NULL;
+
+        memcpy(tmp->data, out->data, out->size);
+        memcpy(&tmp->data[out->size], buf, r);
+        jose_buf_decref(out);
+        out = tmp;
+    }
+
+    return jose_buf_incref(out);
 }

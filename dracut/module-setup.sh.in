@@ -38,11 +38,10 @@ install() {
         luksmeta \
         nc \
         clevis \
-        clevis-decrypt \
-        clevis-pin \
-        clevis-pin-http \
-        clevis-pin-sss \
-        clevis-pin-tang
+        @clevisdir@/decrypt \
+        @clevisdir@/pins/http \
+        @clevisdir@/pins/sss \
+        @clevisdir@/pins/tang
 
     dracut_need_initqueue
 }

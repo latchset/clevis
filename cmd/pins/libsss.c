@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "sss.h"
+#include "libsss.h"
 #include <jose/b64.h>
 #include <openssl/bn.h>
 

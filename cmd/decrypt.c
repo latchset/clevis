@@ -17,13 +17,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
 #include <jose/jose.h>
 
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#define _str(x) # x
+#define str(x) _str(x)
 
 int
 main(int argc, char *argv[])
@@ -31,10 +36,15 @@ main(int argc, char *argv[])
     char path[PATH_MAX] = {};
     json_auto_t *jwe = NULL;
     json_auto_t *hdr = NULL;
+    const char *cmd = NULL;
     const char *pin = NULL;
     int fds[] = { -1, -1 };
-    char *end = NULL;
     pid_t pid = 0;
+    int r = 0;
+
+    cmd = secure_getenv("CLEVIS_CMD_DIR");
+    if (!cmd)
+        cmd = str(CLEVIS_CMD_DIR);
 
     jwe = json_loadf(stdin, 0, NULL);
     if (!jwe || argc != 1) {
@@ -44,7 +54,7 @@ main(int argc, char *argv[])
 
     hdr = jose_jwe_merge_header(jwe, NULL);
     if (!hdr) {
-        fprintf(stderr, "Error mergint JWE header!\n");
+        fprintf(stderr, "Error merging JWE header!\n");
         return EXIT_FAILURE;
     }
 
@@ -53,20 +63,23 @@ main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (readlink("/proc/self/exe", path, sizeof(path) - 1) < 0)
+    for (size_t i = 0; pin[i]; i++) {
+        if (!isalnum(pin[i]) && pin[i] != '-') {
+            fprintf(stderr, "Invalid pin name: %s\n", pin);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!pin[0]) {
+        fprintf(stderr, "Empty pin name\n");
         return EXIT_FAILURE;
+    }
 
-    end = strrchr(path, '-');
-    if (!end)
+    r = snprintf(path, sizeof(path), "%s/pins/%s", cmd, pin);
+    if (r < 0 || r == sizeof(path)) {
+        fprintf(stderr, "Invalid pin name: %s\n", pin);
         return EXIT_FAILURE;
-
-    end[1] = 0;
-
-    if (strlen(path) + strlen("pin-") + strlen(pin) >= sizeof(path))
-        return EXIT_FAILURE;
-
-    strcat(path, "pin-");
-    strcat(path, pin);
+    }
 
     if (pipe(fds) < 0)
         return EXIT_FAILURE;

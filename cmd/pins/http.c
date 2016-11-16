@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "readall.h"
-#include "http.h"
+#include "libreadall.h"
+#include "libhttp.h"
 
 #include <jose/b64.h>
 #include <jose/jwk.h>

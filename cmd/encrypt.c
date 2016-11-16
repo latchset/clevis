@@ -17,37 +17,50 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#define _str(x) # x
+#define str(x) _str(x)
+
 int
 main(int argc, char *argv[])
 {
     char path[PATH_MAX] = {};
-    char *end = NULL;
+    const char *cmd = NULL;
+    int r = 0;
+
+    cmd = secure_getenv("CLEVIS_CMD_DIR");
+    if (!cmd)
+        cmd = str(CLEVIS_CMD_DIR);
 
     if (argc != 3) {
         fprintf(stderr, "Usage: %s PIN CONFIG\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    if (readlink("/proc/self/exe", path, sizeof(path) - 1) < 0)
+    for (size_t i = 0; argv[1][i]; i++) {
+        if (!isalnum(argv[1][i]) && argv[1][i] != '-') {
+            fprintf(stderr, "Invalid pin name: %s\n", argv[1]);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!argv[1][0]) {
+        fprintf(stderr, "Empty pin name\n");
         return EXIT_FAILURE;
+    }
 
-    end = strrchr(path, '-');
-    if (!end)
+    r = snprintf(path, sizeof(path), "%s/pins/%s", cmd, argv[1]);
+    if (r < 0 || (size_t) r >= sizeof(path)) {
+        fprintf(stderr, "Invalid pin name: %s\n", argv[1]);
         return EXIT_FAILURE;
-
-    end[1] = 0;
-
-    if (strlen(path) + strlen("pin-") + strlen(argv[1]) >= sizeof(path))
-        return EXIT_FAILURE;
-
-    strcat(path, "pin-");
-    strcat(path, argv[1]);
+    }
 
     execl(path, path, "encrypt", argv[2], NULL);
     return EXIT_FAILURE;

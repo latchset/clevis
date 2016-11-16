@@ -4,7 +4,7 @@ trap 'exit' ERR
 
 PORT=`shuf -i 1024-65535 -n 1`
 
-./test-pin-httpd $PORT &
+./pin-httpd $PORT &
 export PID=$!
 sleep 0.25
 
@@ -16,8 +16,8 @@ function onerr() {
 
 trap 'onerr' ERR
 
-e=`echo hi | ./clevis-encrypt http "{\"url\": \"http://localhost:${PORT}/foo\"}"`
-d=`echo $e | ./clevis-decrypt`
+e=`echo hi | ${top_builddir:-.}/clevis encrypt http "{\"url\": \"http://localhost:${PORT}/foo\"}"`
+d=`echo $e | ${top_builddir:-.}/clevis decrypt`
 test "$d" == "hi"
 
 kill -9 $PID
@@ -25,4 +25,4 @@ kill -9 $PID
 
 trap 'exit' ERR
 
-! echo $e | ./clevis-decrypt
+! echo $e | ${top_builddir:-.}/clevis decrypt

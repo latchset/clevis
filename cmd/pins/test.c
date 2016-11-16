@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "readall.h"
+#include "libreadall.h"
 #include <string.h>
 
 static int

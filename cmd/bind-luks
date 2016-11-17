@@ -35,7 +35,7 @@ bytes=$(($bits / 8))
 new=`od -An -N $bytes -t x8 /dev/urandom | tr -d '\n '`
 
 # Encrypt the key
-jwe=`echo -n $new | "${0%%-*}-encrypt" "$2" "$3"`
+jwe=`echo -n $new | "${0%/*}/encrypt" "$2" "$3"`
 
 # If necessary, initialize the LUKS volume
 if ! luksmeta test -d $device; then

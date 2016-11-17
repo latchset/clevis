@@ -125,7 +125,8 @@ idle(gpointer misc)
                 break;
             }
 
-            /* NOTE: pkt.data is now implicitly NULL terminated */
+            /* NOTE: pkt.data is now implicitly NULL terminated regardless of
+             * whether or not the plaintext inside the JWE was terminated. */
 
             success = udisks_encrypted_call_unlock_sync(enc, pkt.data, options,
                                                         NULL, NULL, NULL);
@@ -263,6 +264,7 @@ error:
  */
 
 static int pair[2] = { -1, -1 };
+pid_t pid = 0;
 
 static void
 safeclose(int *fd)
@@ -275,7 +277,14 @@ safeclose(int *fd)
 static void
 on_signal(int sig)
 {
-    safeclose(&pair[0]);
+    switch (sig) {
+    case SIGCHLD:
+        if (wait(NULL) != pid)
+            return;
+        pid = -1;
+    default:
+        safeclose(&pair[0]);
+    }
 }
 
 static ssize_t
@@ -327,7 +336,7 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
     int push[2] = { -1, -1 };
     int pull[2] = { -1, -1 };
     ssize_t bytes = 0;
-    pid_t pid = 0;
+    pid_t chld = 0;
 
     if (pipe(push) != 0)
         goto error;
@@ -335,11 +344,11 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
     if (pipe(pull) != 0)
         goto error;
 
-    pid = fork();
-    if (pid < 0)
+    chld = fork();
+    if (chld < 0)
         goto error;
 
-    if (pid == 0) {
+    if (chld == 0) {
         const char *cmd = str(CLEVIS_CMD_DIR) "/decrypt";
         int r = 0;
 
@@ -367,22 +376,20 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
     safeclose(&push[PIPE_WR]);
     if (bytes < 0 || bytes != jwe->used) {
         errno = errno == 0 ? EIO : errno;
-        kill(pid, SIGTERM);
-        waitpid(pid, NULL, 0);
+        kill(chld, SIGTERM);
         goto error;
     }
 
-    for (ssize_t block = bytes = 0; block > 0; bytes += block) {
+    bytes = 0;
+    for (ssize_t block = 1; block > 0; bytes += block) {
         block = read(pull[PIPE_RD], &out[bytes], max - bytes);
         if (block < 0) {
-            kill(pid, SIGTERM);
-            waitpid(pid, NULL, 0);
+            kill(chld, SIGTERM);
             goto error;
         }
     }
 
     safeclose(&pull[PIPE_RD]);
-    waitpid(pid, NULL, 0);
     return bytes;
 
 error:
@@ -396,7 +403,10 @@ error:
 int
 main(int argc, char *argv[])
 {
-    pid_t pid = 0;
+    if (getuid() == geteuid()) {
+        fprintf(stderr, "Not running as SUID = root!\n");
+        return EXIT_FAILURE;
+    }
 
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, pair) == -1)
         return EXIT_FAILURE;
@@ -433,39 +443,38 @@ main(int argc, char *argv[])
     if (setuid(geteuid()) == -1)
         goto error;
 
-    for (pkt_t key = {}, jwe = {}, req = {}; ; key = jwe = req = (pkt_t) {}) {
+    for (pkt_t req = {}, jwe = {}, key = {}; ; req = jwe = key = (pkt_t) {}) {
         /* Receive a request. Ensure that it is null terminated. */
         req.used = recv(pair[0], req.data, sizeof(req.data), 0);
         if (req.used < 2 || req.data[req.used - 1])
-            goto error;
+            break;
 
         fprintf(stderr, "%s\tSLOT\t%hhu\n", &req.data[1], req.data[0]);
 
         /* Load the JWE for the request. */
         jwe.used = load_jwe(&req, (uint8_t *) jwe.data, sizeof(jwe.data));
         fprintf(stderr, "%s\tMETA\t%s\n", &req.data[1],
-                jwe.used < 0 ? strerror(-jwe.used) : "success");
+                strerror(jwe.used < 0 ? -jwe.used : 0));
 
         /* Recover the key from the JWE. */
         if (jwe.used > 0) {
             key.used = recover_key(&jwe, key.data, sizeof(key.data));
             fprintf(stderr, "%s\tRCVR\t%s\n", &req.data[1],
-                    key.used < 0 ? strerror(-key.used) : "success");
-
+                    strerror(key.used < 0 ? -key.used : 0));
             if (key.used < 0)
                 key.used = 0;
         }
 
         /* Send the key as a reply. */
-        if (send(pair[0], key.data, key.used, 0) != key.used) {
-            memset(&key, 0, sizeof(key));
-            goto error;
-        }
+        if (send(pair[0], key.data, key.used, 0) != key.used)
+            break;
     }
 
 error:
     safeclose(&pair[0]);
-    kill(pid, SIGTERM);
-    waitpid(pid, NULL, 0);
+    if (pid != -1) {
+        kill(pid, SIGTERM);
+        waitpid(pid, NULL, 0);
+    }
     return EXIT_FAILURE;
 }

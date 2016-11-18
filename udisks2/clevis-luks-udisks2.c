@@ -443,7 +443,7 @@ main(int argc, char *argv[])
     if (setuid(geteuid()) == -1)
         goto error;
 
-    for (pkt_t req = {}, jwe = {}, key = {}; ; req = jwe = key = (pkt_t) {}) {
+    for (pkt_t req = {}, jwe = {}, key = {}; ; key = (pkt_t) {}) {
         /* Receive a request. Ensure that it is null terminated. */
         req.used = recv(pair[0], req.data, sizeof(req.data), 0);
         if (req.used < 2 || req.data[req.used - 1])

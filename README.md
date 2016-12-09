@@ -25,12 +25,12 @@ encryption and setup automated decryption.
 
 To decrypt our JWE, we simply perform the following:
 
-    $ clevis decrypt < CIPHERTEXT.jwe > PLAINTEXT
+```bash
+$ clevis decrypt < CIPHERTEXT.jwe > PLAINTEXT
+```
 
 Notice that no additional input or interaction is required for the decrypt
-command.
-
-Let's look at some more concrete examples.
+command. Let's look at some more concrete examples.
 
 #### PIN: Tang
 
@@ -39,11 +39,13 @@ provides cryptographic binding services without the need for an escrow.
 Clevis has full support for Tang. Here is an example of how to use Clevis with
 Tang:
 
-    $ echo hi | clevis encrypt tang '{"url": "http://tang.local"}' > hi.jwe
-    The advertisement is signed with the following keys:
-            kWwirxc5PhkFIH0yE28nc-EvjDY
+```bash
+$ echo hi | clevis encrypt tang '{"url": "http://tang.local"}' > hi.jwe
+The advertisement is signed with the following keys:
+        kWwirxc5PhkFIH0yE28nc-EvjDY
 
-    Do you wish to trust the advertisement? [yN] y
+Do you wish to trust the advertisement? [yN] y
+```
 
 In this example, we encrypt the message "hi" using the Tang pin. The only
 parameter needed in this case is the URL of the Tang server. During the
@@ -65,7 +67,9 @@ for use over local sockets. This provides integration with services like
 
 For example:
 
-    $ echo hi | clevis encrypt http '{"url": "http://server.local/key"}' > hi.jwe
+```bash
+$ echo hi | clevis encrypt http '{"url": "http://server.local/key"}' > hi.jwe
+```
 
 The HTTP pin generate a new (cryptographically-strong random) key and performs
 encryption using it. It then performs a PUT request to the URL specified. It is
@@ -89,7 +93,11 @@ decryption can succeed.
 
 Here is an example where we use the SSS pin with both the Tang and HTTP pins:
 
-    $ echo hi | clevis encrypt sss '{"t": 2, "pins": {"http": {"url": ...}, "tang": {"url": ...}}}' > hi.jwe
+```bash
+$ echo hi | clevis encrypt sss \
+'{"t": 2, "pins": {"http": {"url": "http://server.local/key"}, "tang": {"url": "http://tang.local"}}}' \
+> hi.jwe
+```
 
 In the above example, we define two child pins and have a threshold of 2.
 This means that during decryption **both** child pins must succeed in order for
@@ -97,11 +105,15 @@ SSS itself to succeed.
 
 Here is another example where we use just the HTTP pin:
 
-    $ echo hi | clevis encrypt sss '{"t": 1, "pins": {"http": [{"url": ...}, {"url": ...}]}}' > hi.jwe
+```bash
+$ echo hi | clevis encrypt sss \
+'{"t": 1, "pins": {"http": [{"url": "http://server1.local/key"}, {"url": "http://server1.local/key"}]}}' \
+> hi.jwe
+```
 
 In this example, we define two child instances of the HTTP pin - each with its
-own configuration. Since we have a threshold of 1, if either of the HTTP pin
-instances succeed during decryption, SSS will succeed.
+own configuration. Since we have a threshold of 1, if **either** of the HTTP
+pin instances succeed during decryption, SSS will succeed.
 
 ### Binding LUKS Volumes
 
@@ -115,12 +127,14 @@ this key using Clevis, and store the output JWE inside the LUKS header using
 
 Here is an example where we bind `/dev/sda1` using the Tang ping:
 
-    $ sudo clevis bind-luks /dev/sda1 tang '{"url": "http://tang.local"}'
-    The advertisement is signed with the following keys:
-            kWwirxc5PhkFIH0yE28nc-EvjDY
+```bash
+$ sudo clevis bind-luks /dev/sda1 tang '{"url": "http://tang.local"}'
+The advertisement is signed with the following keys:
+        kWwirxc5PhkFIH0yE28nc-EvjDY
 
-    Do you wish to trust the advertisement? [yN] y
-    Enter existing LUKS password:
+Do you wish to trust the advertisement? [yN] y
+Enter existing LUKS password:
+```
 
 Upon successful completion of this binding process, the disk can be unlocked
 using one of the provided unlockers.
@@ -131,7 +145,9 @@ The Dracut unlocker attempts to automatically unlock volumes during early
 boot. This permits automated root volume encryption. Enabling the Dracut
 unlocker is easy. Just rebuild your initramfs after installing Clevis:
 
-    $ sudo dracut -f
+```bash
+$ sudo dracut -f
+```
 
 Upon reboot, you will be prompted to unlock the volume using a password. In
 the background, Clevis will attempt to unlock the volume automatically. If it
@@ -151,8 +167,14 @@ user intervention.
 
 ## Installing Clevis
 
-Please don't install Clevis directly. Use your preferred distribution's packages.
+Please don't install Clevis directly. Instead, use your preferred
+distribution's packages.
 
 ### Fedora 24+
 
-    $ sudo dnf install clevis clevis-dracut clevis-udisks2
+This command installs the core Clevis commands, the Dracut unlocker and the
+UDisks2 unlocker, respectively.
+
+```bash
+$ sudo dnf install clevis clevis-dracut clevis-udisks2
+```

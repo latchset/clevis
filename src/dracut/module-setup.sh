@@ -33,15 +33,16 @@ install() {
     inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
     inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
 
-    inst_multiple \
-        /etc/services \
+    inst_multiple /etc/services \
+        clevis-decrypt-http \
+        clevis-decrypt-tang \
+        clevis-decrypt-sss \
+        clevis-decrypt \
         luksmeta \
-        nc \
         clevis \
-        @clevisdir@/decrypt \
-        @clevisdir@/pins/http \
-        @clevisdir@/pins/sss \
-        @clevisdir@/pins/tang
+        curl \
+        jose \
+        nc
 
     dracut_need_initqueue
 }

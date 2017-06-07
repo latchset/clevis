@@ -32,8 +32,6 @@
 #include <stdio.h>
 
 #define MAX_UDP 65507
-#define _str(x) # x
-#define str(x) _str(x)
 
 typedef struct {
     ssize_t used;
@@ -277,14 +275,13 @@ safeclose(int *fd)
 static void
 on_signal(int sig)
 {
-    switch (sig) {
-    case SIGCHLD:
+    if (sig == SIGCHLD) {
         if (wait(NULL) != pid)
             return;
         pid = -1;
-    default:
-        safeclose(&pair[0]);
     }
+
+    safeclose(&pair[0]);
 }
 
 static ssize_t
@@ -349,7 +346,7 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
         goto error;
 
     if (chld == 0) {
-        const char *cmd = str(CLEVIS_CMD_DIR) "/decrypt";
+        char *const env[] = { "PATH=" BINDIR, NULL };
         int r = 0;
 
         r = dup2(push[PIPE_RD], STDIN_FILENO);
@@ -365,7 +362,7 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
         safeclose(&pull[PIPE_RD]);
         safeclose(&pull[PIPE_WR]);
 
-        execle(cmd, cmd, NULL, (char * const[]) { NULL });
+        execle(BINDIR "/clevis", "clevis", "decrypt", NULL, env);
         return EXIT_FAILURE;
     }
 

@@ -1,11 +1,10 @@
-#!/bin/sh -x
+#!/bin/bash -x
 
 trap 'exit' ERR
 
-e=`echo hi | ${top_builddir:-.}/clevis encrypt test '{"fail": false}'`
-d=`echo $e | ${top_builddir:-.}/clevis decrypt`
+e=`echo -n hi | clevis encrypt test '{}'`
+d=`echo -n "$e" | clevis decrypt`
 test "$d" == "hi"
 
-e=`echo hi | ${top_builddir:-.}/clevis encrypt test '{"fail": true}'`
-! echo $e | ${top_builddir:-.}/clevis decrypt
-
+e=`echo -n hi | clevis encrypt test '{"fail":true}'`
+! echo "$e" | decrypt

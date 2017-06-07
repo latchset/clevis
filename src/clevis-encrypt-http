@@ -1,0 +1,107 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Encrypts using a REST HTTP escrow server policy"
+
+function http() {
+    curl -sf -X "$1" -H "Content-Type: $2" --data-binary @- "$3"
+}
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ]; then
+    echo >&2
+    echo "Usage: clevis encrypt http CONFIG < PLAINTEXT > JWE" >&2
+    echo >&2
+    echo "$SUMMARY" >&2
+    echo >&2
+    echo "This command uses the following configuration properties:" >&2
+    echo >&2
+    echo "     url: <string>   The URL where the key is stored (REQUIRED)" >&2
+    echo >&2
+    echo "    http: <boolean>  Allow or disallow non-TLS HTTP (default: false)" >&2
+    echo >&2
+    echo "    type: <string>   The type of key to store (default: octet-stream)" >&2
+    echo >&2
+    echo "  method: <string>   The HTTP method to use (default: PUT)" >&2
+    echo >&2
+    exit 1
+fi
+
+if ! cfg=`jose fmt -j "$1" -Oo- 2>/dev/null`; then
+    echo "Configuration is malformed!" >&2
+    exit 1
+fi
+
+if ! url=`jose fmt -j "$cfg" -g url -u-`; then
+    echo "Configuration is missing required 'url' property!" >&2
+    exit 1
+fi
+
+case $url in
+http:*)
+    if ! jose fmt -j "$cfg" -g http -T; then
+        echo "HTTP is not allowed (see 'http' config property)!" >&2
+        exit 1
+    fi ;;
+https:*) ;;
+*) echo "URL '$url' not supported!" >&2; exit 1;;
+esac
+
+typ=`jose fmt -j "$cfg" -Og type -u-` || typ="octet-stream"
+case $typ in
+jwk+json) typ="application/jwk+json" ;;
+octet-stream) typ="application/octet-stream" ;;
+application/jwk+json) ;;
+application/octet-stream) ;;
+*) echo "Type '$typ' not supported!" >&2; exit 1;;
+esac
+
+mth=`jose fmt -j "$cfg" -Og method -u-` || mth=PUT
+case $mth in
+PUT) ;;
+POST) ;;
+*) echo "Method '$mth' not supported!" >&2; exit 1;;
+esac
+
+jwk=`jose jwk gen -i '{"alg":"A256GCM"}'`
+jwe='{"protected":{"clevis":{"pin":"http","http":{}}}}'
+jwe=`jose fmt -j "$jwe" -g protected -g clevis -g http -q "$url" -s url  -UUUUo-`
+jwe=`jose fmt -j "$jwe" -g protected -g clevis -g http -q "$typ" -s type -UUUUo-`
+
+case $typ in
+application/jwk+json)
+    if ! http "$mth" "$typ" "$url" <<< "$jwk"; then
+        echo "Key transfer failed!" >&2
+        exit 1
+    fi
+    ;;
+application/octet-stream)
+    if ! jose fmt -j- -g k -u- <<< "$jwk" | jose b64 dec -i- | http "$mth" "$typ" "$url"; then
+        echo "Key transfer failed!" >&2
+        exit 1
+    fi
+    ;;
+esac
+
+exec jose jwe enc -i "$jwe" -k- -I- -c < <(echo -n "$jwk"; cat)

@@ -1,0 +1,55 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Decrypts using the policy defined at encryption time"
+
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH"
+    return 1
+}
+
+if [ "$#" -eq 1 -a "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if ! [ -t 0 ]; then
+    read -d . hdr
+
+    if ! pin=`jose fmt -q "$hdr" -SyOg clevis -Og pin -Su-`; then
+        echo "JWE is missing the required 'clevis.pin' header property!" >&2
+        exit 1
+    fi
+
+    if ! cmd="`findexe clevis-decrypt-$pin`"; then
+        echo "Unable to locate pin '$pin'!" >&2
+        exit 1
+    fi
+
+    exec "$cmd" < <(echo -n "$hdr."; cat)
+fi
+
+echo >&2
+echo "Usage: clevis decrypt < JWE > PLAINTEXT" >&2
+echo >&2
+echo "$SUMMARY" >&2
+echo >&2

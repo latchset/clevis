@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "libsss.h"
+#define _GNU_SOURCE
+#include "sss.h"
 #include <jose/b64.h>
 #include <openssl/bn.h>
 
@@ -25,6 +26,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <signal.h>
 
 #define BIGNUM_auto __attribute__((cleanup(BN_cleanup))) BIGNUM
 #define BN_CTX_auto __attribute__((cleanup(BN_CTX_cleanup))) BN_CTX
@@ -38,13 +45,26 @@ bn_decode(const uint8_t buf[], size_t len)
 static BIGNUM *
 bn_decode_json(const json_t *json)
 {
-    jose_buf_auto_t *buf = NULL;
+    uint8_t *buf = NULL;
+    BIGNUM *bn = NULL;
+    size_t len;
 
-    buf = jose_b64_decode_json(json);
+    len = jose_b64_dec(json, NULL, 0);
+    if (len == SIZE_MAX)
+        return NULL;
+
+    buf = malloc(len);
     if (!buf)
         return NULL;
 
-    return bn_decode(buf->data, buf->size);
+    if (jose_b64_dec(json, buf, len) != len) {
+        free(bn);
+        return NULL;
+    }
+
+    bn = bn_decode(buf, len);
+    free(buf);
+    return bn;
 }
 
 static bool
@@ -69,24 +89,29 @@ bn_encode(const BIGNUM *bn, uint8_t buf[], size_t len)
 static json_t *
 bn_encode_json(const BIGNUM *bn, size_t len)
 {
-    jose_buf_auto_t *buf = NULL;
+    uint8_t *buf = NULL;
     json_t *out = NULL;
 
     if (!bn)
-        return false;
+        return NULL;
 
     if (len == 0)
         len = BN_num_bytes(bn);
 
     if ((int) len < BN_num_bytes(bn))
-        return false;
+        return NULL;
 
-    buf = jose_buf(len, JOSE_BUF_FLAG_WIPE);
-    if (buf) {
-        if (bn_encode(bn, buf->data, buf->size))
-            out = jose_b64_encode_json(buf->data, buf->size);
+    buf = malloc(len);
+    if (!buf)
+        return NULL;
+
+    if (!bn_encode(bn, buf, len)) {
+        free(buf);
+        return NULL;
     }
 
+    out = jose_b64_enc(buf, len);
+    free(buf);
     return out;
 }
 
@@ -199,7 +224,9 @@ sss_point(const json_t *sss, size_t *len)
             return NULL;
     }
 
-    *len = jose_b64_dlen(json_string_length(p));
+    *len = jose_b64_dec(p, NULL, 0);
+    if (*len == SIZE_MAX)
+        return NULL;
     key = malloc(*len * 2);
     if (!key)
         return NULL;
@@ -230,8 +257,8 @@ sss_recover(const json_t *p, size_t npnts, const uint8_t *pnts[])
     if (BN_zero(k) <= 0)
         return NULL;
 
-    len = jose_b64_dlen(json_string_length(p));
-    if (len == 0)
+    len = jose_b64_dec(p, NULL, 0);
+    if (len == SIZE_MAX)
         return NULL;
 
     for (size_t i = 0; i < npnts; i++) {
@@ -287,4 +314,68 @@ sss_recover(const json_t *p, size_t npnts, const uint8_t *pnts[])
     }
 
     return bn_encode_json(k, len);
+}
+
+enum {
+    PIPE_RD = 0,
+    PIPE_WR = 1
+};
+
+FILE *
+call(char *const argv[], const void *buf, size_t len, pid_t *pid)
+{
+    int dump[2] = { -1, -1 };
+    int load[2] = { -1, -1 };
+    FILE *out = NULL;
+    ssize_t wr = 0;
+
+    *pid = 0;
+
+    if (pipe2(dump, O_CLOEXEC) < 0)
+        goto error;
+
+    if (pipe2(load, O_CLOEXEC) < 0)
+        goto error;
+
+    *pid = fork();
+    if (*pid < 0)
+        goto error;
+
+    if (*pid == 0) {
+        if (dup2(dump[PIPE_RD], STDIN_FILENO) < 0 ||
+            dup2(load[PIPE_WR], STDOUT_FILENO) < 0)
+            exit(EXIT_FAILURE);
+
+        execvp(argv[0], argv);
+        exit(EXIT_FAILURE);
+    }
+
+    for (const uint8_t *tmp = buf; len > 0; tmp += wr, len -= wr) {
+        wr = write(dump[PIPE_WR], tmp, len);
+        if (wr < 0)
+            goto error;
+    }
+
+    out = fdopen(load[PIPE_RD], "r");
+    if (!out)
+        goto error;
+
+    close(dump[PIPE_RD]);
+    close(dump[PIPE_WR]);
+    close(load[PIPE_WR]);
+    return out;
+
+error:
+    close(dump[PIPE_RD]);
+    close(dump[PIPE_WR]);
+    close(load[PIPE_RD]);
+    close(load[PIPE_WR]);
+
+    if (*pid > 0) {
+        kill(*pid, SIGTERM);
+        waitpid(*pid, NULL, 0);
+        *pid = 0;
+    }
+
+    return NULL;
 }

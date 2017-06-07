@@ -11,20 +11,36 @@ AM_PROG_CC_C_O
 
 PKG_PROG_PKG_CONFIG([0.25])
 
-PKG_CHECK_MODULES([jose], [jose-openssl >= 6 jose-zlib >= 6])
 PKG_CHECK_MODULES([luksmeta], [luksmeta >= 3])
 PKG_CHECK_MODULES([libcrypto], [libcrypto])
+PKG_CHECK_MODULES([jansson], [jansson])
 PKG_CHECK_MODULES([udisks2], [udisks2])
+PKG_CHECK_MODULES([jose], [jose >= 8])
 PKG_CHECK_MODULES([dracut], [dracut])
-
-AC_CHECK_HEADER([http_parser.h], [], [AC_MSG_ERROR([http-parser required!])])
-AC_SEARCH_LIBS([http_parser_execute], [http_parser], [], [AC_MSG_ERROR([http-parser required!])])
 
 AC_ARG_WITH([dracutmodulesdir],
 	    [AS_HELP_STRING([--with-dracutmodulesdir=DIR], [Directory for dracut modules])],
 	    [],
 	    [with_dracutmodulesdir=$($PKG_CONFIG --variable=dracutmodulesdir dracut)])
 AC_SUBST([dracutmodulesdir], [$with_dracutmodulesdir])
+
+for ac_prog in systemd-socket-activate systemd-activate; do
+    AC_CHECK_PROG([SD_ACTIVATE], [$ac_prog], [$as_dir/$ac_prog], [],
+		  [$PATH$PATH_SEPARATOR$($PKG_CONFIG --variable=systemdutildir systemd)])
+    test -n "$SD_ACTIVATE" && break
+done
+
+test -n "$SD_ACTIVATE" || AC_MSG_ERROR([systemd-socket-activate required!])
+
+AC_MSG_CHECKING([systemd-socket-activate inetd flag])
+if $SD_ACTIVATE --help | grep -q inetd; then
+    SD_ACTIVATE="$SD_ACTIVATE --inetd"
+    AC_MSG_RESULT([--inetd])
+else
+    AC_MSG_RESULT([(default)])
+fi
+
+AC_SUBST(SD_ACTIVATE)
 
 CLEVIS_CFLAGS="\
 -Wall \
@@ -46,5 +62,9 @@ CLEVIS_CFLAGS="\
 "
 AC_SUBST([CLEVIS_CFLAGS])
 
-AC_CONFIG_FILES([Makefile cmd/Makefile cmd/pins/Makefile dracut/Makefile udisks2/Makefile tests/Makefile])
+AC_CONFIG_FILES([
+    tests/Makefile
+    src/Makefile
+    Makefile
+])
 AC_OUTPUT

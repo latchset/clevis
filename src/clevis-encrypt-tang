@@ -1,0 +1,132 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Encrypts using a Tang binding server policy"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ]; then
+    echo >&2
+    echo "Usage: clevis encrypt tang CONFIG < PLAINTEXT > JWE" >&2
+    echo >&2
+    echo $SUMMARY >&2
+    echo >&2
+    echo "This command uses the following configuration properties:" >&2
+    echo >&2
+    echo "  url: <string>   The base URL of the Tang server (REQUIRED)" >&2
+    echo >&2
+    echo "  thp: <string>   The thumbprint of a trusted signing key" >&2
+    echo >&2
+    echo "  adv: <string>   A filename containing a trusted advertisement" >&2
+    echo "  adv: <object>   A trusted advertisement (raw JSON)" >&2
+    echo >&2
+    echo "Obtaining the thumbprint of a trusted signing key is easy. If you" >&2
+    echo "have access to the Tang server's database directory, simply do:" >&2
+    echo >&2
+    echo "    $ jose jwk thp -i \$DBDIR/\$SIG.jwk " >&2
+    echo >&2
+    echo "Alternatively, if you have certainty that your network connection" >&2
+    echo "is not compromised (not likely), you can download the advertisement" >&2
+    echo "yourself using:" >&2
+    echo >&2
+    echo "    $ curl -f \$URL/adv > adv.jws" >&2
+    echo >&2
+    exit 1
+fi
+
+if ! cfg=`jose fmt -j- -Oo- <<< "$1" 2>/dev/null`; then
+    echo "Configuration is malformed!" >&2
+    exit 1
+fi
+
+if ! url=`jose fmt -j- -Og url -u- <<< "$cfg"`; then
+    echo "Missing the required 'url' property!" >&2
+    exit 1
+fi
+
+thp=`jose fmt -j- -Og thp -Su- <<< "$cfg"` || true
+
+### Get the advertisement
+if jws=`jose fmt -j- -g adv -Oo- <<< "$cfg"`; then
+    thp=${thp:-any}
+elif jws=`jose fmt -j- -g adv -Su- <<< "$cfg"`; then
+    if ! [ -f "$jws" ]; then
+        echo "Advertisement file '$jws' not found!" >&2
+        exit 1
+    fi
+
+    if ! jws=`jose fmt -j- -Oo- < "$jws"`; then
+        echo "Advertisement file '$jws' is malformed!" >&2
+        exit 1
+    fi
+
+    thp=${thp:-any}
+elif ! jws=`curl -sf "$url/adv/$thp"`; then
+    echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
+    exit 1
+fi
+
+if ! jwks=`jose fmt -j- -Og payload -SyOg keys -AUo- <<< "$jws"`; then
+    echo "Advertisement is malformed!" >&2
+    exit 1
+fi
+
+### Check advertisement validity
+ver=`jose jwk use -i- -r -u verify -o- <<< "$jwks"`
+if ! jose jws ver -i "$jws" -k- -a <<< "$ver"; then
+    echo "Advertisement is missing signatures!" >&2
+    exit 1
+fi
+
+### Check advertisement trust
+if [ -z "$thp" ]; then
+    echo "The advertisement contains the following signing keys:" >&2
+    echo >&2
+    jose jwk thp -i- <<< "$ver" >&2
+    echo >&2
+    read -r -p "Do you wish to trust these keys? [ynYN] " ans < /dev/tty
+    [[ "$ans" =~ ^[yY]$ ]] || exit 1
+
+elif [ "$thp" != "any" ] && \
+    ! jose jwk thp -i- -f "$thp" -o /dev/null <<< "$ver"; then
+    echo "Trusted JWK '$thp' did not sign the advertisement!" >&2
+    exit 1
+fi
+
+### Perform encryption
+enc=`jose jwk use -i- -r -u deriveKey -o- <<< "$jwks"`
+jose fmt -j "$enc" -Og keys -A || enc="{\"keys\":[$enc]}"
+
+for jwk in `jose fmt -j- -Og keys -Af- <<< "$enc"`; do
+    jwk=`jose fmt -j- -Od key_ops -o- <<< "$jwk"`
+    jwk=`jose fmt -j- -Od alg -o- <<< "$jwk"`
+    kid=`jose jwk thp -i- <<< "$jwk"`
+    jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
+    jwe=`jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-`
+    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-`
+    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks"`
+    exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; cat)
+done
+
+echo "No exchange keys found!" >&2
+exit 1

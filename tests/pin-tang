@@ -26,25 +26,12 @@ function on_exit() {
 trap 'on_exit' EXIT
 trap 'exit' ERR
 
-for cmd in systemd-socket-activate \
-    `pkg-config --variable=systemdutildir systemd`/systemd-activate; do
-    if SD_ACTIVATE=`which $cmd`; then
-        if $SD_ACTIVATE --help | grep -q inetd; then
-            SD_ACTIVATE="$SD_ACTIVATE --inetd"
-        fi
-        break
-    fi
-done
-
-[ ! "$SD_ACTIVATE" ] && exit 1
-
 export TMP=`mktemp -d`
 mkdir -p $TMP/db
 mkdir -p $TMP/cache
 
 # Generate the server keys
-jose gen -t '{"alg": "ES256"}' -o $TMP/db/sig.jwk
-jose gen -t '{"kty": "EC", "crv": "P-256", "key_ops": ["deriveKey"] }' -o $TMP/db/exc.jwk
+/usr/libexec/tangd-keygen $TMP/db sig exc
 /usr/libexec/tangd-update $TMP/db $TMP/cache
 
 # Start the server
@@ -53,15 +40,22 @@ $SD_ACTIVATE -l 127.0.0.1:$port -a /usr/libexec/tangd $TMP/cache &
 export PID=$!
 sleep 0.25
 
+thp=`jose jwk thp -i "$TMP/db/sig.jwk"`
 adv="$TMP/cache/default.jws"
 url="http://localhost:${port}"
+
 cfg=`printf '{"url":"%s","adv":"%s"}' "$url" "$adv"`
-enc=`echo hi | ${top_builddir:-.}/clevis encrypt tang "$cfg"`
-dec=`echo $enc | ${top_builddir:-.}/clevis decrypt`
+enc=`echo -n "hi" | clevis encrypt tang "$cfg"`
+dec=`echo -n "$enc" | clevis decrypt`
+test "$dec" == "hi"
+
+cfg=`printf '{"url":"%s","thp":"%s"}' "$url" "$thp"`
+enc=`echo -n "hi" | clevis encrypt tang "$cfg"`
+dec=`echo -n "$enc" | clevis decrypt`
 test "$dec" == "hi"
 
 kill -9 $PID
 ! wait $PID
 unset PID
 
-! echo $enc | ./clevis-decrypt
+! echo $enc | clevis decrypt

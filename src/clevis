@@ -1,8 +1,7 @@
-#!/bin/bash
+#!/bin/bash -e
 # vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2016 Red Hat, Inc.
-# Author: Harald Hoyer <harald@redhat.com>
+# Copyright (c) 2017 Red Hat, Inc.
 # Author: Nathaniel McCallum <npmccallum@redhat.com>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,31 +18,38 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH"
+    return 1
+}
 
-shopt -s nullglob
+cmd=clevis
+while [ $# -gt 0 ]; do
+    [[ "$1" =~ ^- ]] && break
+    cmd="$cmd-$1"
+    shift
 
-for question in /run/systemd/ask-password/ask.*; do
-    d=
-    s=
-
-    while read line; do
-        case "$line" in
-            Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
-            Socket=*) s="${line##Socket=}";;
-        esac
-    done < "$question"
-
-    [ -z "$d" -o -z "$s" ] && continue
-
-    luksmeta show -d "$d" | while read -r -a row; do
-        [ "${row[1]}" != "active" ] && continue
-        [ "${row[2]}" != "$UUID" ] && continue
-        n=${row[0]}
-
-        if pt="`luksmeta load -d $d -s $n -u $UUID | clevis decrypt`"; then
-            echo -n "+$pt" | nc -U -u --send-only "$s"
-            break;
-        fi
-    done
+    exe=`findexe "$cmd"` && exec "$exe" "$@"
 done
+
+echo >&2
+echo "Usage: clevis COMMAND [OPTIONS]" >&2
+echo >&2
+
+max=0
+for f in $0-*; do
+    [ -f "$f" -a -x "$f" ] || continue
+    f=${f##*/}
+    [ ${#f} -gt $max ] && max=${#f}
+done
+
+for f in $0-*; do
+    [ -f "$f" -a -x "$f" ] || continue
+    summ=`$f --summary 2>/dev/null` || continue
+    f=${f##*/}
+    printf "  %-*s %s\n" "$max" "${f//-/ }" "$summ" >&2
+done
+
+echo >&2

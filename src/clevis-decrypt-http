@@ -18,13 +18,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-function http() {
-    case "$2" in
-    GET) ;;
-    *)   curl -sf -X "$2" -H "Content-Type: $3" --data-binary @- "$1";;
-    esac
-}
-
 [ $# -eq 1 -a "$1" == "--summary" ] && exit 1
 
 if [ -t 0 ]; then
@@ -51,21 +44,21 @@ if ! typ=`jose fmt -q "$hdr" -SyOg clevis -g http -g type -u-`; then
     exit 1
 fi
 
-if ! rep=`curl -sf -H "Accept: $typ" "$url"`; then
+if ! rep=`curl -sfg -H "Accept: $typ" "$url"`; then
     echo "Key transfer failed!" >&2
     exit 1
 fi
 
 case $typ in
 application/jwk+json)
-    if ! rep=`curl -sf -H "Accept: $typ" "$url" \
+    if ! rep=`curl -sfg -H "Accept: $typ" "$url" \
             | jose fmt -j- -Og kty -q oct -EUUo-`; then
         echo "Key transfer failed!" >&2
         exit 1
     fi
     ;;
 application/octet-stream)
-    if ! key=`curl -sf -H "Accept: $typ" "$url" | jose b64 enc -I-`; then
+    if ! key=`curl -sfg -H "Accept: $typ" "$url" | jose b64 enc -I-`; then
         echo "Key transfer failed!" >&2
         exit 1
     fi

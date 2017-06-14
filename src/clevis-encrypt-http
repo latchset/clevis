@@ -21,7 +21,7 @@
 SUMMARY="Encrypts using a REST HTTP escrow server policy"
 
 function http() {
-    curl -sf -X "$1" -H "Content-Type: $2" --data-binary @- "$3"
+    curl -sfg -X "$1" -H "Content-Type: $2" --data-binary @- "$3"
 }
 
 if [ "$1" == "--summary" ]; then

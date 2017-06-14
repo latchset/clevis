@@ -74,7 +74,7 @@ xfr=`jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph"`
 
 url="$url/rec/$kid"
 ct="Content-Type: application/jwk+json"
-if ! rep=`curl -sf -X POST -H "$ct" --data-binary @- "$url" <<< "$xfr"`; then
+if ! rep=`curl -sfg -X POST -H "$ct" --data-binary @- "$url" <<< "$xfr"`; then
     echo "Error communicating with the server!" >&2
     exit 1
 fi

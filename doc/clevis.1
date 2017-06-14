@@ -1,0 +1,160 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "CLEVIS" "1" "June 2017" "" ""
+.
+.SH "NAME"
+\fBclevis\fR \- Automated decryption policy framework
+.
+.SH "SYNOPSIS"
+\fBclevis\fR COMMAND [OPTIONS]
+.
+.SH "OVERVIEW"
+Clevis is a framework for automated decryption policy\. It allows you to define a policy at encryption time that must be satisfied for the data to decrypt\. Once this policy is met, the data is decrypted\.
+.
+.P
+Clevis is pluggable\. Our plugins are called pins\. The job of a pin is to take a policy as its first argument and plaintext on standard input and to encrypt the data so that it can be automatically decrypted if the policy is met\. Lets walk through an example\.
+.
+.SH "HTTP ESCROW"
+When using the HTTP pin, we create a new, cryptographically\-strong, random key\. This key is stored in a remote HTTP escrow server (using a simple PUT or POST)\. Then at decryption time, we attempt to fetch the key back again in order to decrypt our data\. So, for our configuration we need to pass the URL to the key location:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis encrypt http \'{"url":"https://escrow\.srv/1234"}\' < PT > JWE
+.
+.fi
+.
+.IP "" 0
+.
+.P
+To decrypt the data, simply provide the ciphertext (JWE):
+.
+.IP "" 4
+.
+.nf
+
+$ clevis decrypt < JWE > PLAINTEXT
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Notice that we did not pass any configuration during decryption\. The decrypt command extracted the URL (and possibly other configuration) from the JWE object, fetched the encryption key from the escrow and performed decryption\.
+.
+.P
+For more information, see \fBclevis\-encrypt\-http\fR(1)\.
+.
+.SH "TANG BINDING"
+Clevis provides support for the Tang network binding server\. Tang provides a stateless, lightweight alternative to escrows\. Encrypting data using the Tang pin works much like our HTTP pin above:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis encrypt tang \'{"url":"http://tang\.srv"}\' < PT > JWE
+The advertisement contains the following signing keys:
+
+_OsIk0T\-E2l6qjfdDiwVmidoZjA
+
+Do you wish to trust these keys? [ynYN] y
+.
+.fi
+.
+.IP "" 0
+.
+.P
+As you can see above, Tang utilizes a trust\-on\-first\-use workflow\. Alternatively, Tang can perform entirely offline encryption if you pre\-share the server advertisment\. Decryption, too works like our first example:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis decrypt < JWE > PT
+.
+.fi
+.
+.IP "" 0
+.
+.P
+For more information, see \fBclevis\-encrypt\-tang\fR(1)\.
+.
+.SH "SHAMIR\'S SECRET SHARING"
+Clevis provides a way to mix pins together to create sophisticated unlocking and high availability policies\. This is accomplished by using an algorithm called Shamir\'s Secret Sharing (SSS)\.
+.
+.P
+SSS is a thresholding scheme\. It creates a key and divides it into a number of pieces\. Each piece is encrypted using another pin (possibly even SSS recursively)\. Additionally, you define the threshold \fBt\fR\. If at least \fBt\fR pieces can be decrypted, then the encryption key can be recovered and decryption can succeed\.
+.
+.P
+For example, let\'s create a high\-availability setup using Tang:
+.
+.IP "" 4
+.
+.nf
+
+$ cfg=\'{"t":1,"pins":{"tang":[{"url":\.\.\.},{"url":\.\.\.}]}}\'
+$ clevis encrypt sss "$cfg" < PT > JWE
+.
+.fi
+.
+.IP "" 0
+.
+.P
+In this policy, we are declaring that we have a threshold of 1, but that there are multiple key fragments encrypted using different Tang servers\. Since our threshold is 1, so long as any of the Tang servers are available, decryption will succeed\. As always, decryption is simply:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis decrypt < JWE > PT
+.
+.fi
+.
+.IP "" 0
+.
+.P
+For more information, see \fBclevis\-encrypt\-tang\fR(1)\.
+.
+.SH "LUKS BINDING"
+Clevis can be used to bind an existing LUKS volume to its automation policy\. This is accomplished with a simple command:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis bind luks \-d /dev/sda tang \'{"url":\.\.\.}\'
+.
+.fi
+.
+.IP "" 0
+.
+.P
+This command performs four steps:
+.
+.IP "1." 4
+Creates a new key with the same entropy as the LUKS master key\.
+.
+.IP "2." 4
+Encrypts the new key with Clevis\.
+.
+.IP "3." 4
+Stores the Clevis JWE in the LUKS header with LUKSMeta\.
+.
+.IP "4." 4
+Enables the new key for use with LUKS\.
+.
+.IP "" 0
+.
+.P
+This disk can now be unlocked with your existing password as well as with the Clevis policy\. Clevis provides two unlockers for LUKS volumes\. First, we provide integration with Dracut to automatically unlock your root volume during early boot\. Second, we provide integration with UDisks2 to automatically unlock your removable media in your desktop session\.
+.
+.P
+For more information, see \fBclevis\-bind\-luks\fR(1)\.
+.
+.SH "AUTHOR"
+Nathaniel McCallum <npmccallum@redhat\.com>
+.
+.SH "SEE ALSO"
+\fBclevis\-encrypt\-http\fR(8), \fBclevis\-encrypt\-tang\fR(8), \fBclevis\-encrypt\-sss\fR(8), \fBclevis\-bind\-luks\fR(8), \fBclevis\-decrypt\fR(8),

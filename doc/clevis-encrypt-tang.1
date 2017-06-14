@@ -1,0 +1,122 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "CLEVIS\-ENCRYPT\-TANG" "1" "June 2017" "" ""
+.
+.SH "NAME"
+\fBclevis\-encrypt\-tang\fR \- Encrypts using a Tang binding server policy
+.
+.SH "SYNOPSIS"
+\fBclevis encrypt tang\fR CONFIG \fIPT\fR JWE
+.
+.SH "OVERVIEW"
+The \fBclevis encrypt tang\fR command encrypts using a Tang binding server policy\. Its only argument is the JSON configuration object\.
+.
+.P
+Clevis provides support for the Tang network binding server\. Tang provides a stateless, lightweight alternative to escrows\. Encrypting data using the Tang pin works like this:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis encrypt tang \'{"url":"http://tang\.srv"}\' < PT > JWE
+The advertisement contains the following signing keys:
+
+_OsIk0T\-E2l6qjfdDiwVmidoZjA
+
+Do you wish to trust these keys? [ynYN] y
+.
+.fi
+.
+.IP "" 0
+.
+.P
+To decrypt the data, just pass it to the \fBclevis decrypt\fR command:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis decrypt < JWE > PT
+.
+.fi
+.
+.IP "" 0
+.
+.P
+As you can see above, Tang utilizes a trust\-on\-first\-use workflow\. If you already know the thumbprint of a trusted key, you can specify it in the configuration at encryption time:
+.
+.IP "" 4
+.
+.nf
+
+$ cfg=\'{"url":"http://tang\.srv","thp":"_OsIk0T\-E2l6qjfdDiwVmidoZjA"}\'
+$ clevis encrypt tang "$cfg" < PT > JWE
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Obtaining the thumbprint of a trusted signing key is easy\. If you have access to the Tang server\'s database directory, simply do:
+.
+.IP "" 4
+.
+.nf
+
+$ jose jwk thp \-i $DBDIR/$SIG\.jwk
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Tang can also perform entirely offline encryption if you pre\-share the server advertisment\. You can fetch the advertisment with a simple command (just be careful your network isn\'t compromised!):
+.
+.IP "" 4
+.
+.nf
+
+$ curl \-f $URL/adv > adv\.jws
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Once you have the advertisment file, just provide it:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis encrypt tang \'{"url":\.\.\.,"adv":"adv\.jws"}\' < PT > JWE
+.
+.fi
+.
+.IP "" 0
+.
+.SH "CONFIG"
+This command uses the following configuration properties:
+.
+.TP
+\fBurl\fR (string)
+The base URL of the Tang server (REQUIRED)
+.
+.TP
+\fBthp\fR (string)
+The thumbprint of a trusted signing key
+.
+.TP
+\fBadv\fR (string)
+A filename containing a trusted advertisement
+.
+.TP
+\fBadv\fR (object)
+A trusted advertisement (raw JSON)
+.
+.SH "AUTHOR"
+Nathaniel McCallum <npmccallum@redhat\.com>
+.
+.SH "SEE ALSO"
+\fBclevis\-decrypt\fR(1)

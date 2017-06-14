@@ -1,0 +1,67 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "CLEVIS\-ENCRYPT\-HTTP" "1" "June 2017" "" ""
+.
+.SH "NAME"
+\fBclevis\-encrypt\-http\fR \- Encrypts using a REST HTTP escrow server policy
+.
+.SH "SYNOPSIS"
+\fBclevis encrypt http\fR CONFIG \fIPT\fR JWE
+.
+.SH "OVERVIEW"
+The \fBclevis encrypt http\fR command encrypts using a REST HTTP escrow server policy\. Its only argument is the JSON configuration object\.
+.
+.P
+When using the HTTP pin, we create a new, cryptographically\-strong, random key\. This key is stored in a remote HTTP escrow server (using a simple PUT or POST)\. Then at decryption time, we attempt to fetch the key back again in order to decrypt our data\. So, for our configuration we need to pass the URL to the key location:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis encrypt http \'{"url":"https://escrow\.srv/1234"}\' < PT > JWE
+.
+.fi
+.
+.IP "" 0
+.
+.P
+To decrypt the data, simply provide the ciphertext (JWE):
+.
+.IP "" 4
+.
+.nf
+
+$ clevis decrypt < JWE > PT
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Notice that we did not pass any configuration during decryption\. The decrypt command extracted the URL (and possibly other configuration) from the JWE object, fetched the encryption key from the escrow and performed decryption\.
+.
+.SH "CONFIG"
+This command uses the following configuration properties:
+.
+.TP
+\fBurl\fR (string)
+The URL where the key is stored (REQUIRED)
+.
+.TP
+\fBhttp\fR (boolean)
+Allow or disallow non\-TLS HTTP (default: false)
+.
+.TP
+\fBtype\fR (string)
+The type of key to store (default: octet\-stream)
+.
+.TP
+\fBmethod\fR (string)
+The HTTP method to use (default: PUT)
+.
+.SH "AUTHOR"
+Nathaniel McCallum <npmccallum@redhat\.com>
+.
+.SH "SEE ALSO"
+\fBclevis\-decrypt\fR(1)

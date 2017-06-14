@@ -1,0 +1,77 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "CLEVIS\-BIND\-LUKS" "1" "June 2017" "" ""
+.
+.SH "NAME"
+\fBclevis\-bind\-luks\fR \- Bind a LUKSv1 device using the specified policy
+.
+.SH "SYNOPSIS"
+\fBclevis bind luks\fR [\-f] \-d DEV [\-s SLT] [\-k KEY] PIN CFG
+.
+.SH "OVERVIEW"
+The \fBclevis bind luks\fR command binds a LUKSv1 device using the specified policy\. This is accomplished with a simple command:
+.
+.IP "" 4
+.
+.nf
+
+$ clevis bind luks \-d /dev/sda tang \'{"url":\.\.\.}\'
+.
+.fi
+.
+.IP "" 0
+.
+.P
+This command performs four steps:
+.
+.IP "1." 4
+Creates a new key with the same entropy as the LUKS master key\.
+.
+.IP "2." 4
+Encrypts the new key with Clevis\.
+.
+.IP "3." 4
+Stores the Clevis JWE in the LUKS header with LUKSMeta\.
+.
+.IP "4." 4
+Enables the new key for use with LUKS\.
+.
+.IP "" 0
+.
+.P
+This disk can now be unlocked with your existing password as well as with the Clevis policy\. Clevis provides two unlockers for LUKS volumes\. First, we provide integration with Dracut to automatically unlock your root volume during early boot\. Second, we provide integration with UDisks2 to automatically unlock your removable media in your desktop session\.
+.
+.SH "OPTIONS"
+.
+.TP
+\fB\-f\fR
+Do not prompt for LUKSMeta initialization
+.
+.TP
+\fB\-d\fR \fIDEV\fR
+The LUKS device on which to perform binding
+.
+.TP
+\fB\-s\fR \fISLT\fR
+The LUKSMeta slot to use for metadata storage
+.
+.TP
+\fB\-k\fR \fIKEY\fR
+Non\-interactively read LUKS password from KEY file
+.
+.TP
+\fB\-k\fR \-
+Non\-interactively read LUKS password from standard input
+.
+.SH "CAVEATS"
+This command does not change the LUKS master key\. This implies that if you create a LUKS\-encrypted image for use in a Virtual Machine or Cloud environment, all the instances that run this image will share a master key\. This is extremely dangerous and should be avoided at all cost\.
+.
+.P
+This is not a limitation of Clevis but a design principle of LUKS\. If you wish to have encrypted root volumes in the cloud, you will need to make sure that you perform the OS install method for each instance in the cloud as well\. The images cannot be shared without also sharing a master key\.
+.
+.SH "AUTHOR"
+Nathaniel McCallum <npmccallum@redhat\.com>
+.
+.SH "SEE ALSO"
+\fBclevis\-encrypt\-http\fR(1), \fBclevis\-encrypt\-tang\fR(1), \fBclevis\-encrypt\-sss\fR(1), \fBclevis\-decrypt\fR(1)

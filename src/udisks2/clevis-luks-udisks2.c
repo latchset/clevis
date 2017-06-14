@@ -56,8 +56,8 @@ remove_path(GList **lst, const char *path)
     GList *i = NULL;
 
     while ((i = g_list_find_custom(*lst, path, (GCompareFunc) g_strcmp0))) {
-        g_free(i->data);
         *lst = g_list_remove(*lst, i->data);
+        g_free(i->data);
     }
 }
 

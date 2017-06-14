@@ -148,6 +148,9 @@ main(int argc, char *argv[])
                     "clevis", "sss", "t", &t, "p", &p, "jwe", &pins) != 0)
         goto egress;
 
+    if (t < 1)
+        goto egress;
+
     pl = jose_b64_dec(p, NULL, 0);
     if (pl == SIZE_MAX)
         goto egress;

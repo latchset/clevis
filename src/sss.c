@@ -58,7 +58,7 @@ bn_decode_json(const json_t *json)
         return NULL;
 
     if (jose_b64_dec(json, buf, len) != len) {
-        free(bn);
+        free(buf);
         return NULL;
     }
 

@@ -98,12 +98,16 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
         size_t rd = 0;
 
         rd = fread(buf, 1, sizeof(buf), pipe);
-        if (ferror(pipe))
+        if (ferror(pipe)) {
+            fclose(pipe);
             return NULL;
+        }
 
         tmp = json_pack("s+%", json_string_value(jwe), buf, rd);
-        if (!tmp)
+        if (!tmp) {
+            fclose(pipe);
             return NULL;
+        }
 
         json_decref(jwe);
         jwe = tmp;

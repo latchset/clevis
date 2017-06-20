@@ -1,0 +1,77 @@
+#!/bin/bash
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Copyright (c) 2017 Shawn Rose
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+[ $1 == "prereqs" ] && exit 0 # We don't have any
+
+unlockclevis()
+{
+    UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+    cryptsource=$1
+    luksmeta show -d "$cryptsource" | while read -r slot state uuid; do
+        [ "$state" != "active" ] && continue
+        [ "$uuid" != "$UUID" ] && continue
+        luksmeta load -d $cryptsource -s $slot -u $UUID | clevis decrypt > /lib/cryptsetup/passfifo
+        break
+    done
+}
+
+clevisloop()
+{
+    # Exit on any error, so if it unlocks (not from clevis) we won't spam errors when initramfs unloads (Sleep doesn't exist!)
+    # Might want to come up with a semi-sane way to close out.
+    set -e
+
+    cryptkeyscript=""
+    # Are we using pymouth? This grabs which askpass we should be looking for. Copied straight from cryptroot.
+    if [ -x /bin/plymouth ] && plymouth --ping; then
+        cryptkeyscript="plymouth ask-for-password"
+    else
+        cryptkeyscript="/lib/cryptsetup/askpass"
+    fi
+
+    while true; do
+        sleep 0.2
+        # get ps info
+        psinfo=$(ps)
+        # Does it contain any processes that match $cryptkeyscript?
+        if [ -z "${psinfo##*$cryptkeyscript*}" ]; then
+            # ps, not even ps -w has ALL the arguments, and often cuts the end off of the uuid.
+            # So we'll need to do this even hackier by getting the pid, and then grepping the cmdline in /proc/.
+            cryptsetuppid=$(echo "$psinfo" | awk '/\/sbin\/cryptsetup/ {print $1}')
+            # Just making sure that the pid is valid: if it's blank, /proc//cmdline still works for this, so we check for exe.
+            if [ -e /proc/$cryptsetuppid/exe ]; then
+                luksdisk=$(grep -o "/dev/[-/a-zA-Z0-9]*" /proc/$cryptsetuppid/cmdline)
+                # And again, we double check and make sure it is a valid block device.
+                if [ -b "$luksdisk" ]; then
+                    unlockclevis "$luksdisk"
+                fi
+            fi
+        fi
+    done
+}
+
+. /scripts/functions
+
+configure_networking
+
+clevisloop &

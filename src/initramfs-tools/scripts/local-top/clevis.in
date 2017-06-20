@@ -1,0 +1,134 @@
+#!/bin/bash
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2017 Guilhem Moulin
+#
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+# Author: Guilhem Moulin <guilhem@guilhem.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+case $1 in
+prereqs) exit 0;;
+esac
+
+# Return 0 if $pid has a file descriptor pointing to $name, 1 otherwise
+in_fds() {
+    local  pid="$1" name="$2" fd
+    for fd in $(find "/proc/$pid/fd" -type l); do
+        [ "$(readlink -f "$fd")" != "$name" ] || return 0
+    done
+    return 1
+}
+
+# Print the PID of the askpass process with a file descriptor opened to
+# /lib/cryptsetup/passfifo if there is one.
+get_askpass_pid() {
+    psinfo=$(ps) # Doing this so I don't end up matching myself
+    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | \
+        while read pid; do
+        if in_fds "$pid" "$PASSFIFO"; then
+            echo "$pid"
+            break
+        fi
+    done
+}
+
+# Wait for askpass, and then try and decrypt immediately. Just in case
+# there are multiple devices that need decrypting, this will loop
+# infinitely (The local-bottom script will kill this after decryption)
+clevisloop()
+{
+    set -e
+
+    # Set the path how we want it (Probably not all needed)
+    PATH="/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
+
+    if [ -x /bin/plymouth ] && plymouth --ping; then
+        cryptkeyscript='plymouth ask-for-password'
+    else
+        # This has to be escaped for awk
+        cryptkeyscript='\/lib\/cryptsetup\/askpass'
+    fi
+
+    PASSFIFO='/lib/cryptsetup/passfifo'
+
+    OLD_CRYPTTAB_SOURCE=""
+
+    while true; do
+
+        pid=$(get_askpass_pid)
+
+        until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
+            sleep .1
+            pid=$(get_askpass_pid)
+        done
+
+        # Import CRYPTTAB_SOURCE from the askpass process.
+        local $(grep '^CRYPTTAB_SOURCE=' /proc/$pid/environ)
+
+        # Make sure that CRYPTTAB_SOURCE is actually a block device
+        [ ! -b "$CRYPTTAB_SOURCE" ] && continue
+
+        # Make the source has changed if needed
+        [ "$CRYPTTAB_SOURCE" == "$OLD_CRYPTTAB_SOURCE" ] && continue
+
+        OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
+
+        UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+        luksmeta show -d "$CRYPTTAB_SOURCE" | \
+            while read -r slot state uuid; do
+
+            [ "$state" != "active" ] && continue
+            [ "$uuid" != "$UUID" ] && continue
+            luksmeta load -d "$CRYPTTAB_SOURCE" -s $slot -u $UUID | \
+                clevis decrypt > $PASSFIFO
+            break
+        done
+
+        # Now that the current device has its password, let's sleep a
+        # bit. This gives cryptsetup time to actually decrypt the
+        # device and prompt for the next password if needed.
+        sleep .5
+    done
+}
+
+. /scripts/functions
+
+# Check if network is up before trying to configure it.
+eth_check() {
+    for device in $(all_netbootable_devices); do
+        ip link set dev $device up
+        sleep 1
+        ETH_HAS_CARRIER=$(</sys/class/net/$device/carrier)
+        if [ "$ETH_HAS_CARRIER" == '1' ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+if eth_check; then
+    # Make sure networking is set up: if booting via nfs, it already is
+    # Doesn't seem to work when added to clevisloop for some reason
+    [ "$boot" = nfs ] || configure_networking
+else
+    echo No Network Connection
+fi
+
+clevisloop &
+echo $! > /run/clevis.pid

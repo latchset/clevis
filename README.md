@@ -169,6 +169,17 @@ Upon reboot, you will be prompted to unlock the volume using a password. In
 the background, Clevis will attempt to unlock the volume automatically. If it
 succeeds, the password prompt will be cancelled and boot will continue.
 
+#### Unlocker: Initramfs-tools
+
+When using Clevis with initramfs-tools, in order to rebuild your
+initramfs you will need to run:
+
+```bash
+sudo update-initramfs -u -k 'all'
+```
+
+Upon reboot it will behave exactly as if using Dracut.
+
 #### Unlocker: UDisks2
 
 Our UDisks2 unlocker runs in your desktop session. You should not need to

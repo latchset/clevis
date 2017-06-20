@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+# Copyright (c) 2017 Shawn Rose
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+case $1 in
+prereqs) exit 0;;
+esac
+
+. @initramfstoolsdir@/hook-functions
+
+copy_exec @bindir@/clevis-decrypt-http
+copy_exec @bindir@/clevis-decrypt-tang
+copy_exec @bindir@/clevis-decrypt-sss
+copy_exec @bindir@/clevis-decrypt
+if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
+    copy_exec @bindir@/clevis-decrypt-tpm2
+fi
+if [ -x @bindir@/tpm2_createprimary ]; then
+    copy_exec @bindir@/tpm2_createprimary
+    copy_exec @bindir@/tpm2_unseal
+    copy_exec @bindir@/tpm2_load
+fi
+copy_exec @bindir@/luksmeta
+copy_exec @bindir@/clevis
+copy_exec @bindir@/jose
+copy_exec /usr/bin/curl
+copy_exec /bin/bash

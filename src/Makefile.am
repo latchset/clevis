@@ -1,4 +1,4 @@
-SUBDIRS=dracut systemd udisks2 .
+SUBDIRS=dracut initramfs-tools systemd udisks2 .
 
 AM_CFLAGS = \
     @CLEVIS_CFLAGS@ \

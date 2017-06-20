@@ -1,6 +1,7 @@
 DISTCHECK_CONFIGURE_FLAGS = \
     --with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir) \
-    --with-dracutmodulesdir=$$dc_install_base/$(dracutmodulesdir)
+    --with-dracutmodulesdir=$$dc_install_base/$(dracutmodulesdir)   \
+    --with-initramfstoolsmodulesdir=$$dc_install_base/$(initramfstoolsmodulesdir)
 
 SUBDIRS = . src tests
 EXTRA_DIST = COPYING

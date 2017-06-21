@@ -18,19 +18,20 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-[ $1 == "prereqs" ] && exit 0 # We don't have any
+case $1 in
+prereqs) exit 0;;
+esac
 
 . /usr/share/initramfs-tools/hook-functions
 
-# Why am I copying all the stuff that's normally in /usr/local/bin/ to /usr/bin?
-# Because /usr/local/bin isn't in path, and even if I add it TO path in /init
-# the findexe function in clevis fails to find anything.
-copy_exec /usr/local/bin/clevis-decrypt-http /usr/bin/clevis-decrypt-http
-copy_exec /usr/local/bin/clevis-decrypt-tang /usr/bin/clevis-decrypt-tang
-copy_exec /usr/local/bin/clevis-decrypt-sss /usr/bin/clevis-decrypt-sss
-copy_exec /usr/local/bin/clevis-decrypt /usr/bin/clevis-decrypt
-copy_exec /usr/local/bin/luksmeta /usr/bin/luksmeta
-copy_exec /usr/local/bin/clevis /usr/bin/clevis
-copy_exec /usr/local/bin/jose /usr/bin/jose
-copy_exec /usr/bin/curl
+# Why am I copying all the stuff that's normally in /usr/local/bin/ to /bin?
+# Because /usr/local/bin isn't in path, and findexe seems to be finicky.
+copy_exec /usr/local/bin/clevis-decrypt-http /bin/clevis-decrypt-http
+copy_exec /usr/local/bin/clevis-decrypt-tang /bin/clevis-decrypt-tang
+copy_exec /usr/local/bin/clevis-decrypt-sss /bin/clevis-decrypt-sss
+copy_exec /usr/local/bin/clevis-decrypt /bin/clevis-decrypt
+copy_exec /usr/local/bin/luksmeta /bin/luksmeta
+copy_exec /usr/local/bin/clevis /bin/clevis
+copy_exec /usr/local/bin/jose /bin/jose
+copy_exec /usr/bin/curl /bin/curl
 copy_exec /bin/bash

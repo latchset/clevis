@@ -21,7 +21,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-[ $1 == "prereqs" ] && exit 0 # We don't have any
+case $1 in
+prereqs) exit 0;;
+esac
 
 unlockclevis()
 {
@@ -64,6 +66,7 @@ clevisloop()
                 # And again, we double check and make sure it is a valid block device.
                 if [ -b "$luksdisk" ]; then
                     unlockclevis "$luksdisk"
+                    exit 0 # Die after trying to decrypt: If it fails, it fails.
                 fi
             fi
         fi

@@ -3,9 +3,12 @@
 #
 # Copyright (c) 2017 Red Hat, Inc.
 # Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2017 Guilhem Moulin
+#
 # Author: Harald Hoyer <harald@redhat.com>
 # Author: Nathaniel McCallum <npmccallum@redhat.com>
 # Author: Shawn Rose <shawnandrewrose@gmail.com>
+# Author: Guilhem Moulin <guilhem@guilhem.org>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,51 +28,58 @@ case $1 in
 prereqs) exit 0;;
 esac
 
-unlockclevis()
-{
-    UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
-    cryptsource=$1
-    luksmeta show -d "$cryptsource" | while read -r slot state uuid; do
-        [ "$state" != "active" ] && continue
-        [ "$uuid" != "$UUID" ] && continue
-        luksmeta load -d $cryptsource -s $slot -u $UUID | clevis decrypt > /lib/cryptsetup/passfifo
-        break
+# Return 0 if $pid has a file descriptor pointing to $name, and 1
+# otherwise.
+in_fds() {
+    local  pid="$1" name="$2" fd
+    for fd in $(find "/proc/$pid/fd" -type l); do
+        [ "$(readlink -f "$fd")" != "$name" ] || return 0
+    done
+    return 1
+}
+
+# Print the PID of the askpass process with a file descriptor opened to
+# /lib/cryptsetup/passfifo.
+get_askpass_pid() {
+    psinfo=$(ps) # Doing this so I don't end up matching myself
+    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | while read pid; do
+        if in_fds "$pid" "$PASSFIFO"; then
+            echo "$pid"
+            break
+        fi
     done
 }
 
+# Wait for askpass, and then try and decrypt immediately.
 clevisloop()
 {
-    # Exit on any error, so if it unlocks (not from clevis) we won't spam errors when initramfs unloads (Sleep doesn't exist!)
-    # Might want to come up with a semi-sane way to close out.
     set -e
 
-    cryptkeyscript=""
-    # Are we using pymouth? This grabs which askpass we should be looking for. Copied straight from cryptroot.
     if [ -x /bin/plymouth ] && plymouth --ping; then
-        cryptkeyscript="plymouth ask-for-password"
+        cryptkeyscript='plymouth ask-for-password'
     else
-        cryptkeyscript="/lib/cryptsetup/askpass"
+        # This has to be escaped for awk
+        cryptkeyscript='\/lib\/cryptsetup\/askpass'
     fi
 
-    while true; do
-        sleep 0.2
-        # get ps info
-        psinfo=$(ps)
-        # Does it contain any processes that match $cryptkeyscript?
-        if [ -z "${psinfo##*$cryptkeyscript*}" ]; then
-            # ps, not even ps -w has ALL the arguments, and often cuts the end off of the uuid.
-            # So we'll need to do this even hackier by getting the pid, and then grepping the cmdline in /proc/.
-            cryptsetuppid=$(echo "$psinfo" | awk '/\/sbin\/cryptsetup/ {print $1}')
-            # Just making sure that the pid is valid: if it's blank, /proc//cmdline still works for this, so we check for exe.
-            if [ -e /proc/$cryptsetuppid/exe ]; then
-                luksdisk=$(grep -o "/dev/[-/a-zA-Z0-9]*" /proc/$cryptsetuppid/cmdline)
-                # And again, we double check and make sure it is a valid block device.
-                if [ -b "$luksdisk" ]; then
-                    unlockclevis "$luksdisk"
-                    exit 0 # Die after trying to decrypt: If it fails, it fails.
-                fi
-            fi
-        fi
+    PASSFIFO='/lib/cryptsetup/passfifo'
+
+    pid=$(get_askpass_pid)
+
+    until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
+        sleep .1
+        pid=$(get_askpass_pid)
+    done
+
+    # Import CRYPTTAB_SOURCE from the askpass process
+    local $(grep '^CRYPTTAB_SOURCE=' /proc/$pid/environ)
+
+    UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+    luksmeta show -d "$CRYPTTAB_SOURCE" | while read -r slot state uuid; do
+        [ "$state" != "active" ] && continue
+        [ "$uuid" != "$UUID" ] && continue
+        luksmeta load -d $CRYPTTAB_SOURCE -s $slot -u $UUID | clevis decrypt > $PASSFIFO
+        break
     done
 }
 

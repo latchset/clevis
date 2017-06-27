@@ -409,40 +409,24 @@ error:
 int
 main(int argc, char *const argv[])
 {
-    uid_t uid = 0;
-    gid_t gid = 0;
+    const struct passwd *pwd = getpwnam(CLEVIS_USER);
+    const struct group *grp = getgrnam(CLEVIS_GROUP);
+    uid_t uid = pwd ? pwd->pw_uid : 0;
+    gid_t gid = grp ? grp->gr_gid : 0;
+
+    if (!pwd) {
+        fprintf(stderr, "Invalid user name '%s'!\n", CLEVIS_USER);
+        return EXIT_FAILURE;
+    }
+
+    if (!grp) {
+        fprintf(stderr, "Invalid group name '%s'!\n", CLEVIS_GROUP);
+        return EXIT_FAILURE;
+    }
 
     if (getuid() == geteuid()) {
         fprintf(stderr, "Not running as SUID = root!\n");
         return EXIT_FAILURE;
-    }
-
-    for (int o; (o = getopt(argc, argv, "u:g:")) != -1; ) {
-        const struct passwd *pwd = NULL;
-        const struct group *grp = NULL;
-
-        switch (o) {
-        case 'u':
-            pwd = getpwnam(optarg);
-            if (!pwd) {
-                fprintf(stderr, "Invalid user name '%s'!\n", optarg);
-                return EXIT_FAILURE;
-            }
-            uid = pwd->pw_uid;
-            break;
-
-        case 'g':
-            grp = getgrnam(optarg);
-            if (!grp) {
-                fprintf(stderr, "Invalid group name '%s'!\n", optarg);
-                return EXIT_FAILURE;
-            }
-            gid = grp->gr_gid;
-            break;
-
-        default:
-            return EXIT_FAILURE;
-        }
     }
 
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, pair) == -1)

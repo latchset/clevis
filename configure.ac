@@ -42,6 +42,19 @@ fi
 
 AC_SUBST(SD_ACTIVATE)
 
+AC_ARG_ENABLE([user],
+              AS_HELP_STRING([--enable-user=USER],
+                             [Set unprivileged user (default: root)]),
+              [CLEVIS_USER="${enableval}"],
+              [CLEVIS_USER="root"])
+AC_ARG_ENABLE([group],
+              AS_HELP_STRING([--enable-group=GROUP],
+                             [Set unprivileged group (default: root)]),
+              [CLEVIS_GROUP="${enableval}"],
+              [CLEVIS_GROUP="root"])
+AC_SUBST([CLEVIS_USER])
+AC_SUBST([CLEVIS_GROUP])
+
 CLEVIS_CFLAGS="\
 -Wall \
 -Wextra \

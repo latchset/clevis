@@ -4,7 +4,9 @@ AM_CFLAGS = \
     @libcrypto_CFLAGS@ \
     @jose_CFLAGS@ \
     @udisks2_CFLAGS@ \
-    -D BINDIR='"@bindir@"'
+    -D BINDIR='"@bindir@"' \
+    -D CLEVIS_USER='"@CLEVIS_USER@"' \
+    -D CLEVIS_GROUP='"@CLEVIS_GROUP@"'
 
 dracutdir = @dracutmodulesdir@/60$(PACKAGE_NAME)
 autostartdir = $(sysconfdir)/xdg/autostart

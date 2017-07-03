@@ -31,6 +31,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <pwd.h>
+#include <grp.h>
+
 #define MAX_UDP 65507
 
 typedef struct {
@@ -328,7 +331,7 @@ egress:
 }
 
 static ssize_t
-recover_key(const pkt_t *jwe, char *out, size_t max)
+recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
 {
     int push[2] = { -1, -1 };
     int pull[2] = { -1, -1 };
@@ -348,6 +351,12 @@ recover_key(const pkt_t *jwe, char *out, size_t max)
     if (chld == 0) {
         char *const env[] = { "PATH=" BINDIR, NULL };
         int r = 0;
+
+        if (gid != 0 && (setgid(gid) != 0 || setegid(gid) != 0))
+            return EXIT_FAILURE;
+
+        if (uid != 0 && (setuid(uid) != 0 || seteuid(uid) != 0))
+            return EXIT_FAILURE;
 
         r = dup2(push[PIPE_RD], STDIN_FILENO);
         if (r != STDIN_FILENO)
@@ -398,8 +407,23 @@ error:
 }
 
 int
-main(int argc, char *argv[])
+main(int argc, char *const argv[])
 {
+    const struct passwd *pwd = getpwnam(CLEVIS_USER);
+    const struct group *grp = getgrnam(CLEVIS_GROUP);
+    uid_t uid = pwd ? pwd->pw_uid : 0;
+    gid_t gid = grp ? grp->gr_gid : 0;
+
+    if (!pwd) {
+        fprintf(stderr, "Invalid user name '%s'!\n", CLEVIS_USER);
+        return EXIT_FAILURE;
+    }
+
+    if (!grp) {
+        fprintf(stderr, "Invalid group name '%s'!\n", CLEVIS_GROUP);
+        return EXIT_FAILURE;
+    }
+
     if (getuid() == geteuid()) {
         fprintf(stderr, "Not running as SUID = root!\n");
         return EXIT_FAILURE;
@@ -455,9 +479,9 @@ main(int argc, char *argv[])
 
         /* Recover the key from the JWE. */
         if (jwe.used > 0) {
-            key.used = recover_key(&jwe, key.data, sizeof(key.data));
-            fprintf(stderr, "%s\tRCVR\t%s\n", &req.data[1],
-                    strerror(key.used < 0 ? -key.used : 0));
+            key.used = recover_key(&jwe, key.data, sizeof(key.data), uid, gid);
+            fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", &req.data[1],
+                    strerror(key.used < 0 ? -key.used : 0), key.used);
             if (key.used < 0)
                 key.used = 0;
         }

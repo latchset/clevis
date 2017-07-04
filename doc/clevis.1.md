@@ -62,6 +62,30 @@ the server advertisement. Decryption, too works like our first example:
 
 For more information, see `clevis-encrypt-tang`(1).
 
+# TPM2 BINDING
+
+Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
+chip. The cryptographically-strong, random key used for encryption is encrypted
+using the TPM2 chip, and then at decryption time is decrypted using the TPM2 to
+allow clevis to decrypt the secret stored in the JWE.
+
+Encrypting data using the tpm2 pin works the same than the pins mentioned above:
+
+    $ clevis encrypt tpm2 '{}' < PT > JWE
+
+The pin has reasonable defaults for its configuration, but a different hierarchy,
+hash, and key algorithms can be choosen if the defaults used are not suitable.
+
+Decryption also works similar to other pins, only the JWE needs to be provided:
+
+    $ clevis decrypt < JWE > PT
+
+Note that like other pins no configuration is used for decryption, this is due
+clevis storing the public and private keys to unseal the TPM2 encrypted object
+in the JWE so clevis can fetch that information from there.
+
+For more information see `clevis-encrypt-tpm2`(1).
+
 # SHAMIR'S SECRET SHARING
 
 Clevis provides a way to mix pins together to create sophisticated unlocking
@@ -114,6 +138,7 @@ For more information, see `clevis-luks-bind`(1).
 
 `clevis-encrypt-http`(1),
 `clevis-encrypt-tang`(1),
+`clevis-encrypt-tpm2`(1),
 `clevis-encrypt-sss`(1),
 `clevis-luks-bind`(1),
 `clevis-decrypt`(1)

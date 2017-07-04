@@ -79,6 +79,22 @@ perform decryption.
 
 Patches to provide support for HTTPS and authentication are welcome.
 
+#### PIN: TPM2
+
+Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
+chip. The cryptographically-strong, random key used for encryption is encrypted
+using the TPM2 chip, and then at decryption time is decrypted using the TPM2 to
+allow clevis to decrypt the secret stored in the JWE.
+
+For example:
+
+```bash
+$ echo hi | clevis encrypt tpm2 '{}' > hi.jwe
+```
+
+Clevis store the public and private keys of the encrypted key in the JWE object,
+so those can be fetched on decryption to unseal the key encrypted using the TPM2.
+
 #### PIN: Shamir Secret Sharing
 
 Clevis provides a way to mix pins together to provide sophisticated unlocking

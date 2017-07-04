@@ -1,0 +1,126 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Javier Martinez Canillas <javierm@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# The owner hierarchy is the one that should be used by the Operating System.
+auth="o"
+
+function on_exit() {
+    if ! rm -r $TMP; then
+        echo "Delete temporary files failed!" >&2
+        exit 1
+    fi
+}
+
+[ $# -eq 1 -a "$1" == "--summary" ] && exit 1
+
+if [ -t 0 ]; then
+    echo >&2
+    echo "Usage: clevis decrypt tpm2 < JWE > PLAINTEXT" >&2
+    echo >&2
+    exit 1
+fi
+
+export TPM2TOOLS_TCTI_NAME=device
+export TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+
+if [ -z "${TPM2TOOLS_DEVICE_FILE[0]}" ]; then
+    echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
+    exit 1
+fi
+
+if ! [[ -r "${TPM2TOOLS_DEVICE_FILE[0]}" && -w "${TPM2TOOLS_DEVICE_FILE[0]}" ]]; then
+    echo "The ${TPM2TOOLS_DEVICE_FILE[0]} device must be readable and writable!" >&2
+    exit 1
+fi
+
+read -d . hdr
+
+if ! jhd=`jose b64 dec -i- <<< "$hdr"`; then
+    echo "Error decoding JWE protected header!" >&2
+    exit 1
+fi
+
+if [ `jose fmt -j- -Og clevis -g pin -u- <<< "$jhd"` != "tpm2" ]; then
+    echo "JWE pin mismatch!" >&2
+    exit 1
+fi
+
+if ! hash=`jose fmt -j- -Og clevis -g tpm2 -g hash -Su- <<< "$jhd"`; then
+    echo "JWE missing required 'hash' header parameter!" >&2
+    exit 1
+fi
+
+if ! key=`jose fmt -j- -Og clevis -g tpm2 -g key -Su- <<< "$jhd"`; then
+    echo "JWE missing required 'key' header parameter!" >&2
+    exit 1
+fi
+
+if ! jwk_pub=`jose fmt -j- -Og clevis -g tpm2 -g jwk_pub -Su- <<< "$jhd"`; then
+    echo "JWE missing required 'key' header parameter!" >&2
+    exit 1
+fi
+
+if ! jwk_priv=`jose fmt -j- -Og clevis -g tpm2 -g jwk_priv -Su- <<< "$jhd"`; then
+    echo "JWE missing required 'key' header parameter!" >&2
+    exit 1
+fi
+
+if ! TMP=`mktemp -d -p ~`; then
+    echo "Creating a temporary dir for TPM files failed!" >&2
+    exit 1
+fi
+
+trap 'on_exit' EXIT
+
+pcr_ids=`jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd"` || true
+
+if [ -n "$pcr_ids" ]; then
+    pcr_bank=`jose fmt -j- -Og clevis -g tpm2 -g pcr_bank -Su- <<< "$jhd"`
+    policy_options="-L $pcr_bank:$pcr_ids"
+fi
+
+if ! `jose b64 dec -i- -O $TMP/jwk.pub <<< "$jwk_pub"`; then
+    echo "Decoding jwk.pub from Base64 failed!" >&2
+    exit 1
+fi
+
+if ! `jose b64 dec -i- -O $TMP/jwk.priv <<< "$jwk_priv"`; then
+    echo "Decoding jwk.priv from Base64 failed!" >&2
+    exit 1
+fi
+
+if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" \
+     -C $TMP/primary.context 2>/dev/null; then
+    echo "Creating TPM2 primary key failed!" >&2
+    exit 1
+fi
+
+if ! tpm2_load -Q -c $TMP/primary.context -u $TMP/jwk.pub -r $TMP/jwk.priv \
+     -C $TMP/load.context 2>/dev/null; then
+    echo "Loading jwk to TPM2 failed!" >&2
+    exit 1
+fi
+
+if ! jwk=`tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null`; then
+    echo "Unsealing jwk from TPM failed!" >&2
+    exit 1
+fi
+
+jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; cat)

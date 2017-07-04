@@ -36,15 +36,24 @@ install() {
     inst_multiple /etc/services \
         clevis-decrypt-http \
         clevis-decrypt-tang \
+        clevis-decrypt-tpm2 \
         clevis-decrypt-sss \
         @libexecdir@/clevis-luks-askpass \
         clevis-decrypt \
+        tpm2_createprimary \
+        tpm2_unseal \
+        tpm2_load \
         luksmeta \
         clevis \
+        mktemp \
         curl \
         jose \
         nc
 
     dracut_need_initqueue
+}
+
+installkernel() {
+    hostonly='' instmods =drivers/char/tpm
 }
 

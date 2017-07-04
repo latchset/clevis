@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# Copyright (c) 2017 Shawn Rose
+#
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+PREREQ=""
+
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+    ;;
+esac
+
+[ -s /run/clevis.pid ] || exit 0
+
+pid=$(cat /run/clevis.pid)
+ps -l | awk -v pid=$pid '$4==pid { system("kill " $3) }'
+kill $pid
+
+# Not really worried about downing extra interfaces: they will come up during the actual boot.
+
+for iface in $(ls /sys/class/net/) ; do
+    ip link  set   dev "$iface" down
+    ip addr  flush dev "$iface"
+    ip route flush dev "$iface"
+done

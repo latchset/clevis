@@ -1,5 +1,4 @@
 #!/bin/bash
-# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
 # Copyright (c) 2017 Red Hat, Inc.
 # Copyright (c) 2017 Shawn Rose
@@ -28,8 +27,7 @@ case $1 in
 prereqs) exit 0;;
 esac
 
-# Return 0 if $pid has a file descriptor pointing to $name, and 1
-# otherwise.
+# Return 0 if $pid has a file descriptor pointing to $name, and 1 otherwise.
 in_fds() {
     local  pid="$1" name="$2" fd
     for fd in $(find "/proc/$pid/fd" -type l); do
@@ -38,8 +36,7 @@ in_fds() {
     return 1
 }
 
-# Print the PID of the askpass process with a file descriptor opened to
-# /lib/cryptsetup/passfifo.
+# Print the PID of the askpass process with a file descriptor opened to /lib/cryptsetup/passfifo.
 get_askpass_pid() {
     psinfo=$(ps) # Doing this so I don't end up matching myself
     echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | while read pid; do
@@ -50,10 +47,17 @@ get_askpass_pid() {
     done
 }
 
+# Set up networking if needed (by checking nfs)
 # Wait for askpass, and then try and decrypt immediately.
 clevisloop()
 {
     set -e
+
+    # Make sure networking is set up: if booting via nfs, it already is
+    [ "$boot" = nfs ] || configure_networking
+
+    # Set the path how we want it (Probably not all needed)
+    PATH="/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 
     if [ -x /bin/plymouth ] && plymouth --ping; then
         cryptkeyscript='plymouth ask-for-password'
@@ -65,26 +69,28 @@ clevisloop()
     PASSFIFO='/lib/cryptsetup/passfifo'
 
     pid=$(get_askpass_pid)
-
+    
     until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
         sleep .1
         pid=$(get_askpass_pid)
     done
 
-    # Import CRYPTTAB_SOURCE from the askpass process
+    # Import CRYPTTAB_SOURCE from the askpass process.
     local $(grep '^CRYPTTAB_SOURCE=' /proc/$pid/environ)
+
+    # Make sure that CRYPTTAB_SOURCE is actually a block device
+    [ ! -b "$CRYPTTAB_SOURCE" ] && continue
 
     UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
     luksmeta show -d "$CRYPTTAB_SOURCE" | while read -r slot state uuid; do
         [ "$state" != "active" ] && continue
         [ "$uuid" != "$UUID" ] && continue
-        luksmeta load -d $CRYPTTAB_SOURCE -s $slot -u $UUID | clevis decrypt > $PASSFIFO
+        luksmeta load -d "$CRYPTTAB_SOURCE" -s $slot -u $UUID | clevis decrypt > $PASSFIFO
         break
     done
 }
 
 . /scripts/functions
 
-configure_networking
-
 clevisloop &
+echo $! > /run/clevis.pid

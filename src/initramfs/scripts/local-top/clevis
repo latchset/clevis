@@ -27,7 +27,7 @@ case $1 in
 prereqs) exit 0;;
 esac
 
-# Return 0 if $pid has a file descriptor pointing to $name, and 1 otherwise.
+# Return 0 if $pid has a file descriptor pointing to $name, 1 otherwise
 in_fds() {
     local  pid="$1" name="$2" fd
     for fd in $(find "/proc/$pid/fd" -type l); do
@@ -36,10 +36,12 @@ in_fds() {
     return 1
 }
 
-# Print the PID of the askpass process with a file descriptor opened to /lib/cryptsetup/passfifo.
+# Print the PID of the askpass process with a file descriptor opened to
+# /lib/cryptsetup/passfifo if there is one.
 get_askpass_pid() {
     psinfo=$(ps) # Doing this so I don't end up matching myself
-    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | while read pid; do
+    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | \
+        while read pid; do
         if in_fds "$pid" "$PASSFIFO"; then
             echo "$pid"
             break
@@ -47,8 +49,9 @@ get_askpass_pid() {
     done
 }
 
-# Set up networking if needed (by checking nfs)
-# Wait for askpass, and then try and decrypt immediately.
+# Wait for askpass, and then try and decrypt immediately. Just in case
+# there are multiple devices that need decrypting, this will loop
+# infinitely (The local-bottom script will kill this after decryption)
 clevisloop()
 {
     set -e
@@ -65,31 +68,50 @@ clevisloop()
 
     PASSFIFO='/lib/cryptsetup/passfifo'
 
-    pid=$(get_askpass_pid)
+    OLD_CRYPTTAB_SOURCE=""
 
-    until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
-        sleep .1
+    while true; do
+
         pid=$(get_askpass_pid)
-    done
 
-    # Import CRYPTTAB_SOURCE from the askpass process.
-    local $(grep '^CRYPTTAB_SOURCE=' /proc/$pid/environ)
+        until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
+            sleep .1
+            pid=$(get_askpass_pid)
+        done
 
-    # Make sure that CRYPTTAB_SOURCE is actually a block device
-    [ ! -b "$CRYPTTAB_SOURCE" ] && continue
+        # Import CRYPTTAB_SOURCE from the askpass process.
+        local $(grep '^CRYPTTAB_SOURCE=' /proc/$pid/environ)
 
-    UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
-    luksmeta show -d "$CRYPTTAB_SOURCE" | while read -r slot state uuid; do
-        [ "$state" != "active" ] && continue
-        [ "$uuid" != "$UUID" ] && continue
-        luksmeta load -d "$CRYPTTAB_SOURCE" -s $slot -u $UUID | clevis decrypt > $PASSFIFO
-        break
+        # Make sure that CRYPTTAB_SOURCE is actually a block device
+        [ ! -b "$CRYPTTAB_SOURCE" ] && continue
+
+        # Make the source has changed if needed
+        [ "$CRYPTTAB_SOURCE" == "$OLD_CRYPTTAB_SOURCE" ] && continue
+
+        OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
+
+        UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+        luksmeta show -d "$CRYPTTAB_SOURCE" | \
+            while read -r slot state uuid; do
+
+            [ "$state" != "active" ] && continue
+            [ "$uuid" != "$UUID" ] && continue
+            luksmeta load -d "$CRYPTTAB_SOURCE" -s $slot -u $UUID | \
+                clevis decrypt > $PASSFIFO
+            break
+        done
+
+        # Now that the current device has its password, let's sleep a
+        # bit. This gives cryptsetup time to actually decrypt the
+        # device and prompt for the next password if needed.
+        sleep .5
     done
 }
 
 . /scripts/functions
 
 # Make sure networking is set up: if booting via nfs, it already is
+# Doesn't seem to work when added to clevisloop for some reason
 [ "$boot" = nfs ] || configure_networking
 
 clevisloop &

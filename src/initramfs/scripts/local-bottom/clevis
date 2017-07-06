@@ -37,7 +37,8 @@ pid=$(cat /run/clevis.pid)
 ps -l | awk -v pid=$pid '$4==pid { system("kill " $3) }'
 kill $pid
 
-# Not really worried about downing extra interfaces: they will come up during the actual boot.
+# Not really worried about downing extra interfaces: they will come up
+# during the actual boot. Might make this configurable later if needed.
 
 for iface in $(ls /sys/class/net/) ; do
     ip link  set   dev "$iface" down

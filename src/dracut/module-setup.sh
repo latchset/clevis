@@ -37,6 +37,7 @@ install() {
         clevis-decrypt-http \
         clevis-decrypt-tang \
         clevis-decrypt-sss \
+        clevis-luks-askpass \
         clevis-decrypt \
         luksmeta \
         clevis \

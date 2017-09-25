@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
 # Copyright (c) 2016 Red Hat, Inc.
@@ -42,7 +42,7 @@ for question in /run/systemd/ask-password/ask.*; do
 
         if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
             echo -n "+$pt" | nc -U -u --send-only "$s"
-            break;
+            break
         fi
     done
 done

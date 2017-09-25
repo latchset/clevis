@@ -1,1 +1,10 @@
+[Unit]
+Description=Clevis systemd-ask-password Watcher
+Before=remote-fs-pre.target
+Wants=remote-fs-pre.target
+
+[Path]
 PathChanged=/run/systemd/ask-password
+
+[Install]
+WantedBy=remote-fs.target

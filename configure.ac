@@ -16,6 +16,7 @@ PKG_CHECK_MODULES([libcrypto], [libcrypto])
 PKG_CHECK_MODULES([jansson], [jansson])
 PKG_CHECK_MODULES([udisks2], [udisks2])
 PKG_CHECK_MODULES([jose], [jose >= 8])
+PKG_CHECK_MODULES([systemd], [systemd])
 PKG_CHECK_MODULES([dracut], [dracut])
 
 AC_ARG_WITH([dracutmodulesdir],
@@ -23,6 +24,13 @@ AC_ARG_WITH([dracutmodulesdir],
 	    [],
 	    [with_dracutmodulesdir=$($PKG_CONFIG --variable=dracutmodulesdir dracut)])
 AC_SUBST([dracutmodulesdir], [$with_dracutmodulesdir])
+
+AC_ARG_WITH([systemdsystemunitdir],
+            [AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd unit files])],
+            [],
+            [with_systemdsystemunitdir=$($PKG_CONFIG --variable=systemdsystemunitdir systemd)])
+
+AC_SUBST([systemdsystemunitdir], [$with_systemdsystemunitdir])
 
 for ac_prog in systemd-socket-activate systemd-activate; do
     AC_CHECK_PROG([SD_ACTIVATE], [$ac_prog], [$as_dir/$ac_prog], [],
@@ -76,6 +84,7 @@ CLEVIS_CFLAGS="\
 AC_SUBST([CLEVIS_CFLAGS])
 
 AC_CONFIG_FILES([
+    src/systemd/Makefile
     src/udisks2/Makefile
     src/dracut/Makefile
     tests/Makefile

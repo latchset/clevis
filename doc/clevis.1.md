@@ -88,7 +88,7 @@ For more information, see `clevis-encrypt-tang`(1).
 Clevis can be used to bind an existing LUKS volume to its automation policy.
 This is accomplished with a simple command:
 
-    $ clevis bind luks -d /dev/sda tang '{"url":...}'
+    $ clevis luks bind -d /dev/sda tang '{"url":...}'
 
 This command performs four steps:
 
@@ -103,7 +103,7 @@ we provide integration with Dracut to automatically unlock your root volume
 during early boot. Second, we provide integration with UDisks2 to
 automatically unlock your removable media in your desktop session.
 
-For more information, see `clevis-bind-luks`(1).
+For more information, see `clevis-luks-bind`(1).
 
 ## AUTHOR
 
@@ -114,5 +114,5 @@ Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
 `clevis-encrypt-http`(8),
 `clevis-encrypt-tang`(8),
 `clevis-encrypt-sss`(8),
-`clevis-bind-luks`(8),
+`clevis-luks-bind`(8),
 `clevis-decrypt`(8),

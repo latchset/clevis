@@ -1,16 +1,16 @@
-clevis-bind-luks(1) -- Bind a LUKSv1 device using the specified policy
+clevis-luks-bind(1) -- Bind a LUKSv1 device using the specified policy
 ======================================================================
 
 ## SYNOPSIS
 
-`clevis bind luks` [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
+`clevis luks bind` [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
 
 ## OVERVIEW
 
-The `clevis bind luks` command binds a LUKSv1 device using the specified
+The `clevis luks bind` command binds a LUKSv1 device using the specified
 policy. This is accomplished with a simple command:
 
-    $ clevis bind luks -d /dev/sda tang '{"url":...}'
+    $ clevis luks bind -d /dev/sda tang '{"url":...}'
 
 This command performs four steps:
 

@@ -1,0 +1,132 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2016 Red Hat, Inc.
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Binds a LUKSv1 device using the specified policy"
+UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+
+function onerr() {
+    if [ -n "$DEV" -a -n "$SLT" ]; then
+        luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"
+        SLT=
+    fi
+    exit 1
+}
+
+trap 'onerr' ERR HUP INT QUIT PIPE TERM
+
+function usage() {
+    echo >&2
+    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] -d DEV PIN CFG" >&2
+    echo >&2
+    echo "$SUMMARY": >&2
+    echo >&2
+    echo "  -f      Do not prompt for LUKSMeta initialization" >&2
+    echo >&2
+    echo "  -d DEV  The LUKS device on which to perform binding" >&2
+    echo >&2
+    echo "  -s SLT  The LUKSMeta slot to use for metadata storage" >&2
+    echo >&2
+    echo "  -k KEY  Non-interactively read LUKS password from KEY file" >&2
+    echo "  -k -    Non-interactively read LUKS password from standard input" >&2
+    echo >&2
+    exit 1
+}
+
+if [ $# -eq 1 -a "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+while getopts ":hfd:s:k:" o; do
+    case "$o" in
+    f) FRC=-f;;
+    d) DEV=$OPTARG;;
+    s) SLT=$OPTARG;;
+    k) KEY=$OPTARG;;
+    *) usage;;
+    esac
+done
+
+if [ -z "$DEV" ]; then
+    echo "Did not specify a device!" >&2
+    usage
+fi
+
+if ! PIN=${@:$((OPTIND++)):1} || [ -z "$PIN" ]; then
+    echo "Did not specify a pin!" >&2
+    usage
+fi
+
+if ! CFG=${@:$((OPTIND++)):1} || [ -z "$CFG" ]; then
+    echo "Did not specify a pin config!" >&2
+    usage
+fi
+
+if [ -n "$KEY" ]; then
+    if [ "$KEY" == "-" ]; then
+        if ! luksmeta test -d $DEV && [ -z "$FRC" ]; then
+            echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
+            usage
+        fi
+    elif ! [ -f "$KEY" ]; then
+        echo "Key file '$KEY' not found!" >&2
+        exit 1
+    fi
+fi
+
+# Generate a key with the same entropy as the LUKS Master Key
+dump=`cryptsetup luksDump $DEV`
+bits=`sed -r -n 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "$dump"`
+tmp=`jose fmt -j '{"kty":"oct"}' -j $((bits / 8)) -s bytes -Uo-`
+key=`jose jwk gen -i "$tmp" | jose fmt -j- -Og k -Su-`
+
+# Encrypt the new key
+jwe=`echo -n "$key" | clevis encrypt "$PIN" "$CFG"`
+
+# If necessary, initialize the LUKS volume
+if ! luksmeta test -d $DEV; then
+    luksmeta init -d $DEV $FRC
+fi
+
+# Write the JWE into the specified slot. Or, if no slot is given, ...
+if [ -n "$SLT" ]; then
+    if ! echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" -s $SLT 2>/dev/null; then
+        echo "Error while saving Clevis metadata in LUKS header!" >&2
+        false
+    fi
+
+# ... write the JWE to the first slot unused by both LUKS and LUKSMeta
+elif ! SLT=`echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" 2>/dev/null`; then
+    echo "Error while saving Clevis metadata in LUKS header!" >&2
+    false
+fi
+
+export DEV
+export SLT
+
+# Add the new key to the LUKS slot that matches the LUKSMeta slot
+case "$KEY" in
+"") read -s -p "Enter existing LUKS password: " old; echo;;
+ -) old=`cat`;;
+ *) old=`cat "$KEY"`;;
+esac
+
+echo -e "$old\n$key" | cryptsetup luksAddKey -S $SLT $DEV

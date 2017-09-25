@@ -128,7 +128,7 @@ this key using Clevis, and store the output JWE inside the LUKS header using
 Here is an example where we bind `/dev/sda1` using the Tang ping:
 
 ```bash
-$ sudo clevis bind-luks -d /dev/sda1 tang '{"url": "http://tang.local"}'
+$ sudo clevis luks bind -d /dev/sda1 tang '{"url": "http://tang.local"}'
 The advertisement is signed with the following keys:
         kWwirxc5PhkFIH0yE28nc-EvjDY
 

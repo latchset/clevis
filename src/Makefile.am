@@ -29,6 +29,7 @@ dist_bin_SCRIPTS = \
     clevis-decrypt-http \
     clevis-decrypt-tang \
     clevis-bind-luks \
+    clevis-luks-bind \
     clevis-decrypt \
     clevis
 

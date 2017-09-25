@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "CLEVIS" "1" "June 2017" "" ""
+.TH "CLEVIS" "1" "September 2017" "" ""
 .
 .SH "NAME"
 \fBclevis\fR \- Automated decryption policy framework
@@ -124,7 +124,7 @@ Clevis can be used to bind an existing LUKS volume to its automation policy\. Th
 .
 .nf
 
-$ clevis bind luks \-d /dev/sda tang \'{"url":\.\.\.}\'
+$ clevis luks bind \-d /dev/sda tang \'{"url":\.\.\.}\'
 .
 .fi
 .
@@ -151,10 +151,10 @@ Enables the new key for use with LUKS\.
 This disk can now be unlocked with your existing password as well as with the Clevis policy\. Clevis provides two unlockers for LUKS volumes\. First, we provide integration with Dracut to automatically unlock your root volume during early boot\. Second, we provide integration with UDisks2 to automatically unlock your removable media in your desktop session\.
 .
 .P
-For more information, see \fBclevis\-bind\-luks\fR(1)\.
+For more information, see \fBclevis\-luks\-bind\fR(1)\.
 .
 .SH "AUTHOR"
 Nathaniel McCallum <npmccallum@redhat\.com>
 .
 .SH "SEE ALSO"
-\fBclevis\-encrypt\-http\fR(8), \fBclevis\-encrypt\-tang\fR(8), \fBclevis\-encrypt\-sss\fR(8), \fBclevis\-bind\-luks\fR(8), \fBclevis\-decrypt\fR(8),
+\fBclevis\-encrypt\-http\fR(8), \fBclevis\-encrypt\-tang\fR(8), \fBclevis\-encrypt\-sss\fR(8), \fBclevis\-luks\-bind\fR(8), \fBclevis\-decrypt\fR(8),

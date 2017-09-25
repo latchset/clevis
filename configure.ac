@@ -76,6 +76,8 @@ CLEVIS_CFLAGS="\
 AC_SUBST([CLEVIS_CFLAGS])
 
 AC_CONFIG_FILES([
+    src/udisks2/Makefile
+    src/dracut/Makefile
     tests/Makefile
     src/Makefile
     Makefile

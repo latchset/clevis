@@ -1,0 +1,6 @@
+[Unit]
+Description=Clevis LUKS systemd-ask-password Responder
+
+[Service]
+Type=oneshot
+ExecStart=@bindir@/clevis luks askpass

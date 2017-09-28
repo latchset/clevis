@@ -1,11 +1,16 @@
-clevis-luks-bind(1) -- Bind a LUKSv1 device using the specified policy
-======================================================================
+% CLEVIS-LUKS-BIND(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis-luks-bind -- Bind a LUKSv1 device using the specified policy
+
+# SYNOPSIS
 
 `clevis luks bind` [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
 
-## OVERVIEW
+# OVERVIEW
 
 The `clevis luks bind` command binds a LUKSv1 device using the specified
 policy. This is accomplished with a simple command:
@@ -25,7 +30,7 @@ we provide integration with Dracut to automatically unlock your root volume
 during early boot. Second, we provide integration with UDisks2 to
 automatically unlock your removable media in your desktop session.
 
-## OPTIONS
+# OPTIONS
 
 * `-f` :
   Do not prompt for LUKSMeta initialization
@@ -42,7 +47,7 @@ automatically unlock your removable media in your desktop session.
 * `-k` - :
   Non-interactively read LUKS password from standard input
 
-## CAVEATS
+# CAVEATS
 
 This command does not change the LUKS master key. This implies that if you
 create a LUKS-encrypted image for use in a Virtual Machine or Cloud
@@ -54,11 +59,7 @@ to have encrypted root volumes in the cloud, you will need to make sure that
 you perform the OS install method for each instance in the cloud as well.
 The images cannot be shared without also sharing a master key.
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-encrypt-http`(1),
 `clevis-encrypt-tang`(1),

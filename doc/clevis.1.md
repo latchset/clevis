@@ -1,11 +1,16 @@
-clevis(1) -- Automated decryption policy framework
-==================================================
+% CLEVIS(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis -- Automated decryption policy framework
+
+# SYNOPSIS
 
 `clevis` COMMAND [OPTIONS]
 
-## OVERVIEW
+# OVERVIEW
 
 Clevis is a framework for automated decryption policy. It allows you to define
 a policy at encryption time that must be satisfied for the data to decrypt.
@@ -16,7 +21,7 @@ take a policy as its first argument and plaintext on standard input and to
 encrypt the data so that it can be automatically decrypted if the policy is
 met. Lets walk through an example.
 
-## HTTP ESCROW
+# HTTP ESCROW
 
 When using the HTTP pin, we create a new, cryptographically-strong, random key.
 This key is stored in a remote HTTP escrow server (using a simple PUT or POST).
@@ -36,7 +41,7 @@ object, fetched the encryption key from the escrow and performed decryption.
 
 For more information, see `clevis-encrypt-http`(1).
 
-## TANG BINDING
+# TANG BINDING
 
 Clevis provides support for the Tang network binding server. Tang provides
 a stateless, lightweight alternative to escrows. Encrypting data using the Tang
@@ -57,7 +62,7 @@ the server advertisment. Decryption, too works like our first example:
 
 For more information, see `clevis-encrypt-tang`(1).
 
-## SHAMIR'S SECRET SHARING
+# SHAMIR'S SECRET SHARING
 
 Clevis provides a way to mix pins together to create sophisticated unlocking
 and high availability policies. This is accomplished by using an algorithm
@@ -83,7 +88,7 @@ will succeed. As always, decryption is simply:
 
 For more information, see `clevis-encrypt-tang`(1).
 
-## LUKS BINDING
+# LUKS BINDING
 
 Clevis can be used to bind an existing LUKS volume to its automation policy.
 This is accomplished with a simple command:
@@ -105,11 +110,7 @@ automatically unlock your removable media in your desktop session.
 
 For more information, see `clevis-luks-bind`(1).
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-encrypt-http`(8),
 `clevis-encrypt-tang`(8),

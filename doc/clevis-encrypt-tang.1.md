@@ -1,11 +1,16 @@
-clevis-encrypt-tang(1) -- Encrypts using a Tang binding server policy
-=====================================================================
+% CLEVIS-ENCRYPT-TANG(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis-encrypt-tang -- Encrypts using a Tang binding server policy
+
+# SYNOPSIS
 
 `clevis encrypt tang` CONFIG < PT > JWE
 
-## OVERVIEW
+# OVERVIEW
 
 The `clevis encrypt tang` command encrypts using a Tang binding server policy.
 Its only argument is the JSON configuration object.
@@ -47,7 +52,7 @@ Once you have the advertisment file, just provide it:
 
     $ clevis encrypt tang '{"url":...,"adv":"adv.jws"}' < PT > JWE
 
-## CONFIG
+# CONFIG
 
 This command uses the following configuration properties:
 
@@ -63,10 +68,6 @@ This command uses the following configuration properties:
 * `adv` (object) :
   A trusted advertisement (raw JSON)
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-decrypt`(1)

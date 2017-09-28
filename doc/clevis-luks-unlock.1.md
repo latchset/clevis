@@ -1,18 +1,23 @@
-clevis-luks-unlock(1) -- Unlocks a LUKSv1 device bound with a Clevis policy
-======================================================================
+% CLEVIS-LUKS-UNLOCK(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis-luks-unlock -- Unlocks a LUKSv1 device bound with a Clevis policy
+
+# SYNOPSIS
 
 `clevis luks unlock` -d DEV [-n NAME]
 
-## OVERVIEW
+# OVERVIEW
 
 The `clevis luks unlock` command unlocks a LUKSv1 device using its already
 provisioned Clevis policy. For example:
 
     $ clevis luks unlock -d /dev/sda
 
-## OPTIONS
+# OPTIONS
 
 * `-d` _DEV_ :
   The LUKS device to unlock
@@ -20,10 +25,6 @@ provisioned Clevis policy. For example:
 * `-n` _NAME_ :
   The name to give the unlocked device node
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-luks-bind`(1)

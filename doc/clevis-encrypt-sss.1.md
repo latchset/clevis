@@ -1,11 +1,16 @@
-clevis-encrypt-sss(1) -- Encrypts using a Shamir's Secret Sharing policy 
-========================================================================
+% CLEVIS-ENCRYPT-SSS(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis-encrypt-sss -- Encrypts using a Shamir's Secret Sharing policy 
+
+# SYNOPSIS
 
 `clevis encrypt sss` CONFIG < PT > JWE
 
-## OVERVIEW
+# OVERVIEW
 
 The `clevis encrypt sss` command encrypts using a Shamir's Secret Sharing
 policy. Its only argument is the JSON configuration object.
@@ -29,7 +34,7 @@ will succeed. As always, decryption is simply:
 
     $ clevis decrypt < JWE > PT
 
-## CONFIG
+# CONFIG
 
 This command uses the following configuration properties:
 
@@ -46,11 +51,7 @@ The format of the `pins` property is as follows:
 When the list version of the format is used, multiple pins of that type will
 receive key fragments.
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-encrypt-http`(1),
 `clevis-encrypt-tang`(1),

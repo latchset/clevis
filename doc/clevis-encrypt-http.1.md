@@ -1,11 +1,16 @@
-clevis-encrypt-http(1) -- Encrypts using a REST HTTP escrow server policy
-=========================================================================
+% CLEVIS-ENCRYPT-HTTP(1)
+% Nathaniel McCallum <npmccallum@redhat.com>
+% Sepember 2017
 
-## SYNOPSIS
+# NAME
+
+clevis-encrypt-http -- Encrypts using a REST HTTP escrow server policy
+
+# SYNOPSIS
 
 `clevis encrypt http` CONFIG < PT > JWE
 
-## OVERVIEW
+# OVERVIEW
 
 The `clevis encrypt http` command encrypts using a REST HTTP escrow server
 policy. Its only argument is the JSON configuration object.
@@ -26,7 +31,7 @@ Notice that we did not pass any configuration during decryption. The decrypt
 command extracted the URL (and possibly other configuration) from the JWE
 object, fetched the encryption key from the escrow and performed decryption.
 
-## CONFIG
+# CONFIG
 
 This command uses the following configuration properties:
 
@@ -42,10 +47,6 @@ This command uses the following configuration properties:
 * `method` (string) :
   The HTTP method to use (default: PUT)
 
-## AUTHOR
-
-Nathaniel McCallum &lt;npmccallum@redhat.com&gt;
-
-## SEE ALSO
+# SEE ALSO
 
 `clevis-decrypt`(1)

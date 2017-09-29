@@ -101,40 +101,33 @@ idle(gpointer misc)
         if (!dev)
             continue;
 
-        for (int slot = 0; slot < crypt_keyslot_max(CRYPT_LUKS1); slot++) {
-            gboolean success = FALSE;
+        pkt.used = strlen(dev) + 1;
+        if ((size_t) pkt.used > sizeof(pkt.data))
+            continue;
 
-            pkt.used = strlen(dev) + 2;
-            if ((size_t) pkt.used > sizeof(pkt.data))
-                continue;
+        strcpy(pkt.data, dev);
 
-            pkt.data[0] = slot;
-            strcpy(&pkt.data[1], dev);
-
-            if (send(ctx->sock, pkt.data, pkt.used, 0) != pkt.used) {
-                g_main_loop_quit(ctx->loop);
-                break;
-            }
-
-            memset(&pkt, 0, sizeof(pkt));
-
-            pkt.used = recv(ctx->sock, pkt.data, sizeof(pkt.data), 0);
-            if (pkt.used == 0)
-                continue;
-            else if (pkt.used < 0 || (size_t) pkt.used >= sizeof(pkt.data)) {
-                g_main_loop_quit(ctx->loop);
-                break;
-            }
-
-            /* NOTE: pkt.data is now implicitly NULL terminated regardless of
-             * whether or not the plaintext inside the JWE was terminated. */
-
-            success = udisks_encrypted_call_unlock_sync(enc, pkt.data, options,
-                                                        NULL, NULL, NULL);
-            memset(&pkt, 0, sizeof(pkt));
-            if (success)
-                break;
+        if (send(ctx->sock, pkt.data, pkt.used, 0) != pkt.used) {
+            g_main_loop_quit(ctx->loop);
+            break;
         }
+
+        memset(&pkt, 0, sizeof(pkt));
+
+        pkt.used = recv(ctx->sock, pkt.data, sizeof(pkt.data), 0);
+        if (pkt.used == 0)
+            continue;
+        else if (pkt.used < 0 || (size_t) pkt.used >= sizeof(pkt.data)) {
+            g_main_loop_quit(ctx->loop);
+            break;
+        }
+
+        /* NOTE: pkt.data is now implicitly NULL terminated regardless of
+         * whether or not the plaintext inside the JWE was terminated. */
+
+        udisks_encrypted_call_unlock_sync(enc, pkt.data, options,
+                                          NULL, NULL, NULL);
+        memset(&pkt, 0, sizeof(pkt));
     }
 
 error:
@@ -409,6 +402,7 @@ error:
 int
 main(int argc, char *const argv[])
 {
+    const int slotlen = crypt_keyslot_max(CRYPT_LUKS1);
     const struct passwd *pwd = getpwnam(CLEVIS_USER);
     const struct group *grp = getgrnam(CLEVIS_GROUP);
     uid_t uid = pwd ? pwd->pw_uid : 0;
@@ -467,24 +461,28 @@ main(int argc, char *const argv[])
     for (pkt_t req = {}, jwe = {}, key = {}; ; key = (pkt_t) {}) {
         /* Receive a request. Ensure that it is null terminated. */
         req.used = recv(pair[0], req.data, sizeof(req.data), 0);
-        if (req.used < 2 || req.data[req.used - 1])
+        if (req.used < 1 || req.data[req.used - 1])
             break;
 
-        fprintf(stderr, "%s\tSLOT\t%hhu\n", &req.data[1], req.data[0]);
+        for (uint8_t s = 0; s < slotlen && key.used <= 0; s++) {
+            fprintf(stderr, "%s\tSLOT\t%hhu\n", req.data, s);
 
-        /* Load the JWE for the request. */
-        jwe.used = load_jwe(&req, (uint8_t *) jwe.data, sizeof(jwe.data));
-        fprintf(stderr, "%s\tMETA\t%s\n", &req.data[1],
-                strerror(jwe.used < 0 ? -jwe.used : 0));
+            /* Load the JWE for the request. */
+            jwe.used = load_jwe(&req, (uint8_t *) jwe.data, sizeof(jwe.data));
+            fprintf(stderr, "%s\tMETA\t%s\n", req.data,
+                    strerror(jwe.used < 0 ? -jwe.used : 0));
 
-        /* Recover the key from the JWE. */
-        if (jwe.used > 0) {
-            key.used = recover_key(&jwe, key.data, sizeof(key.data), uid, gid);
-            fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", &req.data[1],
-                    strerror(key.used < 0 ? -key.used : 0), key.used);
-            if (key.used < 0)
-                key.used = 0;
+            /* Recover the key from the JWE. */
+            if (jwe.used > 0) {
+                key.used = recover_key(&jwe, key.data, sizeof(key.data),
+                                       uid, gid);
+                fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", req.data,
+                        strerror(key.used < 0 ? -key.used : 0), key.used);
+            }
         }
+
+        if (key.used < 0)
+            key.used = 0;
 
         /* Send the key as a reply. */
         if (send(pair[0], key.data, key.used, 0) != key.used)

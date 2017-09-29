@@ -11,13 +11,14 @@ AM_PROG_CC_C_O
 
 PKG_PROG_PKG_CONFIG([0.25])
 
-PKG_CHECK_MODULES([luksmeta], [luksmeta >= 3])
+PKG_CHECK_MODULES([luksmeta], [luksmeta >= 8])
 PKG_CHECK_MODULES([libcrypto], [libcrypto])
 PKG_CHECK_MODULES([jansson], [jansson])
 PKG_CHECK_MODULES([udisks2], [udisks2])
 PKG_CHECK_MODULES([jose], [jose >= 8])
 PKG_CHECK_MODULES([systemd], [systemd])
 PKG_CHECK_MODULES([dracut], [dracut])
+PKG_CHECK_MODULES([audit], [audit])
 
 AC_ARG_WITH([dracutmodulesdir],
 	    [AS_HELP_STRING([--with-dracutmodulesdir=DIR], [Directory for dracut modules])],

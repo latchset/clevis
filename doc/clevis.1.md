@@ -112,8 +112,8 @@ For more information, see `clevis-luks-bind`(1).
 
 # SEE ALSO
 
-`clevis-encrypt-http`(8),
-`clevis-encrypt-tang`(8),
-`clevis-encrypt-sss`(8),
-`clevis-luks-bind`(8),
-`clevis-decrypt`(8),
+`clevis-encrypt-http`(1),
+`clevis-encrypt-tang`(1),
+`clevis-encrypt-sss`(1),
+`clevis-luks-bind`(1),
+`clevis-decrypt`(1)

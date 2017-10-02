@@ -165,6 +165,15 @@ attempt to unlock it automatically in parallel with a desktop password prompt.
 If automatic unlocking succeeds, the password prompt will be dissmissed without
 user intervention.
 
+#### Unlocker: Clevis command
+
+A LUKSv1 device bound to a Clevis policy can also be unlocked by using the clevis
+luks unlock command.
+
+```bash
+$ sudo clevis luks unlock -d /dev/sda1
+```
+
 ## Installing Clevis
 
 Please don't install Clevis directly. Instead, use your preferred

@@ -20,6 +20,9 @@ PKG_CHECK_MODULES([systemd], [systemd])
 PKG_CHECK_MODULES([dracut], [dracut])
 PKG_CHECK_MODULES([audit], [audit])
 
+AC_CHECK_PROG([PWMAKE], [pwmake], [yes])
+test -n "$PWMAKE" || AC_MSG_ERROR([pwmake required!])
+
 AC_ARG_WITH([dracutmodulesdir],
 	    [AS_HELP_STRING([--with-dracutmodulesdir=DIR], [Directory for dracut modules])],
 	    [],

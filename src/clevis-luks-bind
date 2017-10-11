@@ -27,6 +27,7 @@ function onerr() {
         luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"
         SLT=
     fi
+    stty echo
     exit 1
 }
 

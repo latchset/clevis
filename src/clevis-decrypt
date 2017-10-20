@@ -23,7 +23,7 @@ SUMMARY="Decrypts using the policy defined at encryption time"
 function findexe() {
     while read -d: path; do
         [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
-    done <<< "$PATH"
+    done <<< "$PATH:"
     return 1
 }
 

@@ -32,10 +32,13 @@
 #include <stdio.h>
 
 #include <libaudit.h>
+#include <getopt.h>
 #include <pwd.h>
 #include <grp.h>
 
 #define MAX_UDP 65507
+#define UERR ((uid_t) -1)
+#define GERR ((gid_t) -1)
 
 typedef struct {
     ssize_t used;
@@ -308,10 +311,10 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         char *const env[] = { "PATH=" BINDIR, NULL };
         int r = 0;
 
-        if (gid != 0 && (setgid(gid) != 0 || setegid(gid) != 0))
+        if (setgid(gid) != 0 || setegid(gid) != 0)
             return EXIT_FAILURE;
 
-        if (uid != 0 && (setuid(uid) != 0 || seteuid(uid) != 0))
+        if (setuid(uid) != 0 || seteuid(uid) != 0)
             return EXIT_FAILURE;
 
         r = dup2(push[PIPE_RD], STDIN_FILENO);
@@ -389,29 +392,87 @@ log_attempt(int log, struct crypt_device *cd, bool success)
                                   NULL, NULL, NULL, success) > 0;
 }
 
+static const char *sopts = "hu:g:";
+static const struct option lopts[] = {
+    { "help",   no_argument,       .val = 'h' },
+    { "user",   required_argument, .val = 'u' },
+    { "group",  required_argument, .val = 'g' },
+    {}
+};
+
+static uid_t
+usr2uid(const char *usr) {
+    const struct passwd *tmp = getpwnam(usr);
+    return tmp ? tmp->pw_uid : UERR;
+}
+
+static gid_t
+grp2gid(const char *grp) {
+    const struct group *tmp = getgrnam(grp);
+    return tmp ? tmp->gr_gid : GERR;
+}
+
 int
 main(int argc, char *const argv[])
 {
     const int slotlen = crypt_keyslot_max(CRYPT_LUKS1);
-    const struct passwd *pwd = getpwnam(CLEVIS_USER);
-    const struct group *grp = getgrnam(CLEVIS_GROUP);
-    uid_t uid = pwd ? pwd->pw_uid : 0;
-    gid_t gid = grp ? grp->gr_gid : 0;
-    uid_t cur = getuid();
+    gid_t recg = grp2gid(CLEVIS_GROUP); /* Recovery group */
+    uid_t recu = usr2uid(CLEVIS_USER);  /* Recovery user */
+    gid_t unlg = getgid();              /* Unlock group */
+    uid_t unlu = getuid();              /* Unlock user */
     int log = -1;
 
-    if (!pwd) {
+    if (recu == UERR) {
         fprintf(stderr, "Invalid user name '%s'!\n", CLEVIS_USER);
         return EXIT_FAILURE;
     }
 
-    if (!grp) {
+    if (recg == GERR) {
         fprintf(stderr, "Invalid group name '%s'!\n", CLEVIS_GROUP);
         return EXIT_FAILURE;
     }
 
-    if (cur == geteuid()) {
-        fprintf(stderr, "Not running as SUID = root!\n");
+    if (geteuid() != 0) {
+        fprintf(stderr, "Root privileges required!\n");
+        return EXIT_FAILURE;
+    }
+
+    for (int c; (c = getopt_long(argc, argv, sopts, lopts, NULL)) >= 0; ) {
+        switch (c) {
+        case 'u':
+            if (getuid() != 0) {
+                fprintf(stderr, "You can only specify the user as root!\n");
+                return EXIT_FAILURE;
+            }
+
+            unlu = usr2uid(optarg);
+            if (unlu == 0 || unlu == UERR) {
+                fprintf(stderr, "Invalid user name '%s'!\n", optarg);
+                return EXIT_FAILURE;
+            }
+            break;
+
+        case 'g':
+            if (getuid() != 0) {
+                fprintf(stderr, "You can only specify the group as root!\n");
+                return EXIT_FAILURE;
+            }
+
+            unlg = grp2gid(optarg);
+            if (unlg == 0 || unlg == GERR) {
+                fprintf(stderr, "Invalid group name '%s'!\n", optarg);
+                return EXIT_FAILURE;
+            }
+            break;
+
+        default:
+            fprintf(stderr, "Usage: clevis-luks-udisks2 [-u USER -g GROUP]\n");
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (unlu == 0 || unlg == 0) {
+        fprintf(stderr, "Either run as SETUID=root or use -u/-g!\n");
         return EXIT_FAILURE;
     }
 
@@ -430,7 +491,8 @@ main(int argc, char *const argv[])
 
         safeclose(&pair[0]);
 
-        if (seteuid(cur) == 0)
+        if (setgid(unlg) == 0 && setegid(unlg) == 0 &&
+            setuid(unlu) == 0 && seteuid(unlu) == 0)
             status = child_main(pair[1]);
 
         safeclose(&pair[1]);
@@ -447,7 +509,8 @@ main(int argc, char *const argv[])
     signal(SIGUSR2, on_signal);
     signal(SIGCHLD, on_signal);
 
-    if (setuid(geteuid()) == -1)
+    if (setgid(0) == -1 || setegid(0) == -1 ||
+        setuid(0) == -1 || seteuid(0) == -1)
         goto error;
 
     log = audit_open();
@@ -493,7 +556,7 @@ main(int argc, char *const argv[])
                     strerror(jwe.used < 0 ? -jwe.used : 0));
 
             /* Recover the key from the JWE. */
-            key.used = recover_key(&jwe, key.data, sizeof(key.data), uid, gid);
+            key.used = recover_key(&jwe, key.data, sizeof(key.data), recu, recg);
             fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", req.data,
                     strerror(key.used < 0 ? -key.used : 0), key.used);
         }

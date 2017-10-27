@@ -32,11 +32,9 @@ Enables the new key for use with LUKS.
 .PP
 This disk can now be unlocked with your existing password as well as
 with the Clevis policy.
-Clevis provides two unlockers for LUKS volumes.
-First, we provide integration with Dracut to automatically unlock your
-root volume during early boot.
-Second, we provide integration with UDisks2 to automatically unlock your
-removable media in your desktop session.
+You will additionally need to enable one or more of the Clevis LUKS
+unlockers.
+See \f[C]clevis\-luks\-unlockers\f[](7).
 .SH OPTIONS
 .IP \[bu] 2
 \f[C]\-f\f[] : Do not prompt for LUKSMeta initialization
@@ -66,7 +64,8 @@ the cloud as well.
 The images cannot be shared without also sharing a master key.
 .SH SEE ALSO
 .PP
-\f[C]clevis\-encrypt\-http\f[](1), \f[C]clevis\-encrypt\-tang\f[](1),
-\f[C]clevis\-encrypt\-sss\f[](1), \f[C]clevis\-decrypt\f[](1)
+\f[C]clevis\-luks\-unlockers\f[](7), \f[C]clevis\-encrypt\-http\f[](1),
+\f[C]clevis\-encrypt\-tang\f[](1), \f[C]clevis\-encrypt\-sss\f[](1),
+\f[C]clevis\-decrypt\f[](1)
 .SH AUTHORS
 Nathaniel McCallum <npmccallum@redhat.com>.

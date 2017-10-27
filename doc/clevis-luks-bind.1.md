@@ -25,10 +25,8 @@ This command performs four steps:
 4. Enables the new key for use with LUKS.
 
 This disk can now be unlocked with your existing password as well as with
-the Clevis policy. Clevis provides two unlockers for LUKS volumes. First,
-we provide integration with Dracut to automatically unlock your root volume
-during early boot. Second, we provide integration with UDisks2 to
-automatically unlock your removable media in your desktop session.
+the Clevis policy. You will additionally need to enable one or more of the
+Clevis LUKS unlockers. See `clevis-luks-unlockers`(7).
 
 # OPTIONS
 
@@ -61,6 +59,7 @@ The images cannot be shared without also sharing a master key.
 
 # SEE ALSO
 
+`clevis-luks-unlockers`(7),
 `clevis-encrypt-http`(1),
 `clevis-encrypt-tang`(1),
 `clevis-encrypt-sss`(1),

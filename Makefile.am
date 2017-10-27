@@ -9,6 +9,7 @@ dist_man1_MANS = \
     doc/clevis-encrypt-tang.1 \
     doc/clevis-encrypt-http.1 \
     doc/clevis-encrypt-sss.1 \
+    doc/clevis-luks-unlockers.7 \
     doc/clevis-luks-unlock.1 \
     doc/clevis-luks-bind.1 \
     doc/clevis-decrypt.1 \

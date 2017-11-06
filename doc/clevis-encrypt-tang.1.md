@@ -43,12 +43,12 @@ have access to the Tang server's database directory, simply do:
     $ jose jwk thp -i $DBDIR/$SIG.jwk 
 
 Tang can also perform entirely offline encryption if you pre-share the server
-advertisment. You can fetch the advertisment with a simple command (just be
+advertisement. You can fetch the advertisement with a simple command (just be
 careful your network isn't compromised!):
 
     $ curl -f $URL/adv > adv.jws
 
-Once you have the advertisment file, just provide it:
+Once you have the advertisement file, just provide it:
 
     $ clevis encrypt tang '{"url":...,"adv":"adv.jws"}' < PT > JWE
 

@@ -56,7 +56,7 @@ pin works much like our HTTP pin above:
 
 As you can see above, Tang utilizes a trust-on-first-use workflow.
 Alternatively, Tang can perform entirely offline encryption if you pre-share
-the server advertisment. Decryption, too works like our first example:
+the server advertisement. Decryption, too works like our first example:
 
     $ clevis decrypt < JWE > PT
 

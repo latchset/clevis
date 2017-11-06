@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 e=`echo hi | clevis encrypt sss '{"t":1,"pins":{"test":[{},{}]}}'`
 d=`echo $e | clevis decrypt`

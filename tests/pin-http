@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/bash -x
 
 function on_exit() {
     [ "$PID" ] && kill $PID && ! wait $PID

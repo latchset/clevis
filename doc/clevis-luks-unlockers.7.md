@@ -1,4 +1,4 @@
-% CLEVIS-LUKS-UNLOCKERS(1)
+% CLEVIS-LUKS-UNLOCKERS(7)
 % Nathaniel McCallum <npmccallum@redhat.com>
 % October 2017
 

@@ -1,2 +1,2 @@
 #!/bin/bash
-@libexec@/clevis-luks-askpass
+@libexecdir@/clevis-luks-askpass

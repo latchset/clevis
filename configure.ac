@@ -18,7 +18,7 @@ PKG_CHECK_MODULES([udisks2], [udisks2])
 PKG_CHECK_MODULES([jose], [jose >= 8])
 PKG_CHECK_MODULES([systemd], [systemd])
 PKG_CHECK_MODULES([dracut], [dracut])
-PKG_CHECK_MODULES([audit], [audit >> 2.7.8])
+PKG_CHECK_MODULES([audit], [audit >= 2.7.8])
 
 AC_CHECK_PROG([PWMAKE], [pwmake], [yes])
 test -n "$PWMAKE" || AC_MSG_ERROR([pwmake required!])

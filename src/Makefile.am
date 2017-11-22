@@ -24,6 +24,7 @@ dist_bin_SCRIPTS = \
     clevis-bind-luks \
     clevis-luks-unlock \
     clevis-luks-bind \
+    clevis-luks-unbind \
     clevis-decrypt \
     clevis
 

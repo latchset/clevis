@@ -1,6 +1,6 @@
 % CLEVIS-DECRYPT(1)
 % Nathaniel McCallum <npmccallum@redhat.com>
-% Sepember 2017
+% September 2017
 
 # NAME
 

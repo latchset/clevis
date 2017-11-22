@@ -1,0 +1,79 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Javier Martinez Canillas <javierm@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Lists pins bound to a LUKSv1 device"
+UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+
+function usage() {
+    echo >&2
+    echo "Usage: clevis luks list -d DEV [-s SLT]" >&2
+    echo >&2
+    echo "$SUMMARY": >&2
+    echo >&2
+    echo "  -d DEV  The LUKS device to list bound pins" >&2
+    echo >&2
+    echo "  -s SLOT The LUKSMeta slot number to list" >&2
+    echo >&2
+    exit 1
+}
+
+if [ $# -eq 1 -a "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+while getopts ":d:s:" o; do
+    case "$o" in
+    d) DEV=$OPTARG;;
+    s) SLT=$OPTARG;;
+    *) usage;;
+    esac
+done
+
+if [ -z "$DEV" ]; then
+    echo "Did not specify a device!" >&2
+    usage
+fi
+
+if ! luksmeta test -d $DEV 2>/dev/null; then
+    echo "The $DEV device is not valid!" >&2
+    exit 1
+fi
+
+if [ -n "$SLT" ]; then
+    slot=`luksmeta load -d "$DEV" -s "$SLT" -u "$UUID" 2>/dev/null | cut -d . -f1`
+    if [ -z "$slot" ]; then
+	echo "No pin found on $DEV slot $SLT!" >&2
+	exit 1
+    fi
+    pin=`echo "$slot" | jose b64 dec -i-`
+    echo "$pin"
+    exit 0
+fi
+
+luksmeta show -d "$DEV" | while read -r slot state uuid; do
+    [ "$uuid" != "$UUID" ] && continue
+    [ "$state" != "active" ] && continue
+
+    pin=`luksmeta load -d "$DEV" -s "$slot" -u "$UUID" 2>/dev/null | cut -d . -f1 | jose b64 dec -i-`
+    echo -e "Pin bound to slot $slot:\n$pin"
+done
+
+exit 0

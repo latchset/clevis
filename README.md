@@ -174,6 +174,15 @@ luks unlock command.
 $ sudo clevis luks unlock -d /dev/sda1
 ```
 
+#### Listing pins bound to LUKS volumes
+
+The pins that are bound to a given LUKS volume can be listed using the clevis
+luks list command. For example:
+
+```bash
+$ sudo clevis luks list -d /dev/sda1
+```
+
 ## Installing Clevis
 
 Please don't install Clevis directly. Instead, use your preferred

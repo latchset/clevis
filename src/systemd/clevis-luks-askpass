@@ -23,26 +23,50 @@ UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 shopt -s nullglob
 
-for question in /run/systemd/ask-password/ask.*; do
-    d=
-    s=
+while getopts ":l" o; do
+    case "$o" in
+    l) loop=true;;
+    esac
+done
 
-    while read line; do
-        case "$line" in
-            Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
-            Socket=*) s="${line##Socket=}";;
-        esac
-    done < "$question"
+while true; do
+    todo=0
 
-    [ -z "$d" -o -z "$s" ] && continue
+    for question in /run/systemd/ask-password/ask.*; do
+        metadata=false
+        unlocked=false
+        d=
+        s=
 
-    luksmeta show -d "$d" | while read -r slot state uuid; do
-        [ "$state" != "active" ] && continue
-        [ "$uuid" != "$UUID" ] && continue
+        while read line; do
+            case "$line" in
+                Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
+                Socket=*) s="${line##Socket=}";;
+            esac
+        done < "$question"
 
-        if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
-            echo -n "+$pt" | nc -U -u --send-only "$s"
-            break
-        fi
+        [ -z "$d" -o -z "$s" ] && continue
+
+        while read -r slot state uuid; do
+            [ "$state" != "active" ] && continue
+            [ "$uuid" != "$UUID" ] && continue
+            metadata=true
+
+            if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
+                echo -n "+$pt" | nc -U -u --send-only "$s"
+                unlocked=true
+                break
+            fi
+        done < <(luksmeta show -d "$d")
+
+        [ $metadata == true ] || continue
+        [ $unlocked == true ] && continue
+        todo=$((todo + 1))
     done
+
+    if [ $todo -eq 0 ] || [ "$loop" != "true" ]; then
+        break;
+    fi
+
+    sleep 0.5
 done

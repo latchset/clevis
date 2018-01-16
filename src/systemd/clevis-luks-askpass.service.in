@@ -5,4 +5,4 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=@libexecdir@/clevis-luks-askpass
+ExecStart=@libexecdir@/clevis-luks-askpass -l

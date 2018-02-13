@@ -11,6 +11,8 @@ dist_man1_MANS = \
     doc/clevis-encrypt-sss.1 \
     doc/clevis-luks-unlock.1 \
     doc/clevis-luks-bind.1 \
+    doc/clevis-luks-list.1 \
+    doc/clevis-luks-unbind.1 \
     doc/clevis-decrypt.1 \
     doc/clevis.1
 

@@ -28,6 +28,8 @@ cmdline() {
 }
 
 install() {
+    local ret=0
+
     cmdline > "${initdir}/etc/cmdline.d/99clevis.conf"
 
     inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
@@ -36,13 +38,9 @@ install() {
     inst_multiple /etc/services \
         clevis-decrypt-http \
         clevis-decrypt-tang \
-        clevis-decrypt-tpm2 \
         clevis-decrypt-sss \
         @libexecdir@/clevis-luks-askpass \
         clevis-decrypt \
-        tpm2_createprimary \
-        tpm2_unseal \
-        tpm2_load \
         luksmeta \
         clevis \
         mktemp \
@@ -50,10 +48,26 @@ install() {
         jose \
         nc
 
+    for cmd in clevis-decrypt-tpm2 \
+	tpm2_createprimary \
+	tpm2_unseal \
+	tpm2_load; do
+
+	if ! find_binary "$cmd" &>/dev/null; then
+	    ((ret++))
+	fi
+    done
+
+    if (($ret == 0)); then
+	inst_multiple clevis-decrypt-tpm2 \
+	    tpm2_createprimary \
+	    tpm2_unseal \
+	    tpm2_load
+    fi
+
     dracut_need_initqueue
 }
 
 installkernel() {
     hostonly='' instmods =drivers/char/tpm
 }
-

@@ -17,15 +17,19 @@ bin_PROGRAMS = \
 dist_bin_SCRIPTS = \
     clevis-encrypt-http \
     clevis-encrypt-tang \
-    clevis-encrypt-tpm2 \
     clevis-decrypt-http \
     clevis-decrypt-tang \
-    clevis-decrypt-tpm2 \
     clevis-bind-luks \
     clevis-luks-unlock \
     clevis-luks-bind \
     clevis-decrypt \
     clevis
+
+if HAVE_TPM2_TOOLS
+    dist_bin_SCRIPTS += \
+    clevis-encrypt-tpm2 \
+    clevis-decrypt-tpm2
+endif
 
 clevis_encrypt_sss_SOURCES = clevis-encrypt-sss.c sss.c sss.h
 clevis_decrypt_sss_SOURCES = clevis-decrypt-sss.c sss.c sss.h

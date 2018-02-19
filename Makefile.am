@@ -8,12 +8,16 @@ EXTRA_DIST = COPYING
 dist_man1_MANS = \
     doc/clevis-encrypt-tang.1 \
     doc/clevis-encrypt-http.1 \
-    doc/clevis-encrypt-tpm2.1 \
     doc/clevis-encrypt-sss.1 \
     doc/clevis-luks-unlock.1 \
     doc/clevis-luks-bind.1 \
     doc/clevis-decrypt.1 \
     doc/clevis.1
+
+if HAVE_TPM2_TOOLS
+    dist_man1_MANS += \
+    doc/clevis-encrypt-tpm2.1
+endif
 
 dist_man7_MANS = \
     doc/clevis-luks-unlockers.7

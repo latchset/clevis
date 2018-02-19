@@ -54,6 +54,17 @@ fi
 
 AC_SUBST(SD_ACTIVATE)
 
+for ac_prog in createprimary pcrlist createpolicy create load unseal; do
+    unset TPM2_TOOLS
+    unset ac_cv_prog_TPM2_TOOLS
+    AC_CHECK_PROG([TPM2_TOOLS], [tpm2_$ac_prog], [yes])
+    test -z "$TPM2_TOOLS" && break
+done
+
+test -n "$TPM2_TOOLS" || AC_MSG_WARN([tpm2_$ac_prog not found, tpm2 pin won't be installed])
+
+AM_CONDITIONAL([HAVE_TPM2_TOOLS], [test -n "$TPM2_TOOLS"])
+
 AC_ARG_ENABLE([user],
               AS_HELP_STRING([--enable-user=USER],
                              [Set unprivileged user (default: root)]),

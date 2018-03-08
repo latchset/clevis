@@ -74,7 +74,7 @@ Encrypting data using the tpm2 pin works the same than the pins mentioned above:
     $ clevis encrypt tpm2 '{}' < PT > JWE
 
 The pin has reasonable defaults for its configuration, but a different hierarchy,
-hash, and key algorithms can be choosen if the defaults used are not suitable.
+hash, and key algorithms can be chosen if the defaults used are not suitable.
 
 Decryption also works similar to other pins, only the JWE needs to be provided:
 

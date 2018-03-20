@@ -50,12 +50,22 @@ $\ clevis\ encrypt\ tang\ "$cfg"\ <\ PT\ >\ JWE
 .fi
 .PP
 Obtaining the thumbprint of a trusted signing key is easy.
-If you have access to the Tang server\[aq]s database directory, simply
-do:
+If you have access to the Tang server, simply execute:
 .IP
 .nf
 \f[C]
-$\ jose\ jwk\ thp\ \-i\ $DBDIR/$SIG.jwk\ 
+$\ tang\-show\-keys\ <PORT>
+\f[]
+.fi
+.PP
+where is the port that the Tang server is listening on.
+.PP
+If \f[C]tang\-show\-keys\f[] is not available, but you have access to
+the Tang server\[aq]s database directory, you can execute this instead:
+.IP
+.nf
+\f[C]
+$\ jose\ jwk\ thp\ \-i\ $DBDIR/$SIG.jwk
 \f[]
 .fi
 .PP

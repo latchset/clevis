@@ -38,9 +38,16 @@ configuration at encryption time:
     $ clevis encrypt tang "$cfg" < PT > JWE
 
 Obtaining the thumbprint of a trusted signing key is easy. If you
-have access to the Tang server's database directory, simply do:
+have access to the Tang server, simply execute:
 
-    $ jose jwk thp -i $DBDIR/$SIG.jwk 
+    $ tang-show-keys <PORT>
+
+where <PORT> is the port that the Tang server is listening on.
+
+If `tang-show-keys` is not available, but you have access to the Tang
+server's database directory, you can execute this instead:
+
+    $ jose jwk thp -i $DBDIR/$SIG.jwk
 
 Tang can also perform entirely offline encryption if you pre-share the server
 advertisement. You can fetch the advertisement with a simple command (just be

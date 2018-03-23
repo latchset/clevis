@@ -1,5 +1,8 @@
 SUBDIRS=dracut systemd udisks2 .
 
+bashcompdir=@bashcompdir@
+dist_bashcomp_DATA=bash-completion/clevis
+
 AM_CFLAGS = \
     @CLEVIS_CFLAGS@ \
     @jansson_CFLAGS@ \

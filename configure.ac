@@ -78,6 +78,10 @@ AC_ARG_ENABLE([group],
 AC_SUBST([CLEVIS_USER])
 AC_SUBST([CLEVIS_GROUP])
 
+PKG_CHECK_VAR(bashcompdir, [bash-completion], [completionsdir], ,
+    bashcompdir="${sysconfdir}/bash_completion.d")
+AC_SUBST(bashcompdir)
+
 CLEVIS_CFLAGS="\
 -Wall \
 -Wextra \

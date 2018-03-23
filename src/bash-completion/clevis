@@ -1,0 +1,26 @@
+# bash completion support for clevis
+
+_clevis()
+{
+    dir=$(dirname $(which clevis))
+    cur=${COMP_WORDS[COMP_CWORD]}
+    field=$(($COMP_CWORD + 1))
+
+    if [[ ${COMP_WORDS[COMP_CWORD-1]} == "clevis" ]]; then
+       name=clevis-*
+    fi
+
+    if [[ ${COMP_WORDS[COMP_CWORD-2]} == "clevis" ]]; then
+       name=clevis-${COMP_WORDS[COMP_CWORD-1]}-*
+    fi
+
+    suggestions=$(find $dir -name $name | cut -d '-' -f$field | sort | uniq)
+
+    if [[ -n $cur ]]; then
+       suggestions=$(for word in ${suggestions[@]}; do echo $word | grep $cur; done)
+    fi
+
+    COMPREPLY=($(compgen -W "$suggestions" -- "$cur"))
+}
+
+complete -F _clevis clevis

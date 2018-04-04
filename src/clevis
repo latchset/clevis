@@ -53,3 +53,5 @@ for f in $0-*; do
 done
 
 echo >&2
+
+exit 1

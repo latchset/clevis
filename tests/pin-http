@@ -23,6 +23,11 @@ e=`echo -n hi | clevis encrypt http "$cfg"`
 d=`echo -n "$e" | clevis decrypt`
 test "$d" == "hi"
 
+cfg=`jose fmt -j "$cfg" -Oj '"jwk+json"' -s type -U -Oo-`
+e=`echo -n ho | clevis encrypt http "$cfg"`
+d=`echo -n "$e" | clevis decrypt`
+test "$d" == "ho"
+
 kill $PID
 ! wait $PID
 

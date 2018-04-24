@@ -51,7 +51,7 @@ fi
 
 case $typ in
 application/jwk+json)
-    if ! rep=`curl -sfg -H "Accept: $typ" "$url" \
+    if ! jwk=`curl -sfg -H "Accept: $typ" "$url" \
             | jose fmt -j- -Og kty -q oct -EUUo-`; then
         echo "Key transfer failed!" >&2
         exit 1

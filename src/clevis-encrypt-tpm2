@@ -59,6 +59,13 @@ if [ -t 0 ]; then
     exit 1
 fi
 
+TPM2TOOLS_INFO=`tpm2_pcrlist -v`
+
+if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
+    echo "The tpm2 pin requires tpm2-tools version 3" >&2
+    exit 1
+fi
+
 export TPM2TOOLS_TCTI_NAME=device
 export TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
 

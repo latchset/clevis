@@ -56,7 +56,7 @@ while true; do
             metadata=true
 
             if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
-                echo -n "+$pt" | nc -U -u --send-only "$s"
+                echo -n "+$pt" | nc -U -u -w2 "$s"
                 unlocked=true
                 break
             fi

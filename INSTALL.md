@@ -5,25 +5,29 @@ To build and install the Clevis software the following software packages
 are required. In many cases dependencies are platform specific and so the
 following sections describe them for the supported platforms.
 
-## Linux:
-* Autoconf
-* Autoconf archive
-* Automake
-* Libtool
-* C compiler
-* C Library Development Libraries and Header Files
-* [jose](https://github.com/latchset/jose)
-* [luksmeta](https://github.com/latchset/luksmeta)
-* [audit-libs](https://github.com/linux-audit/audit-userspace)
-* [udisks2](https://github.com/storaged-project/udisks)
-* [OpenSSL](https://github.com/openssl/openssl)
-* [desktop-file-utils](https://cgit.freedesktop.org/xdg/desktop-file-utils)
-* [pkg-config](https://cgit.freedesktop.org/pkg-config)
-* [systemd](https://github.com/systemd)
-* [dracut](https://github.com/dracutdevs/dracut)
-* [tang](https://github.com/latchset/tang)
-* [curl](https://github.com/curl/curl)
-* [tpm2-tools](https://github.com/tpm2-software/tpm2-tools)
+## Linux
+Autoconf, Autoconf archive, Automake, Libtool, C compiler, 
+C Library Development Libraries and Header Files
+
+* [José](https://github.com/latchset/jose) (JSON Web Signing and Encryption)
+* [LUKSMeta](https://github.com/latchset/luksmeta) (Adds metadata to LUKS volume)
+* [linux-audit](https://github.com/linux-audit/audit-userspace) (Userspace lib of Linux Auditing Framework)
+* [udisks2](https://github.com/storaged-project/udisks) (Storage management deamon, tools and libs)
+* [desktop-file-utils](https://cgit.freedesktop.org/xdg/desktop-file-utils) (Linux .desktop files / autostart)
+* [pkg-config](https://cgit.freedesktop.org/pkg-config) (Dependency discovery with Autotools)
+* [systemd](https://github.com/systemd) (Control clevis akspass service)
+
+PIN specific dependencies
+* [tang](https://github.com/latchset/tang) (required for pin **Tang**)
+* [curl](https://github.com/curl/curl) (required for pin **Tang** and pin **HTTP**)
+* [tpm2-tools](https://github.com/tpm2-software/tpm2-tools) (required for pin **TPM2**)
+* [OpenSSL](https://github.com/openssl/openssl) (required for pin **Shamir Secret Sharing**)
+
+To automatically decrypt rootfs, initramfs needs to be updated.
+* [dracut](https://github.com/dracutdevs/dracut) (default on Fedora)
+* initramfs-tools not yet supported (PR https://github.com/latchset/clevis/pull/35)
+
+Without updating initramfs, you need to trigger decryption manually.
 
 ### Fedora
 
@@ -33,6 +37,14 @@ used to make sure that the needed packages to compile from source are installed:
 ```
 $ sudo dnf builddep clevis
 ```
+
+### Debian
+
+Dependencies can be checked on Debian bases distributions, too.
+```
+apt build-dep clevis
+```
+Caution: Think twice about replacing initramfs-tools!
 
 # Building From Source
 
@@ -72,7 +84,8 @@ much won't be needed besides providing an alternative --prefix option at
 configure time, and maybe DESTDIR at install time if you're packaging for
 a distro.
 
-After is installed, the dracut and systemd hooks can be added to the
+## Updating initramfs
+After clevis is installed, the dracut and systemd hooks can be added to the
 initramfs with:
 
 ```

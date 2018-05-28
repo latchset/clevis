@@ -1,6 +1,9 @@
 DISTCHECK_CONFIGURE_FLAGS = \
-    --with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir) \
+    --with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir)
+if HAVE_DRACUT
+DISTCHECK_CONFIGURE_FLAGS += \
     --with-dracutmodulesdir=$$dc_install_base/$(dracutmodulesdir)
+endif
 
 SUBDIRS = . src tests
 EXTRA_DIST = COPYING

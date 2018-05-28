@@ -17,17 +17,22 @@ PKG_CHECK_MODULES([jansson], [jansson >= 2.10])
 PKG_CHECK_MODULES([udisks2], [udisks2])
 PKG_CHECK_MODULES([jose], [jose >= 8])
 PKG_CHECK_MODULES([systemd], [systemd])
-PKG_CHECK_MODULES([dracut], [dracut])
 PKG_CHECK_MODULES([audit], [audit >= 2.7.8])
 
-AC_CHECK_PROG([PWMAKE], [pwmake], [yes])
-test -n "$PWMAKE" || AC_MSG_ERROR([pwmake required!])
+AC_CHECK_PROG([PWMAKE_IN_PATH], [pwmake], [yes])
+test -n "$PWMAKE_IN_PATH" || AC_MSG_ERROR([pwmake required!])
 
-AC_ARG_WITH([dracutmodulesdir],
-	    [AS_HELP_STRING([--with-dracutmodulesdir=DIR], [Directory for dracut modules])],
-	    [],
-	    [with_dracutmodulesdir=$($PKG_CONFIG --variable=dracutmodulesdir dracut)])
-AC_SUBST([dracutmodulesdir], [$with_dracutmodulesdir])
+AC_CHECK_PROG([DRACUT_IN_PATH], [dracut], [yes])
+AM_CONDITIONAL([HAVE_DRACUT], [test -n "$DRACUT_IN_PATH"])
+if HAVE_DRACUT
+    AC_ARG_WITH([dracutmodulesdir],
+                [AS_HELP_STRING([--with-dracutmodulesdir=DIR], [Directory for dracut modules])],
+                [],
+                [with_dracutmodulesdir=$($PKG_CONFIG --variable=dracutmodulesdir dracut)])
+    AC_SUBST([dracutmodulesdir], [$with_dracutmodulesdir])
+else
+    AC_MSG_WARN([dracut not found: it is required to automatically decrypt rootfs. Configure continues without this feature!])
+fi
 
 AC_ARG_WITH([systemdsystemunitdir],
             [AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd unit files])],

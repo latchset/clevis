@@ -19,8 +19,6 @@
 #
 
 SUMMARY="Encrypts using a TPM2.0 chip binding policy"
-# The owner hierarchy is the one that should be used by the Operating System.
-auth="o"
 # Algorithm type must be keyedhash for object with user provided sensitive data.
 alg_create_key="keyedhash"
 # Attributes for the created TPM2 object with the JWK as sensitive data.
@@ -59,8 +57,16 @@ if [ -t 0 ]; then
     exit 1
 fi
 
-export TPM2TOOLS_TCTI_NAME=device
-export TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+TPM2TOOLS_INFO=`tpm2_pcrlist -v`
+TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+if [[ $TPM2TOOLS_INFO = *version=\"3.* ]]; then
+    export TPM2TOOLS_TCTI_NAME=device
+    export TPM2TOOLS_DEVICE_FILE
+    export TPM2TOOLS_TCTI="device:$TPM2TOOLS_DEVICE_FILE"
+else
+    echo "The tpm2 pin requires tpm2-tools version 3 or higher" >&2
+    exit 1
+fi
 
 if [ -z "${TPM2TOOLS_DEVICE_FILE[0]}" ]; then
     echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
@@ -99,7 +105,21 @@ fi
 
 trap 'on_exit' EXIT
 
-if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C $TMP/primary.context; then
+if [[ $TPM2TOOLS_INFO = *version=\"3.* ]]; then
+    # The (o)wner hierarchy is the one that should be used by the OS.
+    # For tpm-tools version 3.X explicit hierarchy parameter is required,
+    # but should be optional in the future.
+    #arg_createprimary="-H o -C $TMP/primary.context"				# short 3.X
+    arg_createprimary="--hierarchy o --context $TMP/primary.context"		# long  3.X
+    #arg_create="-c $TMP/primary.context"					# short 3.X
+    arg_create="--context-parent $TMP/primary.context"				# long  3.X
+else
+    echo "Developer flag: Use at your own risk!"
+    arg_createprimary="--hierarchy o --out-context $TMP/primary.context"	# long  4.X
+    arg_create="--context-parent $TMP/primary.context"				# long  4.X
+fi
+
+if ! tpm2_createprimary -Q -g "$hash" -G "$key" $arg_createprimary; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
@@ -125,7 +145,7 @@ if [ -n "$pcr_ids" ]; then
     policy_options="-L $TMP/pcr.policy"
 fi
 
-if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c $TMP/primary.context -u $TMP/jwk.pub \
+if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" $arg_create -u $TMP/jwk.pub \
      -r $TMP/jwk.priv -A "$obj_attr" $policy_options -I- <<< "$jwk"; then
     echo "Creating TPM2 object for jwk failed!" >&2
     exit 1

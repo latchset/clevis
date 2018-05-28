@@ -18,9 +18,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# The owner hierarchy is the one that should be used by the Operating System.
-auth="o"
-
 function on_exit() {
     if ! rm -r $TMP; then
         echo "Delete temporary files failed!" >&2
@@ -37,8 +34,16 @@ if [ -t 0 ]; then
     exit 1
 fi
 
-export TPM2TOOLS_TCTI_NAME=device
-export TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+TPM2TOOLS_INFO=`tpm2_pcrlist -v`
+TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+if [[ $TPM2TOOLS_INFO = *version=\"3.* ]]; then
+    export TPM2TOOLS_TCTI_NAME=device
+    export TPM2TOOLS_DEVICE_FILE
+    export TPM2TOOLS_TCTI="device:$TPM2TOOLS_DEVICE_FILE"
+else
+    echo "The tpm2 pin requires tpm2-tools version 3 or higher" >&2
+    exit 1
+fi
 
 if [ -z "${TPM2TOOLS_DEVICE_FILE[0]}" ]; then
     echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
@@ -89,6 +94,23 @@ fi
 
 trap 'on_exit' EXIT
 
+if [[ $TPM2TOOLS_INFO = *version=\"3.* ]]; then
+    # The (o)wner hierarchy is the one that should be used by the OS.
+    # For tpm-tools version 3.X explicit hierarchy parameter is required,
+    # but should be optional in the future.
+    #arg_createprimary="-H o -C $TMP/primary.context"					# short 3.X
+    arg_createprimary="--hierarchy o --context $TMP/primary.context"			# long  3.X
+    #arg_load="-c $TMP/primary.context -C $TMP/load.context"				# short 3.X
+    arg_load="--context-parent $TMP/primary.context --context $TMP/load.context"	# long  3.X
+else
+    echo "Developer flag: Use at your own risk!"
+    arg_createprimary="--hierarchy o --out-context $TMP/primary.context"		# long  4.X
+    arg_load="--context-parent $TMP/primary.context --out-context $TMP/load.context"	# long  4.X
+fi
+
+#arg_unseal="-c $TMP/load.context"		# short 3.X
+arg_unseal="--item-context $TMP/load.context"	# long  3.X
+
 pcr_ids=`jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd"` || true
 
 if [ -n "$pcr_ids" ]; then
@@ -106,19 +128,28 @@ if ! `jose b64 dec -i- -O $TMP/jwk.priv <<< "$jwk_priv"`; then
     exit 1
 fi
 
-if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" \
-     -C $TMP/primary.context 2>/dev/null; then
+ls -la $TMP
+echo "tpm2_createprimary -Q -g "$hash" -G "$key" $arg_createprimary; then"
+
+if ! tpm2_createprimary -Q -g "$hash" -G "$key" \
+     $arg_createprimary; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
 
-if ! tpm2_load -Q -c $TMP/primary.context -u $TMP/jwk.pub -r $TMP/jwk.priv \
-     -C $TMP/load.context 2>/dev/null; then
+ls -la $TMP
+echo "tpm2_load -Q -u $TMP/jwk.pub -r $TMP/jwk.priv $arg_load; then"
+
+if ! tpm2_load -Q -u $TMP/jwk.pub -r $TMP/jwk.priv \
+     $arg_load; then
     echo "Loading jwk to TPM2 failed!" >&2
     exit 1
 fi
 
-if ! jwk=`tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null`; then
+ls -la $TMP
+echo "tpm2_unseal -c $TMP/load.context $policy_options then"
+
+if ! jwk=`tpm2_unseal $arg_unseal $policy_options`; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi

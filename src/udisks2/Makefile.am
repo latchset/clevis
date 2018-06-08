@@ -24,3 +24,6 @@ EXTRA_DIST=clevis-luks-udisks2.desktop.in
 	$(AM_V_GEN)$(SED) \
 		-e 's,@libexecdir\@,$(libexecdir),g' \
 		$(srcdir)/$@.in > $@
+
+install-exec-hook:
+	chmod u+s $(DESTDIR)$(libexecdir)/clevis-luks-udisks2

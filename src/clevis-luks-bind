@@ -71,6 +71,11 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
+if ! cryptsetup isLuks "$DEV"; then
+    echo "$DEV is not a LUKS device!" >&2
+    exit 1
+fi
+
 if ! PIN=${@:$((OPTIND++)):1} || [ -z "$PIN" ]; then
     echo "Did not specify a pin!" >&2
     usage

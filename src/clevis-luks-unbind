@@ -55,6 +55,11 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
+if ! cryptsetup isLuks "$DEV"; then
+    echo "$DEV is not a LUKS device!" >&2
+    exit 1
+fi
+
 if [ -z "$SLT" ]; then
     echo "Did not specify a slot!" >&2
     usage

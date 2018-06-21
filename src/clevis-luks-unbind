@@ -55,8 +55,8 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
-if ! cryptsetup isLuks "$DEV"; then
-    echo "$DEV is not a LUKS device!" >&2
+if ! cryptsetup isLuks --type luks1 "$DEV"; then
+    echo "$DEV is not a LUKSv1 device!" >&2
     exit 1
 fi
 

@@ -23,17 +23,8 @@ depends() {
     return 0
 }
 
-cmdline() {
-    echo "rd.neednet=1"
-}
-
 install() {
     local ret=0
-
-    cmdline > "${initdir}/etc/cmdline.d/99clevis.conf"
-
-    inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
-    inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
 
     inst_multiple /etc/services \
         clevis-decrypt-http \
@@ -46,7 +37,8 @@ install() {
         mktemp \
         curl \
         jose \
-        nc
+        nc \
+        grep
 
     for cmd in clevis-decrypt-tpm2 \
 	tpm2_createprimary \
@@ -64,6 +56,27 @@ install() {
 	    tpm2_unseal \
 	    tpm2_load
     fi
+    
+    unitdir="${initdir}${systemdsystemunitdir}"
+    mkdir -p "${unitdir}/clevis-luks-askpass.path.d" \
+	     "${unitdir}/clevis-luks-askpass.service.d"
+    for f in path service; do
+        cat > "${unitdir}/clevis-luks-askpass.${f}.d/00-dracut.conf" <<EOF
+[Unit]
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=basic.target shutdown.target
+EOF
+    done
+
+    # remove all dependencies etc from original files
+    sed -i '/^[Before|Conflicts|Requires|After|Wants].*/d' \
+        "${unitdir}/clevis-luks-askpass.service" \
+	"${unitdir}/clevis-luks-askpass.path"
+
+    # 
+    ln_r "${systemdsystemunitdir}/clevis-luks-askpass.path" \
+         "${systemdsystemunitdir}/sysinit.target.wants"
 
     dracut_need_initqueue
 }

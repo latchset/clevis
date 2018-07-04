@@ -23,21 +23,21 @@ UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 shopt -s nullglob
 
-while getopts ":l" o; do
-    case "$o" in
-    l) loop=true;;
-    esac
-done
-
 while true; do
-    todo=0
+    previous=(${questions[@]})
+    questions=(/run/systemd/ask-password/ask.*)
+    allprocessed=true
 
-    for question in /run/systemd/ask-password/ask.*; do
-        metadata=false
-        unlocked=false
+    for question in ${questions[@]}; do
         d=
         s=
 
+	# check if we previously processed this file
+        printf -- '%s\n' "${previous[@]}" | grep -q $question && continue
+	allprocessed=false
+
+	# check if question was answered by another PasswordAgent
+        [ -e "$question" ] || continue
         while read line; do
             case "$line" in
                 Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
@@ -53,23 +53,13 @@ while true; do
         while read -r slot state uuid; do
             [ "$state" != "active" ] && continue
             [ "$uuid" != "$UUID" ] && continue
-            metadata=true
 
             if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
                 echo -n "+$pt" | nc -U -u --send-only "$s"
-                unlocked=true
                 break
             fi
         done < <(luksmeta show -d "$d")
-
-        [ $metadata == true ] || continue
-        [ $unlocked == true ] && continue
-        todo=$((todo + 1))
     done
 
-    if [ $todo -eq 0 ] || [ "$loop" != "true" ]; then
-        break;
-    fi
-
-    sleep 0.5
+    $allprocessed && break
 done

@@ -35,6 +35,8 @@ while [ $# -gt 0 ]; do
 done
 
 echo >&2
+echo "Command '$cmd' is invalid" >&2
+echo >&2
 echo "Usage: clevis COMMAND [OPTIONS]" >&2
 echo >&2
 

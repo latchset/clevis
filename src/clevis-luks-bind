@@ -130,8 +130,8 @@ export SLT
 # Add the new key to the LUKS slot that matches the LUKSMeta slot
 case "$KEY" in
 "") read -s -p "Enter existing LUKS password: " old; echo;;
- -) old=`cat`;;
- *) old=`cat "$KEY"`;;
+ -) old=`/bin/cat`;;
+ *) old=`/bin/cat "$KEY"`;;
 esac
 
 echo -e "$old\n$key" | cryptsetup luksAddKey -S $SLT $DEV

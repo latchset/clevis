@@ -11,10 +11,10 @@ function fetch() {
     fi
 
     echo -e "HTTP/1.1 200 OK\r"
-    echo -e "Content-Type: `cat $1.ct`\r"
+    echo -e "Content-Type: `/bin/cat $1.ct`\r"
     echo -e "Content-Length: `stat -c%s $1`\r"
     echo -e "\r"
-    cat $1
+    /bin/cat $1
 }
 
 function store() {

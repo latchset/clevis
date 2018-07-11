@@ -66,4 +66,4 @@ application/octet-stream)
     ;;
 esac
 
-exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; cat)
+exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

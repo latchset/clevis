@@ -29,4 +29,4 @@ fi
 
 jwk=`jose fmt -q "$hdr" -SyOg clevis -g test -g jwk -Oo-` || exit 1
 
-jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; cat)
+jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

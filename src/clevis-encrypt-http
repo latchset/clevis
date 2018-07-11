@@ -104,4 +104,4 @@ application/octet-stream)
     ;;
 esac
 
-exec jose jwe enc -i "$jwe" -k- -I- -c < <(echo -n "$jwk"; cat)
+exec jose jwe enc -i "$jwe" -k- -I- -c < <(echo -n "$jwk"; /bin/cat)

@@ -87,4 +87,4 @@ fi
 tmp=`jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv"`
 rep=`jose jwk pub -i- <<< "$rep"`
 jwk=`jose jwk exc -l- -r- <<< "$rep$tmp"`
-exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; cat)
+exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

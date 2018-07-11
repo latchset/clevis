@@ -125,7 +125,7 @@ for jwk in `jose fmt -j- -Og keys -Af- <<< "$enc"`; do
     jwe=`jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-`
     jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-`
     jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks"`
-    exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; cat)
+    exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)
 done
 
 echo "No exchange keys found!" >&2

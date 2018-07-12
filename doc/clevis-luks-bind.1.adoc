@@ -1,18 +1,19 @@
-% CLEVIS-LUKS-BIND(1)
-% Nathaniel McCallum <npmccallum@redhat.com>
-% September 2017
+CLEVIS-LUKS-BIND(1)
+===================
+:doctype: manpage
 
-# NAME
 
-clevis-luks-bind -- Bind a LUKSv1 device using the specified policy
+== NAME
 
-# SYNOPSIS
+clevis-luks-bind - Bind a LUKSv1 device using the specified policy
 
-`clevis luks bind` [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
+== SYNOPSIS
 
-# OVERVIEW
+*clevis luks bind* [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
 
-The `clevis luks bind` command binds a LUKSv1 device using the specified
+== OVERVIEW
+
+The *clevis luks bind* command binds a LUKSv1 device using the specified
 policy. This is accomplished with a simple command:
 
     $ clevis luks bind -d /dev/sda tang '{"url":...}'
@@ -26,26 +27,26 @@ This command performs four steps:
 
 This disk can now be unlocked with your existing password as well as with
 the Clevis policy. You will additionally need to enable one or more of the
-Clevis LUKS unlockers. See `clevis-luks-unlockers`(7).
+Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlockers*(7)].
 
-# OPTIONS
+== OPTIONS
 
-* `-f` :
+* *-f* :
   Do not prompt for LUKSMeta initialization
 
-* `-d` _DEV_ :
+* *-d* _DEV_ :
   The LUKS device on which to perform binding
 
-* `-s` _SLT_ :
+* *-s* _SLT_ :
   The LUKSMeta slot to use for metadata storage
 
-* `-k` _KEY_ :
+* *-k* _KEY_ :
   Non-interactively read LUKS password from KEY file
 
-* `-k` - :
+* *-k* - :
   Non-interactively read LUKS password from standard input
 
-# CAVEATS
+== CAVEATS
 
 This command does not change the LUKS master key. This implies that if you
 create a LUKS-encrypted image for use in a Virtual Machine or Cloud
@@ -57,10 +58,10 @@ to have encrypted root volumes in the cloud, you will need to make sure that
 you perform the OS install method for each instance in the cloud as well.
 The images cannot be shared without also sharing a master key.
 
-# SEE ALSO
+== SEE ALSO
 
-`clevis-luks-unlockers`(7),
-`clevis-encrypt-http`(1),
-`clevis-encrypt-tang`(1),
-`clevis-encrypt-sss`(1),
-`clevis-decrypt`(1)
+link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlockers*(7)],
+link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)],
+link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

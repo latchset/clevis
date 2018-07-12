@@ -1,8 +1,12 @@
-% CLEVIS-LUKS-UNLOCKERS(7)
-% Nathaniel McCallum <npmccallum@redhat.com>
-% October 2017
+CLEVIS-LUKS-UNLOCKERS(7)
+========================
+:doctype: manpage
 
-# OVERVIEW
+== NAME
+
+clevis-luks-unlockers - Overview of clevis luks unlockers
+
+== OVERVIEW
 
 Clevis provides unlockers for LUKS volumes which can use LUKS policy:
 
@@ -11,18 +15,18 @@ Clevis provides unlockers for LUKS volumes which can use LUKS policy:
   * systemd - Unlocks automatically during late boot.
   * udisks2 - Unlocks automatically in a GNOME desktop session.
 
-Once a LUKS volume is bound using `clevis luks bind`, it can be unlocked using
+Once a LUKS volume is bound using *clevis luks bind*, it can be unlocked using
 any of the above unlockers without using a password.
 
-# MANUAL UNLOCKING
+== MANUAL UNLOCKING
 
 You can unlock a LUKS volume manually using the following command:
 
     $ sudo clevis luks unlock -d /dev/sda
 
-For more information, see `clevis-luks-unlock`(1).
+For more information, see link:clevis-luks-unlock.1.adoc[*clevis-luks-unlock*(1)].
 
-# EARLY BOOT UNLOCKING
+== EARLY BOOT UNLOCKING
 
 If Clevis integration does not already ship in your initramfs, you may need to
 rebuild your initramfs with this command:
@@ -37,24 +41,24 @@ Dracut will bring up your network using DHCP by default. If you need to specify
 additional network parameters, such as static IP configuration, please consult
 the dracut documentation.
 
-# LATE BOOT UNLOCKING
+== LATE BOOT UNLOCKING
 
 You can enable late boot unlocking by executing the following command:
 
     $ sudo systemctl enable clevis-luks-askpass.path
 
-After a reboot, Clevis will attempt to unlock all `_netdev` devices listed in
-`/etc/crypttab` when systemd prompts for their passwords. This implies that
-systemd support for `_netdev` is required.
+After a reboot, Clevis will attempt to unlock all *_netdev* devices listed in
+*/etc/crypttab* when systemd prompts for their passwords. This implies that
+systemd support for *_netdev* is required.
 
-# DESKTOP UNLOCKING
+== DESKTOP UNLOCKING
 
 When the udisks2 unlocker is installed, your GNOME desktop session should
 unlock LUKS removable devices configured with Clevis automatically. You may
 need to restart your desktop session after installation for the unlocker to be
 loaded.
 
-# SEE ALSO
+== SEE ALSO
 
-`clevis-luks-unlock`(1)
-`clevis-luks-bind`(1)
+link:clevis-luks-unlock.1.adoc[*clevis-luks-unlock*(1)]
+link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)]

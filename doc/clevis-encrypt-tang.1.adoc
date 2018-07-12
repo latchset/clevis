@@ -1,18 +1,19 @@
-% CLEVIS-ENCRYPT-TANG(1)
-% Nathaniel McCallum <npmccallum@redhat.com>
-% September 2017
+CLEVIS-ENCRYPT-TANG(1)
+======================
+:doctype: manpage
 
-# NAME
 
-clevis-encrypt-tang -- Encrypts using a Tang binding server policy
+== NAME
 
-# SYNOPSIS
+clevis-encrypt-tang - Encrypts using a Tang binding server policy
 
-`clevis encrypt tang` CONFIG < PT > JWE
+== SYNOPSIS
 
-# OVERVIEW
+*clevis encrypt tang* CONFIG < PT > JWE
 
-The `clevis encrypt tang` command encrypts using a Tang binding server policy.
+== OVERVIEW
+
+The *clevis encrypt tang* command encrypts using a Tang binding server policy.
 Its only argument is the JSON configuration object.
 
 Clevis provides support for the Tang network binding server. Tang provides
@@ -26,7 +27,7 @@ Tang pin works like this:
 
     Do you wish to trust these keys? [ynYN] y
 
-To decrypt the data, just pass it to the `clevis decrypt` command:
+To decrypt the data, just pass it to the *clevis decrypt* command:
 
     $ clevis decrypt < JWE > PT
 
@@ -44,7 +45,7 @@ have access to the Tang server, simply execute:
 
 where <PORT> is the port that the Tang server is listening on.
 
-If `tang-show-keys` is not available, but you have access to the Tang
+If *tang-show-keys* is not available, but you have access to the Tang
 server's database directory, you can execute this instead:
 
     $ jose jwk thp -i $DBDIR/$SIG.jwk
@@ -59,22 +60,22 @@ Once you have the advertisement file, just provide it:
 
     $ clevis encrypt tang '{"url":...,"adv":"adv.jws"}' < PT > JWE
 
-# CONFIG
+== CONFIG
 
 This command uses the following configuration properties:
 
-* `url` (string) :
+* *url* (string) :
   The base URL of the Tang server (REQUIRED)
 
-* `thp` (string) :
+* *thp* (string) :
   The thumbprint of a trusted signing key
 
-* `adv` (string) :
+* *adv* (string) :
   A filename containing a trusted advertisement
 
-* `adv` (object) :
+* *adv* (object) :
   A trusted advertisement (raw JSON)
 
-# SEE ALSO
+== SEE ALSO
 
-`clevis-decrypt`(1)
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

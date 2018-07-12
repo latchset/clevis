@@ -1,16 +1,16 @@
-% CLEVIS(1)
-% Nathaniel McCallum <npmccallum@redhat.com>
-% September 2017
+CLEVIS(1)
+=========
+:doctype: manpage
 
-# NAME
+== NAME
 
-clevis -- Automated decryption policy framework
+clevis - Automated decryption policy framework
 
-# SYNOPSIS
+== SYNOPSIS
 
-`clevis` COMMAND [OPTIONS]
+*clevis* COMMAND [OPTIONS]
 
-# OVERVIEW
+== OVERVIEW
 
 Clevis is a framework for automated decryption policy. It allows you to define
 a policy at encryption time that must be satisfied for the data to decrypt.
@@ -21,7 +21,7 @@ take a policy as its first argument and plaintext on standard input and to
 encrypt the data so that it can be automatically decrypted if the policy is
 met. Lets walk through an example.
 
-# HTTP ESCROW
+== HTTP ESCROW
 
 When using the HTTP pin, we create a new, cryptographically-strong, random key.
 This key is stored in a remote HTTP escrow server (using a simple PUT or POST).
@@ -39,9 +39,9 @@ Notice that we did not pass any configuration during decryption. The decrypt
 command extracted the URL (and possibly other configuration) from the JWE
 object, fetched the encryption key from the escrow and performed decryption.
 
-For more information, see `clevis-encrypt-http`(1).
+For more information, see link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)].
 
-# TANG BINDING
+== TANG BINDING
 
 Clevis provides support for the Tang network binding server. Tang provides
 a stateless, lightweight alternative to escrows. Encrypting data using the Tang
@@ -60,9 +60,9 @@ the server advertisement. Decryption, too works like our first example:
 
     $ clevis decrypt < JWE > PT
 
-For more information, see `clevis-encrypt-tang`(1).
+For more information, see link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)].
 
-# TPM2 BINDING
+== TPM2 BINDING
 
 Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
 chip. The cryptographically-strong, random key used for encryption is encrypted
@@ -84,9 +84,9 @@ Note that like other pins no configuration is used for decryption, this is due
 clevis storing the public and private keys to unseal the TPM2 encrypted object
 in the JWE so clevis can fetch that information from there.
 
-For more information see `clevis-encrypt-tpm2`(1).
+For more information see link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)].
 
-# SHAMIR'S SECRET SHARING
+== SHAMIR'S SECRET SHARING
 
 Clevis provides a way to mix pins together to create sophisticated unlocking
 and high availability policies. This is accomplished by using an algorithm
@@ -94,7 +94,7 @@ called Shamir's Secret Sharing (SSS).
 
 SSS is a thresholding scheme. It creates a key and divides it into a number of
 pieces. Each piece is encrypted using another pin (possibly even SSS
-recursively). Additionally, you define the threshold `t`. If at least `t`
+recursively). Additionally, you define the threshold *t*. If at least *t*
 pieces can be decrypted, then the encryption key can be recovered and
 decryption can succeed.
 
@@ -110,9 +110,9 @@ will succeed. As always, decryption is simply:
 
     $ clevis decrypt < JWE > PT
 
-For more information, see `clevis-encrypt-tang`(1).
+For more information, see link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)].
 
-# LUKS BINDING
+== LUKS BINDING
 
 Clevis can be used to bind an existing LUKS volume to its automation policy.
 This is accomplished with a simple command:
@@ -132,13 +132,13 @@ we provide integration with Dracut to automatically unlock your root volume
 during early boot. Second, we provide integration with UDisks2 to
 automatically unlock your removable media in your desktop session.
 
-For more information, see `clevis-luks-bind`(1).
+For more information, see link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)].
 
-# SEE ALSO
+== SEE ALSO
 
-`clevis-encrypt-http`(1),
-`clevis-encrypt-tang`(1),
-`clevis-encrypt-tpm2`(1),
-`clevis-encrypt-sss`(1),
-`clevis-luks-bind`(1),
-`clevis-decrypt`(1)
+link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)],
+link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)],
+link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
+link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)],
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

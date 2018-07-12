@@ -1,18 +1,19 @@
-% CLEVIS-ENCRYPT-TPM2(1)
-% Javier Martinez Canillas <javierm@redhat.com>
-% November 2017
+CLEVIS-ENCRYPT-TPM2(1)
+======================
+:doctype: manpage
 
-# NAME
 
-clevis-encrypt-tpm2 -- Encrypts using a TPM2.0 chip binding policy
+== NAME
 
-# SYNOPSIS
+clevis-encrypt-tpm2 - Encrypts using a TPM2.0 chip binding policy
 
-`clevis encrypt tpm2` CONFIG < PT > JWE
+== SYNOPSIS
 
-# OVERVIEW
+*clevis encrypt tpm2* CONFIG < PT > JWE
 
-The `clevis encrypt tpm2` command encrypts using a Trusted Platform Module 2.0
+== OVERVIEW
+
+The *clevis encrypt tpm2* command encrypts using a Trusted Platform Module 2.0
 (TPM2) chip. Its only argument is the JSON configuration object.
 
 When using the tpm2 pin, we create a new, cryptographically-strong, random key.
@@ -48,7 +49,7 @@ different to the current ones, by passing the binary hash encoded in base64:
 
     $ clevis encrypt tpm2 '{"pcr_ids":"0","pcr_digest":"xy7J5svCtqlfM03d1lE5gdoA8MI"}' < PT > JWE
 
-# Threat model
+== Threat model
 
 The Clevis security model relies in the fact that an attacker will not be able to
 access both the encrypted data and the decryption key.
@@ -64,45 +65,45 @@ cases for this pin, but it is important to understand the fact that an attacker
 that has access to both the encrypted data and the local TPM2 chip will be able
 to decrypt the data.
 
-# CONFIG
+== CONFIG
 
 This command uses the following configuration properties:
 
-* `hash`  (string) :
+* *hash*  (string) :
   Hash algorithm used in the computation of the object name (default: sha256)
 
   It must be one of the following:
 
-  * `sha1`
-  * `sha256`
-  * `sha384`
-  * `sha512`
-  * `sm3_256`
+  - *sha1*
+  - *sha256*
+  - *sha384*
+  - *sha512*
+  - *sm3_256*
 
-* `key`  (string) :
+* *key*  (string) :
   Algorithm type for the generated key (default: ecc)
 
   It must be one of the following:
 
-  * `rsa`
-  * `keyedhash`
-  * `ecc`
-  * `symcipher`
+  - *rsa*
+  - *keyedhash*
+  - *ecc*
+  - *symcipher*
 
-* `pcr_bank`  (string) :
+* *pcr_bank*  (string) :
   PCR algorithm bank to use for policy (default: sha1)
 
   It must be one of the following:
 
-  * `sha1`
-  * `sha256`
+  - *sha1*
+  - *sha256*
 
-* `pcr_ids`  (string) :
+* *pcr_ids*  (string) :
   Comma separated list of PCR used for policy. If not present, no policy is used
 
-* `pcr_digest`  (string) :
+* *pcr_digest*  (string) :
   Binary PCR hashes encoded in base64. If not present, the hash values are looked up
 
-# SEE ALSO
+== SEE ALSO
 
-`clevis-decrypt`(1)
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

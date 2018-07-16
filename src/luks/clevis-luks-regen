@@ -1,0 +1,217 @@
+#!/bin/bash
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Regenerate luks metadata"
+
+UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH:"
+    return 1
+}
+
+function usage_and_exit () {
+    echo >&2
+    echo "Usage: clevis luks regen -d DEV -s SLOT" >&2
+    echo >&2
+    echo "$SUMMARY" >&2
+    echo >&2
+    exit "$1"
+}
+
+if [ "$#" -ne "4" ]; then
+    usage_and_exit 1
+fi
+
+while getopts "hd:s:" o; do
+    case "$o" in
+    d) DEV="$OPTARG";;
+    h) usage_and_exit 0;;
+    s) SLT="$OPTARG";;
+    *) usage_and_exit 1;;
+    esac
+done
+
+function decode_luks_header () {
+    if DATA_CODED="$(jose jwe fmt -i- <<< "$1")"; then
+        DATA_CODED="$(jose fmt -j- -g protected -u- <<< "$DATA_CODED")"
+        DATA_DECODED="$(jose b64 dec -i- <<< "$DATA_CODED")"
+    else
+        echo "Error decoding JWE protected header!" >&2
+        exit 1
+    fi
+
+    echo "$DATA_DECODED"
+}
+
+function generate_cfg () {
+    echo -n "{"
+    DATA="$(decode_luks_header "$1")"
+
+    if ! P="$(jose fmt -j- -g clevis -g pin -u- <<< "$DATA")" || [ -z "$P" ]; then
+        echo "Pin wasn't found in LUKS metadata!" >&2
+        exit 1
+    fi
+
+    if ! CONTENT="$(jose fmt -j- -g clevis -g "$P" -o- <<< "$DATA")" || [ -z "$CONTENT" ]; then
+        echo "Content was not found!" >&2
+    fi
+
+    # echo -n "\"$P\": ["
+
+    if [ "$P" = "tang" ] || [ "$P" = "http" ]; then
+        URL="$(jose fmt -j- -g url -u- <<< "$CONTENT")"
+        echo -n "\"url\":\"$URL\""
+    elif [ "$P" = "sss" ]; then
+        THRESHOLD="$(jose fmt -j- -g t -o- <<< "$CONTENT")"
+        if [ -n "$THRESHOLD" ]; then
+            echo -n "\"t\":$THRESHOLD,"
+        fi
+
+        echo -n "\"pins\":{"
+
+        CNT=0
+        PREV=""
+        while ITEM="$(jose fmt -j- -g jwe -g"$CNT" -u- <<< "$CONTENT")"; do
+            if [ -z "$ITEM" ]; then
+                CNT=$(( CNT + 1 ))
+                continue # in some cases it can be empty string
+            fi
+
+            DD="$(decode_luks_header "$ITEM")"
+
+            if ! PP="$(jose fmt -j- -g clevis -g pin -u- <<< "$DD")" || [ -z "$PP" ]; then
+                echo "Pin wasn't found in LUKS metadata!" >&2
+                exit 1
+            fi
+
+            if [ "$CNT" -eq 0 ]; then
+                PREV="$PP"
+                echo -n "\"$PP\":["
+                echo -n "$(generate_cfg "$ITEM")"
+            else
+                if ! [ "$PREV" = "$PP" ]; then
+                    echo -n "],\"$PP\":["
+                    echo -n "$(generate_cfg "$ITEM")"
+                else
+                    echo -n ",$(generate_cfg "$ITEM")"
+                fi
+            fi
+
+            PREV="$PP"
+            CNT=$(( CNT + 1 ))
+        done
+
+        echo -n "]}"
+
+    else
+        echo "Unknown pin $P!" >&2
+        exit 1
+    fi
+
+    echo -n "}"
+
+}
+
+
+### get luks metadata
+
+if [ -z "$DEV" ]; then
+    echo "Did not specify a device!" >&2
+    exit 1
+fi
+
+if ! cryptsetup isLuks --type luks1 "$DEV"; then
+    echo "$DEV is not a LUKSv1 device!" >&2
+    exit 1
+fi
+
+if [ -z "$SLT" ]; then
+    echo "Did not specify a slot!" >&2
+    exit 1
+fi
+
+if ! luksmeta test -d "$DEV"; then
+    echo "The $DEV device is not valid!" >&2
+    exit 1
+fi
+
+read -r slot active uuid <<< "$(luksmeta show -d "$DEV" | grep "^$SLT *")"
+
+if [ "$uuid" = "empty" ]; then
+   echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2
+   exit 1
+fi
+
+if ! OLD_LUKS_CODED="$(luksmeta load -d "$DEV" -s "$SLT")"; then
+    echo "Cannot load data from $DEV slot:$SLT!" >&2
+    exit 1
+fi
+
+### ----------------------------------------------------------------------
+
+DECODED="$(decode_luks_header "$OLD_LUKS_CODED")"
+
+if ! PIN="$(jose fmt -j- -g clevis -g pin -u- <<< "$DECODED")" || [ -z "$PIN" ]; then
+    echo "Pin wasn't found in LUKS metadata!" >&2
+    exit 1
+fi
+
+CFG="$(generate_cfg "$OLD_LUKS_CODED")"
+
+### ----------------------------------------------------------------------
+
+echo "Regenerating with:"
+echo "PIN: $PIN"
+echo "CONFIG: $CFG"
+
+PRESENT_KEY="$(echo -n "$OLD_LUKS_CODED" | clevis decrypt)"
+
+DUMP="$(cryptsetup luksDump "$DEV")"
+BITS="$(sed -r -n 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "$DUMP")"
+NEW_KEY="$(pwmake "$BITS")"
+
+trap 'echo "Ignoring CONTROL-C!"' INT TERM
+
+# Encrypt the new key
+if NEW_LUKS_CODED="$(echo -n "$NEW_KEY" | clevis encrypt "$PIN" "$CFG")"; then
+    if ! luksmeta wipe -f -d "$DEV" -s "$SLT" -u "$UUID"; then
+        echo "LUKSMeta slot $SLT for device $DEV couldn't be deleted"
+        exit 1
+    fi
+else
+    exit 0
+fi
+
+if ! echo -n "$NEW_LUKS_CODED" | luksmeta save -d "$DEV" -s "$SLT" -u "$UUID" 2>/dev/null; then
+    echo "Error while saving clevis metadata in LUKS header!" >&2
+    exit 1
+fi
+
+echo -e "$PRESENT_KEY\n$NEW_KEY" | cryptsetup luksChangeKey -S "$SLT" "$DEV"
+
+echo "Keys were succesfully rotated."

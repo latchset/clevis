@@ -1,0 +1,64 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Decode luks header"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 1
+fi
+
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH:"
+    return 1
+}
+
+if [ -z "$1" ]; then
+    echo "$0 missing the first argument!"
+    exit 1
+fi
+
+DATA_CODED="$1"
+
+if DATA_CODED="$(jose jwe fmt -i- <<< "$DATA_CODED")"; then
+    DATA_CODED="$(jose fmt -j- -g protected -u- <<< "$DATA_CODED")"
+    DATA_DECODED="$(jose b64 dec -i- <<< "$DATA_CODED")"
+else
+    echo "Error decoding JWE protected header!" >&2
+    exit 1
+fi
+
+### get pin and url
+
+if ! PIN="$(jose fmt -j- -g clevis -g pin -u- <<< "$DATA_DECODED")" || [ -z "$PIN" ]; then
+    echo "Pin wasn't found in luks metadata!" >&2
+    exit 1
+fi
+
+if ! CONTENT="$(jose fmt -j- -g clevis -g "$PIN" -o- <<< "$DATA_DECODED")" || [ -z "$CONTENT" ]; then
+    echo "Content wasn't found!" >&2
+    exit 1
+fi
+
+EXE="$(findexe clevis-luks-report-"$PIN")"
+
+exec "$EXE" "$CONTENT"

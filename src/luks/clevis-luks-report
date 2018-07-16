@@ -1,0 +1,115 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Report any key rotation on the server side"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH:"
+    return 1
+}
+
+function usage_and_exit () {
+    echo >&2
+    echo "Usage: clevis luks report [-qr] -d DEV -s SLOT" >&2
+    echo >&2
+    echo -e "  -q\t Quiet mode" >&2
+    echo -e "  -r\t Regenerate luks metadata with \"clevis regen -d DEV -s SLOT\"" >&2
+    echo >&2
+    echo "$SUMMARY" >&2
+    echo >&2
+    exit "$1"
+}
+
+while getopts "hd:s:rq" o; do
+    case "$o" in
+    d) DEV="$OPTARG";;
+    h) usage_and_exit 0;;
+    r) ROPT="regen";;
+    s) SLT="$OPTARG";;
+    q) QOPT="quiet";;
+    *) usage_and_exit 1;;
+    esac
+done
+
+### get luks metadata
+
+if [ -z "$DEV" ]; then
+    echo "Did not specify a device!" >&2
+    exit 1
+fi
+
+if ! cryptsetup isLuks --type luks1 "$DEV"; then
+    echo "$DEV is not a LUKSv1 device!" >&2
+    exit 1
+fi
+
+if [ -z "$SLT" ]; then
+    echo "Did not specify a slot!" >&2
+    exit 1
+fi
+
+if ! luksmeta test -d "$DEV"; then
+    echo "The $DEV device is not valid!" >&2
+    exit 1
+fi
+
+read -r slot active uuid <<< "$(luksmeta show -d "$DEV" | grep "^$SLT *")"
+
+if [ "$uuid" = "empty" ]; then
+   echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2
+   exit 1
+fi
+
+# echo $slot $active $uuid
+
+if ! DATA_CODED="$(luksmeta load -d "$DEV" -s "$SLT")"; then
+    echo "Cannot load data from $DEV slot:$SLT!" >&2
+    exit 1
+fi
+
+EXE="$(findexe clevis-luks-report-decode)"
+
+RESULT="$($EXE "$DATA_CODED")"
+
+if [ -n "$RESULT" ]; then
+    echo "$RESULT"
+
+    if [ -z "$QOPT" ]; then
+        echo "Report detected that some keys were rotated."
+
+        if [ -z "$ROPT" ]; then
+            read -r -p "Do you want to regenerate luks metadata with \"clevis regen -d $DEV -s $SLT\"? [ynYN] " ans < /dev/tty
+            [[ "$ans" =~ ^[yY]$ ]] && ROPT="regen"
+        fi
+    fi
+
+fi
+
+if [ "$ROPT" = "regen" ]; then
+    EXE="$(findexe clevis-luks-regen)"
+    exec "$EXE" -d "$DEV" -s "$SLT"
+fi

@@ -1,0 +1,59 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="SSS report plugin"
+PIN="sss"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 1
+fi
+
+function findexe() {
+    while read -d: path; do
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+    done <<< "$PATH:"
+    return 1
+}
+
+if [ -z "$1" ]; then
+    echo "$0 missing the first argument!" >&2
+    exit 1
+fi
+
+CONTENT="$1" # sss content
+
+CNT=0
+while DATA_CODED="$(jose fmt -j- -g jwe -g"$CNT" -u- <<< "$CONTENT")"; do
+    if [ -z "$DATA_CODED" ]; then
+        CNT=$(( CNT + 1 ))
+        continue # in some cases it can be empty string
+    fi
+
+    EXE="$(findexe clevis-luks-report-decode)"
+    if ! $EXE "$DATA_CODED"; then
+        echo "Failed" >&2
+        exit 1
+    fi
+
+    CNT=$(( CNT + 1 ))
+done
+
+exit 0

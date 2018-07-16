@@ -74,7 +74,6 @@ EOF
         "${unitdir}/clevis-luks-askpass.service" \
 	"${unitdir}/clevis-luks-askpass.path"
 
-    # 
     ln_r "${systemdsystemunitdir}/clevis-luks-askpass.path" \
          "${systemdsystemunitdir}/sysinit.target.wants"
 

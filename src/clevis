@@ -18,21 +18,45 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-function findexe() {
-    while read -d: path; do
-        [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
-    done <<< "$PATH:"
-    return 1
-}
-
-cmd=clevis
-while [ $# -gt 0 ]; do
-    [[ "$1" =~ ^- ]] && break
-    cmd="$cmd-$1"
-    shift
-
-    exe=`findexe "$cmd"` && exec "$exe" "$@"
-done
+findexe() {                                                                     
+    while read -d: path; do                                                     
+        [ -f "$path/$1" -a -x "$path/$1" ] && exe="$path/$1" && break           
+    done <<< "$PATH:"                                                           
+    exe="$end"                                                                  
+}                                                                               
+                                                                                
+exeglob() {                                                                     
+    exes=()                                                                     
+    while read -d: path; do                                                     
+        for f in glob $path/$1*; do                                             
+            [ -f "$f" -a -x "$f" ] || continue                                  
+            exes+=($f)                                                          
+        done                                                                
+    done <<< "$PATH:"                                                           
+    opt="${#exes[@]}"                                                           
+}                                                                               
+                                                                                
+if [ $1 ]; then                                                                 
+    cmd=clevis                                                                  
+    end="not_found_string"                                                      
+    while :; do                                                                 
+        cmd="$cmd-$1"                                                           
+        findexe $cmd                                                            
+        exeglob $cmd                                                            
+        if [ "$exe" != "$end" -a "$opt" -eq "1" ]; then                         
+                shift                                                           
+                exec "$exe" "$@"                                                
+        elif [ $opt -eq "0" ]; then                                             
+            echo >&2                                                            
+            echo "Argument or command '$1' is invalid." >&2                     
+            break                                                               
+        elif [ $# -le "1" ]; then                                               
+            break                                                               
+        fi                                                                      
+        shift                                                                   
+                                                                                
+   done                                                                         
+fi
 
 echo >&2
 echo "Command '$cmd' is invalid" >&2

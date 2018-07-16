@@ -65,11 +65,11 @@ install() {
 [Unit]
 DefaultDependencies=no
 Conflicts=shutdown.target
-Before=basic.target shutdown.target
+Before=basic.target shutdown.target network-online.target
 EOF
     done
 
-    # remove all dependencies etc from original files
+    # Remove all dependencies etc from original files.
     sed -i '/^[Before|Conflicts|Requires|After|Wants].*/d' \
         "${unitdir}/clevis-luks-askpass.service" \
 	"${unitdir}/clevis-luks-askpass.path"

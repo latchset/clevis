@@ -62,6 +62,6 @@ while read -r slot state uuid; do
         echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
         exit 0
     fi
-done <<< $(luksmeta show -d "$DEV")
+done <<< "$(luksmeta show -d "$DEV")"
 
 exit 1

@@ -6,10 +6,8 @@ are required. In many cases dependencies are platform specific and so the
 following sections describe them for the supported platforms.
 
 ## Linux:
-* Autoconf
-* Autoconf archive
-* Automake
-* Libtool
+* Meson
+* Ninja
 * C compiler
 * C Library Development Libraries and Header Files
 * [jose](https://github.com/latchset/jose)
@@ -36,38 +34,30 @@ $ sudo dnf builddep clevis
 
 # Building From Source
 
-## Bootstrapping the Build
-To configure the Clevis source code first run autoreconf to generate
-the configure script and Makefile.in configuration files:
-
-```
-$ autoreconf -si
-```
-
 ## Configuring the Build
-Then run the configure script, which generates the Makefiles:
+To configure Clevis, run `meson` which generates the build files:
 
 ```
-$ ./configure
+$ meson build
 ```
 
 ## Compiling
-Then compile the code using make:
+Then compile the code using `ninja`:
 
 ```
-$ make -j$(nproc)
+$ ninja -C build -j$(nproc)
 ```
 
 ## Installing
 Once you've built the Clevis software it can be installed with:
 
 ```
-$ sudo make install
+$ sudo ninja -C build install
 ```
 
 This will install Clevis to a location determined at configure time.
 
-See the output of ./configure --help for the available options. Typically
+See the output of `meson --help` for the available options. Typically
 much won't be needed besides providing an alternative --prefix option at
 configure time, and maybe DESTDIR at install time if you're packaging for
 a distro.

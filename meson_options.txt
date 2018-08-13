@@ -1,0 +1,3 @@
+option('user', type: 'string', value: 'clevis', description: 'Unprivileged user for secure clevis operations')
+option('group', type: 'string', value: 'clevis', description: 'Unprivileged group for secure clevis operations')
+

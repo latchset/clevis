@@ -7,4 +7,4 @@ d=`echo -n "$e" | clevis decrypt`
 test "$d" == "hi"
 
 e=`echo -n hi | clevis encrypt test '{"fail":true}'`
-! echo "$e" | decrypt
+! echo "$e" | clevis decrypt

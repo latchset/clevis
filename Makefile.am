@@ -27,7 +27,7 @@ CLEANFILES += $(man_ROFF_FILES) $(man_ROFF_FILES:.roff=)
 
 $(top_builddir)/%.roff: %.adoc
 	$(MKDIR_P) $$(dirname $@)
-	$(A2X) -v -f manpage $^ -D $(top_builddir)/$$(dirname $@)
+	$(A2X) -f manpage $^ -D $(top_builddir)/$$(dirname $@)
 	$(INSTALL) -m 644 $(top_builddir)/$(@:.roff=) $(top_builddir)/$@
 
 nodist_man1_MANS = \

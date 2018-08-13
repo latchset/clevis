@@ -30,7 +30,7 @@ $(top_builddir)/%.roff: %.adoc
 	$(A2X) -v -f manpage $^ -D $(top_builddir)/$$(dirname $@)
 	$(INSTALL) -m 644 $(top_builddir)/$(@:.roff=) $(top_builddir)/$@
 
-dist_man1_MANS = \
+nodist_man1_MANS = \
     doc/clevis-encrypt-tang.1 \
     doc/clevis-encrypt-sss.1 \
     doc/clevis-luks-unlock.1 \
@@ -40,11 +40,11 @@ dist_man1_MANS = \
     doc/clevis.1
 
 if HAVE_TPM2_TOOLS
-    dist_man1_MANS += \
+    nodist_man1_MANS += \
     doc/clevis-encrypt-tpm2.1
 endif
 
-dist_man7_MANS = \
+nodist_man7_MANS = \
     doc/clevis-luks-unlockers.7
 
 endif

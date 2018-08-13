@@ -18,9 +18,7 @@ bin_PROGRAMS = \
     clevis-decrypt-sss
 
 dist_bin_SCRIPTS = \
-    clevis-encrypt-http \
     clevis-encrypt-tang \
-    clevis-decrypt-http \
     clevis-decrypt-tang \
     clevis-bind-luks \
     clevis-luks-unlock \

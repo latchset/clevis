@@ -10,7 +10,6 @@ CLEANFILES=
 man_ADOC_FILES = \
     doc/clevis.1.adoc \
     doc/clevis-decrypt.1.adoc \
-    doc/clevis-encrypt-http.1.adoc \
     doc/clevis-encrypt-sss.1.adoc \
     doc/clevis-encrypt-tang.1.adoc \
     doc/clevis-encrypt-tpm2.1.adoc \
@@ -33,7 +32,6 @@ $(top_builddir)/%.roff: %.adoc
 
 dist_man1_MANS = \
     doc/clevis-encrypt-tang.1 \
-    doc/clevis-encrypt-http.1 \
     doc/clevis-encrypt-sss.1 \
     doc/clevis-luks-unlock.1 \
     doc/clevis-luks-bind.1 \

@@ -1,4 +1,3 @@
-jansson = dependency('jansson', version: '>=2.10', required: false)
 libcrypto = dependency('libcrypto', required: false)
 
 if jansson.found() and libcrypto.found()

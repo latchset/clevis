@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-SUMMARY="Unlocks a LUKSv1 volume"
+SUMMARY="Unlocks a LUKS volume"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 function usage() {
@@ -54,14 +54,27 @@ fi
 
 NAME=${NAME:-luks-`cryptsetup luksUUID $DEV`}
 
-while read -r slot state uuid; do
-    [ "$state" != "active" ] && continue
-    [ "$uuid" != "$UUID" ] && continue
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    while read -r slot state uuid; do
+        [ "$state" != "active" ] && continue
+        [ "$uuid" != "$UUID" ] && continue
 
-    if pt="`luksmeta load -d $DEV -s $slot -u $UUID | clevis decrypt`"; then
-        echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
-        exit 0
-    fi
-done <<< "$(luksmeta show -d "$DEV")"
+        if pt=`luksmeta load -d $DEV -s $slot -u $UUID | clevis decrypt`; then
+            echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
+            exit 0
+        fi
+    done <<< "$(luksmeta show -d "$DEV")"
+
+elif cryptsetup isLuks --type luks2 "$DEV"; then
+    for id in `cryptsetup luksDump "$DEV" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`; do
+        tok=`cryptsetup token export --token-id "$id" "$DEV"`
+        jwe=`jose fmt -j- -Og jwe -o- <<<"$tok" | jose jwe fmt -i- -c`
+
+        if pt=`echo -n "$jwe" | clevis decrypt`; then
+            echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
+            exit 0
+        fi
+    done
+fi
 
 exit 1

@@ -12,7 +12,7 @@ if udisks2.found() and audit.found()
   )
 
   executable('clevis-luks-udisks2', 'clevis-luks-udisks2.c',
-    dependencies: [udisks2, luksmeta, audit],
+    dependencies: [udisks2, luksmeta, audit, jansson],
     install_dir: libexecdir,
     install: true,
   )

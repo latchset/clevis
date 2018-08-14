@@ -23,16 +23,18 @@ UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 shopt -s nullglob
 
-while getopts ":l" o; do
+path=/run/systemd/ask-password
+while getopts ":lp:" o; do
     case "$o" in
     l) loop=true;;
+    p) path=$OPTARG;;
     esac
 done
 
 while true; do
     todo=0
 
-    for question in /run/systemd/ask-password/ask.*; do
+    for question in $path/ask.*; do
         metadata=false
         unlocked=false
         d=
@@ -47,20 +49,35 @@ while true; do
 
         [ -z "$d" -o -z "$s" ] && continue
 
-        # If the device is not initialized, sliently skip it.
-        luksmeta test -d "$d" || continue
+        if cryptsetup isLuks --type luks1 "$d"; then
+            # If the device is not initialized, sliently skip it.
+            luksmeta test -d "$d" || continue
 
-        while read -r slot state uuid; do
-            [ "$state" != "active" ] && continue
-            [ "$uuid" != "$UUID" ] && continue
-            metadata=true
+            while read -r slot state uuid; do
+                [ "$state" != "active" ] && continue
+                [ "$uuid" != "$UUID" ] && continue
+                metadata=true
 
-            if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
-                echo -n "+$pt" | nc -U -u --send-only "$s"
-                unlocked=true
-                break
-            fi
-        done < <(luksmeta show -d "$d")
+                if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
+                    echo -n "+$pt" | nc -U -u --send-only "$s"
+                    unlocked=true
+                    break
+                fi
+            done < <(luksmeta show -d "$d")
+        elif cryptsetup isLuks --type luks2 "$d"; then
+            ids=`cryptsetup luksDump "$d" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
+            for id in $ids; do
+                tok=`cryptsetup token export --token-id "$id" "$d"`
+                jwe=`jose fmt -j- -Og jwe -o- <<<"$tok" | jose jwe fmt -i- -c`
+                metadata=true
+
+                if pt=`echo -n "$jwe" | clevis decrypt`; then
+                    echo -n "+$pt" | nc -U -u --send-only "$s"
+                    unlocked=true
+                    break
+                fi
+            done
+        fi
 
         [ $metadata == true ] || continue
         [ $unlocked == true ] && continue

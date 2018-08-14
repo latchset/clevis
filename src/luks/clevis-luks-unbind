@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-SUMMARY="Unbinds a pin bound to a LUKSv1 volume"
+SUMMARY="Unbinds a pin bound to a LUKS volume"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 function usage() {
@@ -29,7 +29,7 @@ function usage() {
     echo >&2
     echo "  -d DEV  The bound LUKS device" >&2
     echo >&2
-    echo "  -s SLOT The LUKSMeta slot number for the pin unbind" >&2
+    echo "  -s SLOT The LUKS slot number for the pin unbind" >&2
     echo >&2
     echo "  -f      Do not ask for confirmation and wipe slot in batch-mode" >&2
     echo >&2
@@ -55,45 +55,58 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
-if ! cryptsetup isLuks --type luks1 "$DEV"; then
-    echo "$DEV is not a LUKSv1 device!" >&2
-    exit 1
-fi
-
 if [ -z "$SLT" ]; then
     echo "Did not specify a slot!" >&2
     usage
 fi
 
-if ! luksmeta test -d $DEV 2>/dev/null; then
-    echo "The $DEV device is not valid!" >&2
-    exit 1
-fi
-
-read -r slot active uuid <<< $(luksmeta show -d "$DEV" | grep "^$SLT *")
-
-if [ "$uuid" = "empty" ]; then
-   echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2
-   exit 1
-fi
-
-if [ "$active" = "active" ]; then
-    if ! cryptsetup luksKillSlot "$DEV" "$SLT" $FRC; then
-	echo "LUKSv1 slot $SLT for device $DEV couldn't be deleted"
-	exit 1
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    if ! luksmeta test -d $DEV 2>/dev/null; then
+        echo "The $DEV device does not contain a LUKSMeta header!" >&2
+        exit 1
     fi
-else
-   echo "LUKSv1 slot $SLT not present on $DEV, only LUKSMeta slot will be cleared." >&2
-   if [ -z "$FRC" ]; then
-       echo "The unbind operation will wipe a slot. This operation is unrecoverable." >&2
-       read -r -p "Do you wish to erase LUKSMeta slot $SLT on $DEV? [ynYN] " ans < /dev/tty
-       [[ "$ans" =~ ^[yY]$ ]] || exit 0
-   fi
-fi
 
-if ! luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"; then
-    echo "LUKSMeta slot $SLT for device $DEV couldn't be deleted"
+    read -r slot active uuid <<< $(luksmeta show -d "$DEV" | grep "^$SLT *")
+
+    if [ "$uuid" == "empty" ]; then
+        echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2
+        exit 1
+    fi
+
+    [ "$active" == "active" ] && KILL=true
+
+elif cryptsetup isLuks --type luks2 "$DEV"; then
+    dump=`cryptsetup luksDump "$DEV"`
+    grep -q "^\s*$SLT: luks2" <<<"$dump" && KILL=true
+    TOK=`grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<<"$dump" \
+        | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
+
+else
+    echo "$DEV is not a supported LUKS device!" >&2
     exit 1
 fi
 
-exit 0
+if [ -z "$FRC" ]; then
+    echo "The unbind operation will wipe a slot. This operation is unrecoverable." >&2
+    read -r -p "Do you wish to erase LUKS slot $SLT on $DEV? [ynYN] " ans < /dev/tty
+    [[ "$ans" =~ ^[yY]$ ]] || exit 0
+fi
+
+if [ -n "$KILL" ]; then
+    if ! cryptsetup luksKillSlot "$DEV" "$SLT" $FRC; then
+        echo "LUKS slot $SLT for device $DEV couldn't be deleted"
+        exit 1
+    fi
+fi
+
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    if ! luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"; then
+        echo "LUKSMeta slot $SLT for device $DEV couldn't be deleted"
+        exit 1
+    fi
+elif cryptsetup isLuks --type luks2 "$DEV" && [ -n "$TOK" ]; then
+    if ! cryptsetup token remove --token-id "$TOK" "$DEV"; then
+        echo "Error while removing token $TOK from LUKS device $DEV!" >&2
+        exit 1
+    fi
+fi

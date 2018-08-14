@@ -36,6 +36,7 @@ add_project_arguments(
   language: 'c'
 )
 
+jansson = dependency('jansson', version: '>=2.10', required: false)
 jose = dependency('jose', version: '>=8')
 a2x = find_program('a2x', required: false)
 

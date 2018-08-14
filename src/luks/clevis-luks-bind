@@ -19,19 +19,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-SUMMARY="Binds a LUKSv1 device using the specified policy"
+SUMMARY="Binds a LUKS device using the specified policy"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
-
-function onerr() {
-    if [ -n "$DEV" -a -n "$SLT" ]; then
-        luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"
-        SLT=
-    fi
-    stty echo
-    exit 1
-}
-
-trap 'onerr' ERR HUP INT QUIT PIPE TERM
 
 function usage() {
     echo >&2
@@ -43,7 +32,7 @@ function usage() {
     echo >&2
     echo "  -d DEV  The LUKS device on which to perform binding" >&2
     echo >&2
-    echo "  -s SLT  The LUKSMeta slot to use for metadata storage" >&2
+    echo "  -s SLT  The LUKS slot to use" >&2
     echo >&2
     echo "  -k KEY  Non-interactively read LUKS password from KEY file" >&2
     echo "  -k -    Non-interactively read LUKS password from standard input" >&2
@@ -59,7 +48,7 @@ fi
 while getopts ":hfd:s:k:" o; do
     case "$o" in
     f) FRC=-f;;
-    d) DEV=$OPTARG;;
+    d) export DEV=$OPTARG;;
     s) SLT=$OPTARG;;
     k) KEY=$OPTARG;;
     *) usage;;
@@ -71,8 +60,8 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
-if ! cryptsetup isLuks --type luks1 "$DEV"; then
-    echo "$DEV is not a LUKSv1 device!" >&2
+if ! cryptsetup isLuks "$DEV"; then
+    echo "$DEV is not a LUKS device!" >&2
     exit 1
 fi
 
@@ -88,9 +77,11 @@ fi
 
 if [ -n "$KEY" ]; then
     if [ "$KEY" == "-" ]; then
-        if ! luksmeta test -d $DEV && [ -z "$FRC" ]; then
-            echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
-            usage
+        if cryptsetup isLuks --type luks1 "$DEV"; then
+            if ! luksmeta test -d $DEV && [ -z "$FRC" ]; then
+                echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
+                usage
+            fi
         fi
     elif ! [ -f "$KEY" ]; then
         echo "Key file '$KEY' not found!" >&2
@@ -100,38 +91,55 @@ fi
 
 # Generate a key with the same entropy as the LUKS Master Key
 dump=`cryptsetup luksDump $DEV`
-bits=`sed -r -n 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "$dump"`
-key=`pwmake $bits`
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    filt=`sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "$dump"`
+else
+    filt=`sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p' <<< "$dump"`
+fi
+bits=`sort -n <<<"$filt" | tail -n 1`
+export key=`pwmake $bits`
 
 # Encrypt the new key
 jwe=`echo -n "$key" | clevis encrypt "$PIN" "$CFG"`
 
 # If necessary, initialize the LUKS volume
-if ! luksmeta test -d $DEV; then
-    luksmeta init -d $DEV $FRC
+if cryptsetup isLuks --type luks1 "$DEV" && ! luksmeta test -d "$DEV"; then
+    luksmeta init -d "$DEV" $FRC
 fi
 
-# Write the JWE into the specified slot. Or, if no slot is given, ...
-if [ -n "$SLT" ]; then
-    if ! echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" -s $SLT 2>/dev/null; then
-        echo "Error while saving Clevis metadata in LUKS header!" >&2
-        false
-    fi
-
-# ... write the JWE to the first slot unused by both LUKS and LUKSMeta
-elif ! SLT=`echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" 2>/dev/null`; then
-    echo "Error while saving Clevis metadata in LUKS header!" >&2
-    false
-fi
-
-export DEV
-export SLT
-
-# Add the new key to the LUKS slot that matches the LUKSMeta slot
+# Get the old key
 case "$KEY" in
 "") read -s -p "Enter existing LUKS password: " old; echo;;
  -) old=`/bin/cat`;;
  *) old=`/bin/cat "$KEY"`;;
 esac
 
-echo -e "$old\n$key" | cryptsetup luksAddKey -S $SLT $DEV
+# Add the new key
+if [ -n "$SLT" ]; then
+    if ! echo -e "$old\n$key" | cryptsetup luksAddKey --key-slot $SLT $DEV; then
+        echo "Error while adding new key to LUKS header!" >&2
+        exit 1
+    fi
+elif ! SLT=`echo -e "$old\n$key" \
+        | cryptsetup luksAddKey -v $DEV \
+        | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p'`; then
+    echo "Error while adding new key to LUKS header!" >&2
+    exit 1
+fi
+
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    if ! echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" -s $SLT 2>/dev/null; then
+        echo "Error while saving Clevis metadata in LUKSMeta!" >&2
+        cryptsetup luksRemoveKey "$DEV" <<<"$key"
+        exit 1
+    fi
+else
+    jwe=`jose jwe fmt -i- <<<"$jwe"` # Convert to JSON Serialization
+    tok="{\"type\":\"clevis\",\"keyslots\":[\"$SLT\"],\"jwe\":$jwe}"
+
+    if ! cryptsetup token import "$DEV" <<<"$tok" ; then
+        echo "Error while saving Clevis metadata as a LUKS token!" >&2
+        cryptsetup luksRemoveKey "$DEV" <<<"$key"
+        exit 1
+    fi
+fi

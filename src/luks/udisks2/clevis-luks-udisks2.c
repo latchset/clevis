@@ -20,6 +20,7 @@
 #include <udisks/udisks.h>
 #include <glib-unix.h>
 #include <luksmeta.h>
+#include <jansson.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -39,6 +40,15 @@
 #define MAX_UDP 65507
 #define UERR ((uid_t) -1)
 #define GERR ((gid_t) -1)
+
+#define UUID_TMPL \
+    "%02hhx%02hhx%02hhx%02hhx-" \
+    "%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-" \
+    "%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx"
+
+#define UUID_ARGS(u) \
+    u[0x0], u[0x1], u[0x2], u[0x3], u[0x4], u[0x5], u[0x6], u[0x7], \
+    u[0x8], u[0x9], u[0xa], u[0xb], u[0xc], u[0xd], u[0xe], u[0xf]
 
 typedef struct {
     ssize_t used;
@@ -401,21 +411,55 @@ static const struct option lopts[] = {
 };
 
 static uid_t
-usr2uid(const char *usr) {
+usr2uid(const char *usr)
+{
     const struct passwd *tmp = getpwnam(usr);
     return tmp ? tmp->pw_uid : UERR;
 }
 
 static gid_t
-grp2gid(const char *grp) {
+grp2gid(const char *grp)
+{
     const struct group *tmp = getgrnam(grp);
     return tmp ? tmp->gr_gid : GERR;
+}
+
+static bool
+token_to_jwe(const char *json, pkt_t *pkt)
+{
+    json_auto_t *tokn = NULL;
+    const json_t *jwe = NULL;
+    const char *prt = NULL;
+    const char *key = NULL;
+    const char *tag = NULL;
+    const char *iv = NULL;
+    const char *ct = NULL;
+
+    tokn = json_loads(json, 0, NULL);
+    if (!tokn)
+        return false;
+
+    jwe = json_object_get(tokn, "jwe");
+    if (!jwe)
+        return false;
+
+    if (json_unpack((json_t *) jwe, "{s:s,s:s,s:s,s:s,s:s}",
+                    "protected", &prt, "encrypted_key", &key, "iv", &iv,
+                    "ciphertext", &ct, "tag", &tag) < 0)
+        return false;
+
+    pkt->used = snprintf(pkt->data, sizeof(pkt->data),
+                         "%s.%s.%s.%s.%s", prt, key, iv, ct, tag);
+    if (pkt->used < 0 || (size_t) pkt->used > sizeof(pkt->data))
+        return false;
+
+    pkt->used--; /* Remove null terminator. */
+    return true;
 }
 
 int
 main(int argc, char *const argv[])
 {
-    const int slotlen = crypt_keyslot_max(CRYPT_LUKS1);
     gid_t recg = grp2gid(CLEVIS_GROUP); /* Recovery group */
     uid_t recu = usr2uid(CLEVIS_USER);  /* Recovery user */
     gid_t unlg = getgid();              /* Unlock group */
@@ -519,46 +563,73 @@ main(int argc, char *const argv[])
 
     for (pkt_t req = {}, jwe = {}, key = {}; ; key = (pkt_t) {}) {
         struct crypt_device *cd = NULL;
-        luksmeta_uuid_t uuid = {};
-        int r = 0;
 
         /* Receive a request. Ensure that it is null terminated. */
         req.used = recv(pair[0], req.data, sizeof(req.data), 0);
         if (req.used < 1 || req.data[req.used - 1])
             break;
 
-        r = crypt_init(&cd, req.data);
-        if (r < 0)
+        if (crypt_init(&cd, req.data) < 0)
             goto next;
 
-        r = crypt_load(cd, CRYPT_LUKS1, NULL);
-        if (r < 0)
-            goto next;
+        if (crypt_load(cd, CRYPT_LUKS1, NULL) >= 0) {
+            const int slotlen = crypt_keyslot_max(CRYPT_LUKS1);
+            luksmeta_uuid_t uuid = {};
 
-        for (uint8_t s = 0; s < slotlen && key.used <= 0; s++) {
-            fprintf(stderr, "%s\tSLOT\t%hhu\n", req.data, s);
-            switch (crypt_keyslot_status(cd, s)) {
-            case CRYPT_SLOT_ACTIVE:
-            case CRYPT_SLOT_ACTIVE_LAST:
-                break;
-            default:
-                continue;
+            for (uint8_t s = 0; s < slotlen && key.used <= 0; s++) {
+                fprintf(stderr, "%s\tSLOT\t%hhu\n", req.data, s);
+                switch (crypt_keyslot_status(cd, s)) {
+                case CRYPT_SLOT_ACTIVE:
+                case CRYPT_SLOT_ACTIVE_LAST:
+                    break;
+                default:
+                    continue;
+                }
+
+                jwe.used = luksmeta_load(cd, s, uuid, jwe.data, sizeof(jwe.data));
+                fprintf(stderr, "%s\tMETA\t%s\n",
+                        req.data, strerror(jwe.used < 0 ? -jwe.used : 0));
+                if (jwe.used <= 0)
+                    continue;
+
+                fprintf(stderr, "%s\tUUID\t" UUID_TMPL "\n",
+                        req.data, UUID_ARGS(uuid));
+                if (memcmp(uuid, CLEVIS_LUKS_UUID, sizeof(uuid)) != 0)
+                    continue;
+
+                /* Recover the key from the JWE. */
+                key.used = recover_key(&jwe, key.data, sizeof(key.data), recu, recg);
+                fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", req.data,
+                        strerror(key.used < 0 ? -key.used : 0), key.used);
             }
+        } else if (crypt_load(cd, CRYPT_LUKS2, NULL) >= 0) {
+            for (int t = 0; key.used <= 0; t++) {
+                const char *json = NULL;
+                const char *type = NULL;
+                int r = 0;
 
-            jwe.used = luksmeta_load(cd, s, uuid, jwe.data, sizeof(jwe.data));
-            if (jwe.used <= 0)
-                continue;
+                r = crypt_token_status(cd, t, &type);
+                if (r == CRYPT_TOKEN_INVALID)
+                    break;
+                else if (r != CRYPT_TOKEN_EXTERNAL_UNKNOWN)
+                    continue;
 
-            if (memcmp(uuid, CLEVIS_LUKS_UUID, sizeof(uuid)) != 0)
-                continue;
+                fprintf(stderr, "%s\tTOKN\t%d\t%s\n", req.data, t, type);
+                if (strcmp(type, "clevis") != 0)
+                    continue;
 
-            fprintf(stderr, "%s\tMETA\t%s\n", req.data,
-                    strerror(jwe.used < 0 ? -jwe.used : 0));
+                r = crypt_token_json_get(cd, t, &json);
+                fprintf(stderr, "%s\tMETA\t%s\n",
+                        req.data, strerror(r < 0 ? -r : 0));
 
-            /* Recover the key from the JWE. */
-            key.used = recover_key(&jwe, key.data, sizeof(key.data), recu, recg);
-            fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", req.data,
-                    strerror(key.used < 0 ? -key.used : 0), key.used);
+                if (!token_to_jwe(json, &jwe))
+                    continue;
+
+                /* Recover the key from the JWE. */
+                key.used = recover_key(&jwe, key.data, sizeof(key.data), recu, recg);
+                fprintf(stderr, "%s\tRCVR\t%s (%zd)\n", req.data,
+                        strerror(key.used < 0 ? -key.used : 0), key.used);
+            }
         }
 
         if (key.used < 0)

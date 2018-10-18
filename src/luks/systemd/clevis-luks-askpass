@@ -59,13 +59,12 @@ while true; do
                 metadata=true
 
                 if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
-                    if [ -x "$(command -v nc)" ]; then
+                    if [ hash nc 2>/dev/null ]; then
                         echo -n "+$pt" | nc -U -u -w2 "$s"
-                        unlocked=true
-                    elif [ -x "$(command -v socat)" ]; then
+                    elif [ socat nc 2>/dev/null ]; then
                         echo -n "+$pt" | socat -U "UNIX:$s" -
-                        unlocked=true
                     fi
+                    unlocked=true
                     break
                 fi
             done < <(luksmeta show -d "$d")
@@ -77,7 +76,11 @@ while true; do
                 metadata=true
 
                 if pt=`echo -n "$jwe" | clevis decrypt`; then
-                    echo -n "+$pt" | nc -U -u --send-only "$s"
+                    if [ hash nc 2>/dev/null ]; then
+                        echo -n "+$pt" | nc -U -u -w2 "$s"
+                    elif [ socat nc 2>/dev/null ]; then
+                        echo -n "+$pt" | socat -U "UNIX:$s" -
+                    fi
                     unlocked=true
                     break
                 fi

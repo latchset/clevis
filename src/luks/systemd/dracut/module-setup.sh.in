@@ -40,6 +40,7 @@ install() {
         clevis-decrypt-sss \
         @libexecdir@/clevis-luks-askpass \
         clevis-decrypt \
+        cryptsetup \
         luksmeta \
         clevis \
         mktemp \
@@ -49,6 +50,7 @@ install() {
 
     for cmd in clevis-decrypt-tpm2 \
 	tpm2_createprimary \
+	tpm2_pcrlist \
 	tpm2_unseal \
 	tpm2_load; do
 
@@ -60,6 +62,7 @@ install() {
     if (($ret == 0)); then
 	inst_multiple clevis-decrypt-tpm2 \
 	    tpm2_createprimary \
+	    tpm2_pcrlist \
 	    tpm2_unseal \
 	    tpm2_load
     fi

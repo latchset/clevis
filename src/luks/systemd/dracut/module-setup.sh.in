@@ -65,6 +65,7 @@ install() {
 	    tpm2_pcrlist \
 	    tpm2_unseal \
 	    tpm2_load
+	inst_libdir_file "libtss2-tcti-device.so*"
     fi
 
     dracut_need_initqueue

@@ -21,26 +21,6 @@ take a policy as its first argument and plaintext on standard input and to
 encrypt the data so that it can be automatically decrypted if the policy is
 met. Lets walk through an example.
 
-== HTTP ESCROW
-
-When using the HTTP pin, we create a new, cryptographically-strong, random key.
-This key is stored in a remote HTTP escrow server (using a simple PUT or POST).
-Then at decryption time, we attempt to fetch the key back again in order to
-decrypt our data. So, for our configuration we need to pass the URL to the key
-location:
-
-    $ clevis encrypt http '{"url":"https://escrow.srv/1234"}' < PT > JWE
-
-To decrypt the data, simply provide the ciphertext (JWE):
-
-    $ clevis decrypt < JWE > PLAINTEXT
-
-Notice that we did not pass any configuration during decryption. The decrypt
-command extracted the URL (and possibly other configuration) from the JWE
-object, fetched the encryption key from the escrow and performed decryption.
-
-For more information, see link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)].
-
 == TANG BINDING
 
 Clevis provides support for the Tang network binding server. Tang provides
@@ -136,7 +116,6 @@ For more information, see link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)].
 
 == SEE ALSO
 
-link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)],
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
 link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)],
 link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],

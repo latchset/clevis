@@ -58,27 +58,6 @@ advertisement is stored, or the JSON contents of the advertisment itself. When
 the advertisment is specified manually like this, Clevis presumes that the
 advertisement is trusted.
 
-#### PIN: HTTP
-
-Clevis also ships a pin for performing escrow using HTTP. Please note that,
-at this time, this pin does not provide HTTPS support and is suitable only
-for use over local sockets. This provides integration with services like
-[Custodia](http://github.com/latchset/custodia).
-
-For example:
-
-```bash
-$ echo hi | clevis encrypt http '{"url": "http://server.local/key"}' > hi.jwe
-```
-
-The HTTP pin generate a new (cryptographically-strong random) key and performs
-encryption using it. It then performs a PUT request to the URL specified. It is
-understood that the server will securely store this key for later retrieval.
-During decryption, the pin will perform a GET request to retrieve the key and
-perform decryption.
-
-Patches to provide support for HTTPS and authentication are welcome.
-
 #### PIN: TPM2
 
 Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)

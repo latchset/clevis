@@ -61,7 +61,6 @@ The images cannot be shared without also sharing a master key.
 == SEE ALSO
 
 link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlockers*(7)],
-link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)],
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
 link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
 link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

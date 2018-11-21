@@ -36,11 +36,11 @@ install() {
     inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
 
     inst_multiple /etc/services \
-        clevis-decrypt-http \
         clevis-decrypt-tang \
         clevis-decrypt-sss \
         @libexecdir@/clevis-luks-askpass \
         clevis-decrypt \
+        cryptsetup \
         luksmeta \
         clevis \
         mktemp \
@@ -50,6 +50,7 @@ install() {
 
     for cmd in clevis-decrypt-tpm2 \
 	tpm2_createprimary \
+	tpm2_pcrlist \
 	tpm2_unseal \
 	tpm2_load; do
 
@@ -61,8 +62,10 @@ install() {
     if (($ret == 0)); then
 	inst_multiple clevis-decrypt-tpm2 \
 	    tpm2_createprimary \
+	    tpm2_pcrlist \
 	    tpm2_unseal \
 	    tpm2_load
+	inst_libdir_file "libtss2-tcti-device.so*"
     fi
 
     dracut_need_initqueue

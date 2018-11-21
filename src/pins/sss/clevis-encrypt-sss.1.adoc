@@ -54,6 +54,5 @@ receive key fragments.
 
 == SEE ALSO
 
-link:clevis-encrypt-http.1.adoc[*clevis-encrypt-http*(1)],
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
 link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

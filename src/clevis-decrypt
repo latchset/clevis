@@ -21,7 +21,7 @@
 SUMMARY="Decrypts using the policy defined at encryption time"
 
 function findexe() {
-    while read -d: path; do
+    while read -r -d: path; do
         [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
     done <<< "$PATH:"
     return 1
@@ -33,7 +33,7 @@ if [ "$#" -eq 1 -a "$1" == "--summary" ]; then
 fi
 
 if ! [ -t 0 ]; then
-    read -d . hdr
+    read -r -d . hdr
 
     if ! pin=`jose fmt -q "$hdr" -SyOg clevis -Og pin -Su-`; then
         echo "JWE is missing the required 'clevis.pin' header property!" >&2

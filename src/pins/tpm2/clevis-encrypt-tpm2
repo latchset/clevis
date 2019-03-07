@@ -88,7 +88,7 @@ hash=`jose fmt -j- -Og hash -u- <<< "$cfg"` || hash="sha256"
 
 key=`jose fmt -j- -Og key -u- <<< "$cfg"` || key="ecc"
 
-pcr_bank=`jose fmt -j- -Og pcr_hash -u- <<< "$cfg"` || pcr_bank="sha1"
+pcr_bank=`jose fmt -j- -Og pcr_bank -u- <<< "$cfg"` || pcr_bank="sha1"
 
 pcr_ids=`jose fmt -j- -Og pcr_ids -u- <<< "$cfg"` || true
 

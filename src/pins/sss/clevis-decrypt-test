@@ -20,7 +20,7 @@
 
 [ $# -eq 1 -a "$1" == "--summary" ] && exit 1
 
-read -d . hdr
+read -r -d . hdr
 
 if [ "`jose fmt -q "$hdr" -SyOg clevis -g pin -u-`" != "test" ]; then
     echo "JWE pin mismatch!" >&2

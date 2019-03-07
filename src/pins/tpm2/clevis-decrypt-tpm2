@@ -57,7 +57,7 @@ if ! [[ -r "${TPM2TOOLS_DEVICE_FILE[0]}" && -w "${TPM2TOOLS_DEVICE_FILE[0]}" ]];
     exit 1
 fi
 
-read -d . hdr
+read -r -d . hdr
 
 if ! jhd=`jose b64 dec -i- <<< "$hdr"`; then
     echo "Error decoding JWE protected header!" >&2

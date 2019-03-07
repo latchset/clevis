@@ -109,7 +109,7 @@ fi
 
 # Get the old key
 case "$KEY" in
-"") read -s -p "Enter existing LUKS password: " old; echo;;
+"") read -r -s -p "Enter existing LUKS password: " old; echo;;
  -) old=`/bin/cat`;;
  *) old=`/bin/cat "$KEY"`;;
 esac

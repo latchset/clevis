@@ -124,7 +124,7 @@ if [ -n "$pcr_ids" ]; then
         fi
     fi
 
-    if ! tpm2_createpolicy -Q -P -L "$pcr_bank":"$pcr_ids" -F $TMP/pcr.digest -f $TMP/pcr.policy; then
+    if ! tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" -F $TMP/pcr.digest -f $TMP/pcr.policy; then
         echo "create policy fail, please check the environment or parameters!"
         exit 1
     fi

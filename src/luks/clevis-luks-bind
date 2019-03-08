@@ -48,9 +48,9 @@ fi
 while getopts ":hfd:s:k:" o; do
     case "$o" in
     f) FRC=-f;;
-    d) DEV=$OPTARG;;
-    s) SLT=$OPTARG;;
-    k) KEY=$OPTARG;;
+    d) DEV="$OPTARG";;
+    s) SLT="$OPTARG";;
+    k) KEY="$OPTARG";;
     *) usage;;
     esac
 done
@@ -65,12 +65,12 @@ if ! cryptsetup isLuks "$DEV"; then
     exit 1
 fi
 
-if ! PIN=${@:$((OPTIND++)):1} || [ -z "$PIN" ]; then
+if ! PIN="${@:$((OPTIND++)):1}" || [ -z "$PIN" ]; then
     echo "Did not specify a pin!" >&2
     usage
 fi
 
-if ! CFG=${@:$((OPTIND++)):1} || [ -z "$CFG" ]; then
+if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
     echo "Did not specify a pin config!" >&2
     usage
 fi
@@ -78,7 +78,7 @@ fi
 if [ -n "$KEY" ]; then
     if [ "$KEY" == "-" ]; then
         if cryptsetup isLuks --type luks1 "$DEV"; then
-            if ! luksmeta test -d $DEV && [ -z "$FRC" ]; then
+            if ! luksmeta test -d "$DEV" && [ -z "$FRC" ]; then
                 echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
                 usage
             fi

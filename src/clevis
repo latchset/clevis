@@ -41,16 +41,16 @@ echo "Usage: clevis COMMAND [OPTIONS]" >&2
 echo >&2
 
 max=0
-for f in $0-*; do
+for f in "$0"-*; do
     [ -f "$f" -a -x "$f" ] || continue
-    f=${f##*/}
+    f="${f##*/}"
     [ ${#f} -gt $max ] && max=${#f}
 done
 
-for f in $0-*; do
+for f in "$0"-*; do
     [ -f "$f" -a -x "$f" ] || continue
-    summ=`$f --summary 2>/dev/null` || continue
-    f=${f##*/}
+    summ=`"$f" --summary 2>/dev/null` || continue
+    f="${f##*/}"
     printf "  %-*s %s\n" "$max" "${f//-/ }" "$summ" >&2
 done
 

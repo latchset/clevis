@@ -58,4 +58,4 @@ kill -9 $PID
 ! wait $PID
 unset PID
 
-! echo $enc | clevis decrypt
+! echo "$enc" | clevis decrypt

@@ -23,20 +23,21 @@ SUMMARY="Binds a LUKS device using the specified policy"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 function usage() {
-    echo >&2
-    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] -d DEV PIN CFG" >&2
-    echo >&2
-    echo "$SUMMARY": >&2
-    echo >&2
-    echo "  -f      Do not prompt for LUKSMeta initialization" >&2
-    echo >&2
-    echo "  -d DEV  The LUKS device on which to perform binding" >&2
-    echo >&2
-    echo "  -s SLT  The LUKS slot to use" >&2
-    echo >&2
-    echo "  -k KEY  Non-interactively read LUKS password from KEY file" >&2
-    echo "  -k -    Non-interactively read LUKS password from standard input" >&2
-    echo >&2
+    exec >&2
+    echo
+    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] -d DEV PIN CFG"
+    echo
+    echo "$SUMMARY":
+    echo
+    echo "  -f      Do not prompt for LUKSMeta initialization"
+    echo
+    echo "  -d DEV  The LUKS device on which to perform binding"
+    echo
+    echo "  -s SLT  The LUKS slot to use"
+    echo
+    echo "  -k KEY  Non-interactively read LUKS password from KEY file"
+    echo "  -k -    Non-interactively read LUKS password from standard input"
+    echo
     exit 1
 }
 

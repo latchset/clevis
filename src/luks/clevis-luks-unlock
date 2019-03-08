@@ -22,15 +22,16 @@ SUMMARY="Unlocks a LUKS volume"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 function usage() {
-    echo >&2
-    echo "Usage: clevis luks unlock -d DEV [-n NAME]" >&2
-    echo >&2
-    echo "$SUMMARY": >&2
-    echo >&2
-    echo "  -d DEV  The LUKS device on which to perform unlocking" >&2
-    echo >&2
-    echo "  -n NAME The name of the unlocked device node" >&2
-    echo >&2
+    exec >&2
+    echo
+    echo "Usage: clevis luks unlock -d DEV [-n NAME]"
+    echo
+    echo "$SUMMARY":
+    echo
+    echo "  -d DEV  The LUKS device on which to perform unlocking"
+    echo
+    echo "  -n NAME The name of the unlocked device node"
+    echo
     exit 1
 }
 

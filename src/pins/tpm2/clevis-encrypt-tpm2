@@ -39,23 +39,24 @@ if [ "$1" == "--summary" ]; then
 fi
 
 if [ -t 0 ]; then
-    echo >&2
-    echo "Usage: clevis encrypt tpm2 CONFIG < PLAINTEXT > JWE" >&2
-    echo >&2
-    echo "$SUMMARY" >&2
-    echo >&2
-    echo "This command uses the following configuration properties:" >&2
-    echo >&2
-    echo "  hash: <string>  Hash algorithm used in the computation of the object name (default: sha256)" >&2
-    echo >&2
-    echo "  key: <string>   Algorithm type for the generated key (default: ecc)" >&2
-    echo >&2
-    echo "  pcr_bank: <string>   PCR algorithm bank to use for policy (default: sha1)" >&2
-    echo >&2
-    echo "  pcr_ids: <string>   PCR list used for policy. If not present, no policy is used" >&2
-    echo >&2
-    echo "  pcr_digest: <string>   Binary PCR hashes encoded in base64. If not present, the hash values are looked up" >&2
-    echo >&2
+    exec >&2
+    echo
+    echo "Usage: clevis encrypt tpm2 CONFIG < PLAINTEXT > JWE"
+    echo
+    echo "$SUMMARY"
+    echo
+    echo "This command uses the following configuration properties:"
+    echo
+    echo "  hash: <string>  Hash algorithm used in the computation of the object name (default: sha256)"
+    echo
+    echo "  key: <string>   Algorithm type for the generated key (default: ecc)"
+    echo
+    echo "  pcr_bank: <string>   PCR algorithm bank to use for policy (default: sha1)"
+    echo
+    echo "  pcr_ids: <string>   PCR list used for policy. If not present, no policy is used"
+    echo
+    echo "  pcr_digest: <string>   Binary PCR hashes encoded in base64. If not present, the hash values are looked up"
+    echo
     exit 1
 fi
 

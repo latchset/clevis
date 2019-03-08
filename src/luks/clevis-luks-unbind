@@ -22,17 +22,18 @@ SUMMARY="Unbinds a pin bound to a LUKS volume"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
 function usage() {
-    echo >&2
-    echo "Usage: clevis luks unbind -d DEV -s SLT" >&2
-    echo >&2
-    echo "$SUMMARY": >&2
-    echo >&2
-    echo "  -d DEV  The bound LUKS device" >&2
-    echo >&2
-    echo "  -s SLOT The LUKS slot number for the pin unbind" >&2
-    echo >&2
-    echo "  -f      Do not ask for confirmation and wipe slot in batch-mode" >&2
-    echo >&2
+    exec >&2
+    echo
+    echo "Usage: clevis luks unbind -d DEV -s SLT"
+    echo
+    echo "$SUMMARY":
+    echo
+    echo "  -d DEV  The bound LUKS device"
+    echo
+    echo "  -s SLOT The LUKS slot number for the pin unbind"
+    echo
+    echo "  -f      Do not ask for confirmation and wipe slot in batch-mode"
+    echo
     exit 1
 }
 

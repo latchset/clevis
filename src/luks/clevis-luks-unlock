@@ -41,8 +41,8 @@ fi
 
 while getopts ":d:n:" o; do
     case "$o" in
-    d) DEV=$OPTARG;;
-    n) NAME=$OPTARG;;
+    d) DEV="$OPTARG";;
+    n) NAME="$OPTARG";;
     *) usage;;
     esac
 done
@@ -52,7 +52,7 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
-NAME=${NAME:-luks-`cryptsetup luksUUID $DEV`}
+NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 
 if cryptsetup isLuks --type luks1 "$DEV"; then
     while read -r slot state uuid; do

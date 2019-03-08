@@ -42,7 +42,7 @@ if [ -t 0 ]; then
     echo >&2
     echo "Usage: clevis encrypt tpm2 CONFIG < PLAINTEXT > JWE" >&2
     echo >&2
-    echo $SUMMARY >&2
+    echo "$SUMMARY" >&2
     echo >&2
     echo "This command uses the following configuration properties:" >&2
     echo >&2

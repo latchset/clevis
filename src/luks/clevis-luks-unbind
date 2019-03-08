@@ -44,8 +44,8 @@ fi
 while getopts ":d:s:f" o; do
     case "$o" in
     f) FRC=-q;;
-    d) DEV=$OPTARG;;
-    s) SLT=$OPTARG;;
+    d) DEV="$OPTARG";;
+    s) SLT="$OPTARG";;
     *) usage;;
     esac
 done
@@ -61,7 +61,7 @@ if [ -z "$SLT" ]; then
 fi
 
 if cryptsetup isLuks --type luks1 "$DEV"; then
-    if ! luksmeta test -d $DEV 2>/dev/null; then
+    if ! luksmeta test -d "$DEV" 2>/dev/null; then
         echo "The $DEV device does not contain a LUKSMeta header!" >&2
         exit 1
     fi

@@ -27,14 +27,14 @@ path=/run/systemd/ask-password
 while getopts ":lp:" o; do
     case "$o" in
     l) loop=true;;
-    p) path=$OPTARG;;
+    p) path="$OPTARG";;
     esac
 done
 
 while true; do
     todo=0
 
-    for question in $path/ask.*; do
+    for question in "$path"/ask.*; do
         metadata=false
         unlocked=false
         d=
@@ -58,7 +58,7 @@ while true; do
                 [ "$uuid" != "$UUID" ] && continue
                 metadata=true
 
-                if pt="`luksmeta load -d $d -s $slot -u $UUID | clevis decrypt`"; then
+                if pt="`luksmeta load -d "$d" -s "$slot" -u "$UUID" | clevis decrypt`"; then
                     echo -n "+$pt" | nc -U -u --send-only "$s"
                     unlocked=true
                     break
@@ -79,12 +79,12 @@ while true; do
             done
         fi
 
-        [ $metadata == true ] || continue
-        [ $unlocked == true ] && continue
+        [ "$metadata" == true ] || continue
+        [ "$unlocked" == true ] && continue
         todo=$((todo + 1))
     done
 
-    if [ $todo -eq 0 ] || [ "$loop" != "true" ]; then
+    if [ $todo -eq 0 ] || [ "$loop" != true ]; then
         break;
     fi
 

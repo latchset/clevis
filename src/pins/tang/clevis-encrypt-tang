@@ -68,7 +68,7 @@ thp=`jose fmt -j- -Og thp -Su- <<< "$cfg"` || true
 
 ### Get the advertisement
 if jws=`jose fmt -j- -g adv -Oo- <<< "$cfg"`; then
-    thp=${thp:-any}
+    thp="${thp:-any}"
 elif jws=`jose fmt -j- -g adv -Su- <<< "$cfg"`; then
     if ! [ -f "$jws" ]; then
         echo "Advertisement file '$jws' not found!" >&2
@@ -80,7 +80,7 @@ elif jws=`jose fmt -j- -g adv -Su- <<< "$cfg"`; then
         exit 1
     fi
 
-    thp=${thp:-any}
+    thp="${thp:-any}"
 elif ! jws=`curl -sfg "$url/adv/$thp"`; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1

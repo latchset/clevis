@@ -76,9 +76,18 @@ if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
     usage
 fi
 
+if cryptsetup isLuks --type luks1 "$DEV"; then
+    luks_type=luks1
+elif cryptsetup isLuks --type luks2 "$DEV";then
+    luks_type=luks2
+else
+    echo "$DEV is not a supported LUKS device!" >&2
+    exit 1
+fi
+
 if [ -n "$KEY" ]; then
     if [ "$KEY" == "-" ]; then
-        if cryptsetup isLuks --type luks1 "$DEV"; then
+        if [ "$luks_type" == "luks1" ]; then
             if ! luksmeta test -d "$DEV" && [ -z "$FRC" ]; then
                 echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
                 usage
@@ -93,7 +102,7 @@ fi
 # Generate a key with the same entropy as the LUKS Master Key
 key="$(pwmake "$(
 cryptsetup luksDump "$DEV" \
-    | if cryptsetup isLuks --type luks1 "$DEV"; then
+    | if [ "$luks_type" == "luks1" ]; then
         sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p'
     else
         sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p'
@@ -104,7 +113,7 @@ cryptsetup luksDump "$DEV" \
 jwe=`echo -n "$key" | clevis encrypt "$PIN" "$CFG"`
 
 # If necessary, initialize the LUKS volume
-if cryptsetup isLuks --type luks1 "$DEV" && ! luksmeta test -d "$DEV"; then
+if [ "$luks_type" == "luks1" ] && ! luksmeta test -d "$DEV"; then
     luksmeta init -d "$DEV" $FRC
 fi
 
@@ -127,7 +136,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-if cryptsetup isLuks --type luks1 "$DEV"; then
+if [ "$luks_type" == "luks1" ]; then
     echo -n "$jwe" | luksmeta save -d "$DEV" -u "$UUID" -s "$SLT" 2>/dev/null
 else
     printf '{"type":"clevis","keyslots":["%s"],"jwe":%s}' "$SLT" "$(jose jwe fmt -i- <<< "$jwe")" \

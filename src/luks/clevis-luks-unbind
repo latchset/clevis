@@ -61,7 +61,21 @@ if [ -z "$SLT" ]; then
     usage
 fi
 
+if ! cryptsetup isLuks "$DEV"; then
+    echo "$DEV is not a LUKS device!" >&2
+    exit 1
+fi
+
 if cryptsetup isLuks --type luks1 "$DEV"; then
+    luks_type="luks1"
+elif cryptsetup isLuks --type luks2 "$DEV";then
+    luks_type="luks2"
+else
+    echo "$DEV is not a supported LUKS device!" >&2
+    exit 1
+fi
+
+if [ "$luks_type" == "luks1" ]; then
     if ! luksmeta test -d "$DEV" 2>/dev/null; then
         echo "The $DEV device does not contain a LUKSMeta header!" >&2
         exit 1
@@ -76,15 +90,11 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
 
     [ "$state" == "active" ] && KILL=true
 
-elif cryptsetup isLuks --type luks2 "$DEV"; then
+elif [ "$luks_type" == "luks2" ]; then
     dump=`cryptsetup luksDump "$DEV"`
     grep -q "^\s*$SLT: luks2" <<< "$dump" && KILL=true
     TOK=`grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<< "$dump" \
         | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
-
-else
-    echo "$DEV is not a supported LUKS device!" >&2
-    exit 1
 fi
 
 if [ -z "$FRC" ]; then
@@ -100,12 +110,12 @@ if [ -n "$KILL" ]; then
     fi
 fi
 
-if cryptsetup isLuks --type luks1 "$DEV"; then
+if [ "$luks_type" == "luks1" ]; then
     if ! luksmeta wipe -f -d "$DEV" -u "$UUID" -s "$SLT"; then
         echo "LUKSMeta slot $SLT for device $DEV couldn't be deleted"
         exit 1
     fi
-elif cryptsetup isLuks --type luks2 "$DEV" && [ -n "$TOK" ]; then
+elif [ "$luks_type" == "luks2" ] && [ -n "$TOK" ]; then
     if ! cryptsetup token remove --token-id "$TOK" "$DEV"; then
         echo "Error while removing token $TOK from LUKS device $DEV!" >&2
         exit 1

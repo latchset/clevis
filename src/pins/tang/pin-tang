@@ -26,7 +26,7 @@ function on_exit() {
 trap 'on_exit' EXIT
 trap 'exit' ERR
 
-export TMP=`mktemp -d`
+TMP=`mktemp -d`
 mkdir -p $TMP/db
 mkdir -p $TMP/cache
 
@@ -37,7 +37,7 @@ tangd-update $TMP/db $TMP/cache
 # Start the server
 port=`shuf -i 1024-65536 -n 1`
 $SD_ACTIVATE --inetd -l 127.0.0.1:$port -a tangd $TMP/cache &
-export PID=$!
+PID=$!
 sleep 0.25
 
 thp=`jose jwk thp -i "$TMP/db/sig.jwk"`

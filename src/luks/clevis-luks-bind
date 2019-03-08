@@ -48,7 +48,7 @@ fi
 while getopts ":hfd:s:k:" o; do
     case "$o" in
     f) FRC=-f;;
-    d) export DEV=$OPTARG;;
+    d) DEV=$OPTARG;;
     s) SLT=$OPTARG;;
     k) KEY=$OPTARG;;
     *) usage;;

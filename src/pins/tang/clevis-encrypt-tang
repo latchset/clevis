@@ -26,31 +26,32 @@ if [ "$1" == "--summary" ]; then
 fi
 
 if [ -t 0 ]; then
-    echo >&2
-    echo "Usage: clevis encrypt tang CONFIG < PLAINTEXT > JWE" >&2
-    echo >&2
-    echo $SUMMARY >&2
-    echo >&2
-    echo "This command uses the following configuration properties:" >&2
-    echo >&2
-    echo "  url: <string>   The base URL of the Tang server (REQUIRED)" >&2
-    echo >&2
-    echo "  thp: <string>   The thumbprint of a trusted signing key" >&2
-    echo >&2
-    echo "  adv: <string>   A filename containing a trusted advertisement" >&2
-    echo "  adv: <object>   A trusted advertisement (raw JSON)" >&2
-    echo >&2
-    echo "Obtaining the thumbprint of a trusted signing key is easy. If you" >&2
-    echo "have access to the Tang server's database directory, simply do:" >&2
-    echo >&2
-    echo "    $ jose jwk thp -i \$DBDIR/\$SIG.jwk " >&2
-    echo >&2
-    echo "Alternatively, if you have certainty that your network connection" >&2
-    echo "is not compromised (not likely), you can download the advertisement" >&2
-    echo "yourself using:" >&2
-    echo >&2
-    echo "    $ curl -f \$URL/adv > adv.jws" >&2
-    echo >&2
+    exec >&2
+    echo
+    echo "Usage: clevis encrypt tang CONFIG < PLAINTEXT > JWE"
+    echo
+    echo "$SUMMARY"
+    echo
+    echo "This command uses the following configuration properties:"
+    echo
+    echo "  url: <string>   The base URL of the Tang server (REQUIRED)"
+    echo
+    echo "  thp: <string>   The thumbprint of a trusted signing key"
+    echo
+    echo "  adv: <string>   A filename containing a trusted advertisement"
+    echo "  adv: <object>   A trusted advertisement (raw JSON)"
+    echo
+    echo "Obtaining the thumbprint of a trusted signing key is easy. If you"
+    echo "have access to the Tang server's database directory, simply do:"
+    echo
+    echo "    $ jose jwk thp -i \$DBDIR/\$SIG.jwk "
+    echo
+    echo "Alternatively, if you have certainty that your network connection"
+    echo "is not compromised (not likely), you can download the advertisement"
+    echo "yourself using:"
+    echo
+    echo "    $ curl -f \$URL/adv > adv.jws"
+    echo
     exit 1
 fi
 

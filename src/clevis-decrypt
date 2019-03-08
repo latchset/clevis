@@ -48,8 +48,9 @@ if ! [ -t 0 ]; then
     exec "$cmd" < <(echo -n "$hdr."; /bin/cat)
 fi
 
-echo >&2
-echo "Usage: clevis decrypt < JWE > PLAINTEXT" >&2
-echo >&2
-echo "$SUMMARY" >&2
-echo >&2
+exec >&2
+echo
+echo "Usage: clevis decrypt < JWE > PLAINTEXT"
+echo
+echo "$SUMMARY"
+echo

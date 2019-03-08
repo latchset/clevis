@@ -53,9 +53,23 @@ if [ -z "$DEV" ]; then
     usage
 fi
 
-NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
+if ! cryptsetup isLuks "$DEV"; then
+    echo "$DEV is not a LUKS device!" >&2
+    exit 1
+fi
 
 if cryptsetup isLuks --type luks1 "$DEV"; then
+    luks_type="luks1"
+elif cryptsetup isLuks --type luks2 "$DEV";then
+    luks_type="luks2"
+else
+    echo "$DEV is not a supported LUKS device!" >&2
+    exit 1
+fi
+
+NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
+
+if [ "$luks_type" == "luks1" ]; then
     while read -r slot state uuid; do
         [ "$state" == "active" ] || continue
         [ "$uuid" == "$UUID" ] || continue
@@ -66,7 +80,7 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
         fi
     done < <(luksmeta show -d "$DEV")
 
-elif cryptsetup isLuks --type luks2 "$DEV"; then
+elif [ "$luks_type" == "luks2" ]; then
     for id in `cryptsetup luksDump "$DEV" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`; do
         tok=`cryptsetup token export --token-id "$id" "$DEV"`
         jwe=`jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c`

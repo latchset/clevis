@@ -130,4 +130,4 @@ if ! jwk=`tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null`; then
     exit 1
 fi
 
-jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)
+exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

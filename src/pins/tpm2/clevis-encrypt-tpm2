@@ -160,4 +160,4 @@ fi
 jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_pub" -s jwk_pub -UUUUo-`
 jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_priv" -s jwk_priv -UUUUo-`
 
-jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

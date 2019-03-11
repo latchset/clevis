@@ -35,7 +35,7 @@ if [ -t 0 ]; then
     echo
     echo "Usage: clevis decrypt tpm2 < JWE > PLAINTEXT"
     echo
-    exit 1
+    exit 2
 fi
 
 TPM2TOOLS_INFO=`tpm2_pcrlist -v`

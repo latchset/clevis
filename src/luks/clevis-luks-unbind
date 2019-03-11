@@ -34,7 +34,7 @@ function usage() {
     echo
     echo "  -f      Do not ask for confirmation and wipe slot in batch-mode"
     echo
-    exit 1
+    exit 2
 }
 
 if [ $# -eq 1 -a "$1" == "--summary" ]; then

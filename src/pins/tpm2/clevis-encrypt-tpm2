@@ -57,7 +57,7 @@ if [ -t 0 ]; then
     echo
     echo "  pcr_digest: <string>   Binary PCR hashes encoded in base64. If not present, the hash values are looked up"
     echo
-    exit 1
+    exit 2
 fi
 
 TPM2TOOLS_INFO=`tpm2_pcrlist -v`

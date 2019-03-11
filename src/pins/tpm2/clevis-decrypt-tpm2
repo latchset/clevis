@@ -105,9 +105,10 @@ trap 'on_exit' EXIT
 
 pcr_ids="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd")" || true
 
+policy_options=()
 if [ -n "$pcr_ids" ]; then
     pcr_bank="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_bank -Su- <<< "$jhd")"
-    policy_options="-L $pcr_bank:$pcr_ids"
+    policy_options+=(-L "$pcr_bank:$pcr_ids")
 fi
 
 if ! jose b64 dec -i- -O $TMP/jwk.pub <<< "$jwk_pub"; then
@@ -132,7 +133,7 @@ if ! tpm2_load -Q -c $TMP/primary.context -u $TMP/jwk.pub -r $TMP/jwk.priv \
     exit 1
 fi
 
-if ! jwk="$(tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null)"; then
+if ! jwk="$(tpm2_unseal -c $TMP/load.context "${policy_options[@]}" 2>/dev/null)"; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi

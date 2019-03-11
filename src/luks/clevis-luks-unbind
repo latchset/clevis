@@ -42,9 +42,10 @@ if [ $# -eq 1 -a "$1" == "--summary" ]; then
     exit 0
 fi
 
+FRC=()
 while getopts ":d:s:f" o; do
     case "$o" in
-    f) FRC=-q;;
+    f) FRC+=(-q);;
     d) DEV="$OPTARG";;
     s) SLT="$OPTARG";;
     *) usage;;
@@ -97,14 +98,14 @@ elif [ "$luks_type" == "luks2" ]; then
         | sed -rn 's|^\s+([0-9]+): clevis|\1|p')"
 fi
 
-if [ -z "$FRC" ]; then
+if [ -z "${FRC[*]}" ]; then
     echo "The unbind operation will wipe a slot. This operation is unrecoverable." >&2
     read -r -p "Do you wish to erase LUKS slot $SLT on $DEV? [ynYN] " ans < /dev/tty
     [[ "$ans" =~ ^[yY]$ ]] || exit 0
 fi
 
 if [ -n "$KILL" ]; then
-    if ! cryptsetup luksKillSlot "$DEV" "$SLT" $FRC; then
+    if ! cryptsetup luksKillSlot "$DEV" "$SLT" "${FRC[@]}"; then
         echo "LUKS slot $SLT for device $DEV couldn't be deleted"
         exit 1
     fi

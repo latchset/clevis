@@ -46,9 +46,10 @@ if [ $# -eq 1 -a "$1" == "--summary" ]; then
     exit 0
 fi
 
+FRC=()
 while getopts ":hfd:s:k:" o; do
     case "$o" in
-    f) FRC=-f;;
+    f) FRC+=(-f);;
     d) DEV="$OPTARG";;
     s) SLT="$OPTARG";;
     k) KEY="$OPTARG";;
@@ -88,7 +89,7 @@ fi
 if [ -n "$KEY" ]; then
     if [ "$KEY" == "-" ]; then
         if [ "$luks_type" == "luks1" ]; then
-            if ! luksmeta test -d "$DEV" && [ -z "$FRC" ]; then
+            if ! luksmeta test -d "$DEV" && [ -z "${FRC[*]}" ]; then
                 echo "Cannot use '-k-' without '-f' unless already initialized!" >&2
                 usage
             fi
@@ -114,7 +115,7 @@ jwe="$(echo -n "$key" | clevis encrypt "$PIN" "$CFG")"
 
 # If necessary, initialize the LUKS volume
 if [ "$luks_type" == "luks1" ] && ! luksmeta test -d "$DEV"; then
-    luksmeta init -d "$DEV" $FRC
+    luksmeta init -d "$DEV" "${FRC[@]}"
 fi
 
 # Get the old key

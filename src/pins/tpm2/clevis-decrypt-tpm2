@@ -104,12 +104,12 @@ if [ -n "$pcr_ids" ]; then
     policy_options="-L $pcr_bank:$pcr_ids"
 fi
 
-if ! `jose b64 dec -i- -O $TMP/jwk.pub <<< "$jwk_pub"`; then
+if ! jose b64 dec -i- -O $TMP/jwk.pub <<< "$jwk_pub"; then
     echo "Decoding jwk.pub from Base64 failed!" >&2
     exit 1
 fi
 
-if ! `jose b64 dec -i- -O $TMP/jwk.priv <<< "$jwk_priv"`; then
+if ! jose b64 dec -i- -O $TMP/jwk.priv <<< "$jwk_priv"; then
     echo "Decoding jwk.priv from Base64 failed!" >&2
     exit 1
 fi

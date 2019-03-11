@@ -81,7 +81,7 @@ while true; do
 
         [ "$metadata" == true ] || continue
         [ "$unlocked" == true ] && continue
-        todo=$((todo + 1))
+        ((todo++))
     done
 
     if [ $todo -eq 0 ] || [ "$loop" != true ]; then

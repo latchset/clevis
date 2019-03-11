@@ -110,7 +110,7 @@ cryptsetup luksDump "$DEV" \
 )")"
 
 # Encrypt the new key
-jwe=`echo -n "$key" | clevis encrypt "$PIN" "$CFG"`
+jwe="$(echo -n "$key" | clevis encrypt "$PIN" "$CFG")"
 
 # If necessary, initialize the LUKS volume
 if [ "$luks_type" == "luks1" ] && ! luksmeta test -d "$DEV"; then
@@ -120,16 +120,16 @@ fi
 # Get the old key
 case "$KEY" in
 "") read -r -s -p "Enter existing LUKS password: " old; echo;;
- -) old=`/bin/cat`;;
- *) old=`/bin/cat "$KEY"`;;
+ -) old="$(/bin/cat)";;
+ *) old="$(/bin/cat "$KEY")";;
 esac
 
 # Add the new key
 if [ -n "$SLT" ]; then
     cryptsetup luksAddKey --key-slot "$SLT" "$DEV"
 else
-    SLT=`cryptsetup luksAddKey -v "$DEV"
-        | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p'`
+    SLT="$(cryptsetup luksAddKey -v "$DEV"
+        | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p')"
 fi < <(echo "$old"; echo -n "$key")
 if [ $? -ne 0 ]; then
     echo "Error while adding new key to LUKS header!" >&2

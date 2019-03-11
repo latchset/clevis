@@ -55,22 +55,22 @@ if [ -t 0 ]; then
     exit 2
 fi
 
-if ! cfg=`jose fmt -j- -Oo- <<< "$1" 2>/dev/null`; then
+if ! cfg="$(jose fmt -j- -Oo- <<< "$1" 2>/dev/null)"; then
     echo "Configuration is malformed!" >&2
     exit 1
 fi
 
-if ! url=`jose fmt -j- -Og url -u- <<< "$cfg"`; then
+if ! url="$(jose fmt -j- -Og url -u- <<< "$cfg")"; then
     echo "Missing the required 'url' property!" >&2
     exit 1
 fi
 
-thp=`jose fmt -j- -Og thp -Su- <<< "$cfg"` || true
+thp="$(jose fmt -j- -Og thp -Su- <<< "$cfg")" || true
 
 ### Get the advertisement
-if jws=`jose fmt -j- -g adv -Oo- <<< "$cfg"`; then
+if jws="$(jose fmt -j- -g adv -Oo- <<< "$cfg")"; then
     thp="${thp:-any}"
-elif jws=`jose fmt -j- -g adv -Su- <<< "$cfg"`; then
+elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
     if ! [ -f "$jws" ]; then
         echo "Advertisement file '$jws' not found!" >&2
         exit 1
@@ -82,18 +82,18 @@ elif jws=`jose fmt -j- -g adv -Su- <<< "$cfg"`; then
     fi
 
     thp="${thp:-any}"
-elif ! jws=`curl -sfg "$url/adv/$thp"`; then
+elif ! jws="$(curl -sfg "$url/adv/$thp")"; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1
 fi
 
-if ! jwks=`jose fmt -j- -Og payload -SyOg keys -AUo- <<< "$jws"`; then
+if ! jwks="$(jose fmt -j- -Og payload -SyOg keys -AUo- <<< "$jws")"; then
     echo "Advertisement is malformed!" >&2
     exit 1
 fi
 
 ### Check advertisement validity
-ver=`jose jwk use -i- -r -u verify -o- <<< "$jwks"`
+ver="$(jose jwk use -i- -r -u verify -o- <<< "$jwks")"
 if ! jose jws ver -i "$jws" -k- -a <<< "$ver"; then
     echo "Advertisement is missing signatures!" >&2
     exit 1
@@ -115,19 +115,19 @@ elif [ "$thp" != "any" ] && \
 fi
 
 ### Perform encryption
-enc=`jose jwk use -i- -r -u deriveKey -o- <<< "$jwks"`
+enc="$(jose jwk use -i- -r -u deriveKey -o- <<< "$jwks")"
 jose fmt -j "$enc" -Og keys -A || enc="{\"keys\":[$enc]}"
 
-for jwk in `jose fmt -j- -Og keys -Af- <<< "$enc"`; do
-    jwk=`jose fmt -j- -Od key_ops -o- <<< "$jwk"`
-    jwk=`jose fmt -j- -Od alg -o- <<< "$jwk"`
-    kid=`jose jwk thp -i- <<< "$jwk"`
-    jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
-    jwe=`jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-`
-    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-`
-    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks"`
-    exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)
-done
+if ! jwk="$(jose fmt -j- -Og keys -Af- <<< "$enc")"; then
+    echo "No exchange keys found!" >&2
+    exit 1
+fi
 
-echo "No exchange keys found!" >&2
-exit 1
+jwk="$(jose fmt -j- -Od key_ops -o- <<< "$jwk")"
+jwk="$(jose fmt -j- -Od alg -o- <<< "$jwk")"
+kid="$(jose jwk thp -i- <<< "$jwk")"
+jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
+jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks")"
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

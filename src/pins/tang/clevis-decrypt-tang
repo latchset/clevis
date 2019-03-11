@@ -30,62 +30,62 @@ fi
 
 read -r -d . hdr
 
-if ! jhd=`jose b64 dec -i- <<< "$hdr"`; then
+if ! jhd="$(jose b64 dec -i- <<< "$hdr")"; then
     echo "Error decoding JWE protected header!" >&2
     exit 1
 fi
 
-if [ "`jose fmt -j- -Og clevis -g pin -u- <<< "$jhd"`" != "tang" ]; then
+if [ "$(jose fmt -j- -Og clevis -g pin -u- <<< "$jhd")" != "tang" ]; then
     echo "JWE pin mismatch!" >&2
     exit 1
 fi
 
-if ! clt=`jose fmt -j- -Og epk -Oo- <<< "$jhd"`; then
+if ! clt="$(jose fmt -j- -Og epk -Oo- <<< "$jhd")"; then
     echo "JWE missing required 'epk' header parameter!" >&2
     exit 1
 fi
 
-if ! kid=`jose fmt -j- -Og kid -Su- <<< "$jhd"`; then
+if ! kid="$(jose fmt -j- -Og kid -Su- <<< "$jhd")"; then
     echo "JWE missing required 'kid' header parameter!" >&2
     exit 1
 fi
 
-if ! srv=`jose fmt -j- -Og clevis -g tang -g adv -Oo- <<< "$jhd" \
-        | jose jwk thp -i- -f "$kid"`; then
+if ! srv="$(jose fmt -j- -Og clevis -g tang -g adv -Oo- <<< "$jhd" \
+        | jose jwk thp -i- -f "$kid")"; then
     echo "JWE missing required 'clevis.tang.adv' header parameter!" >&2
     exit 1
 fi
 
-if ! url=`jose fmt -j- -Og clevis -g tang -g url -Su- <<< "$jhd"`; then
+if ! url="$(jose fmt -j- -Og clevis -g tang -g url -Su- <<< "$jhd")"; then
     echo "JWE missing required 'clevis.tang.url' header parameter!" >&2
     exit 1
 fi
 
-if ! crv=`jose fmt -j- -Og crv -Su- <<< "$clt"`; then
+if ! crv="$(jose fmt -j- -Og crv -Su- <<< "$clt")"; then
     echo "Unable to determine EPK's curve!" >&2
     exit 1
 fi
 
-if ! eph=`jose jwk gen -i "{\"alg\":\"ECMR\",\"crv\":\"$crv\"}"`; then
+if ! eph="$(jose jwk gen -i "{\"alg\":\"ECMR\",\"crv\":\"$crv\"}")"; then
     echo "Error generating ephemeral key!" >&2
     exit 1
 fi
 
-xfr=`jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph"`
+xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
 url="$url/rec/$kid"
 ct="Content-Type: application/jwk+json"
-if ! rep=`curl -sfg -X POST -H "$ct" --data-binary @- "$url" <<< "$xfr"`; then
+if ! rep="$(curl -sfg -X POST -H "$ct" --data-binary @- "$url" <<< "$xfr")"; then
     echo "Error communicating with the server!" >&2
     exit 1
 fi
 
-if ! rep=`jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- <<< "$rep"`; then
+if ! rep="$(jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- <<< "$rep")"; then
     echo "Received invalid server reply!" >&2
     exit 1
 fi
 
-tmp=`jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv"`
-rep=`jose jwk pub -i- <<< "$rep"`
-jwk=`jose jwk exc -l- -r- <<< "$rep$tmp"`
+tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv")"
+rep="$(jose jwk pub -i- <<< "$rep")"
+jwk="$(jose jwk exc -l- -r- <<< "$rep$tmp")"
 exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

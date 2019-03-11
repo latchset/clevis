@@ -111,29 +111,29 @@ if [ -n "$pcr_ids" ]; then
     policy_options+=(-L "$pcr_bank:$pcr_ids")
 fi
 
-if ! jose b64 dec -i- -O $TMP/jwk.pub <<< "$jwk_pub"; then
+if ! jose b64 dec -i- -O "$TMP"/jwk.pub <<< "$jwk_pub"; then
     echo "Decoding jwk.pub from Base64 failed!" >&2
     exit 1
 fi
 
-if ! jose b64 dec -i- -O $TMP/jwk.priv <<< "$jwk_priv"; then
+if ! jose b64 dec -i- -O "$TMP"/jwk.priv <<< "$jwk_priv"; then
     echo "Decoding jwk.priv from Base64 failed!" >&2
     exit 1
 fi
 
 if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" \
-     -C $TMP/primary.context 2>/dev/null; then
+     -C "$TMP"/primary.context 2>/dev/null; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
 
-if ! tpm2_load -Q -c $TMP/primary.context -u $TMP/jwk.pub -r $TMP/jwk.priv \
-     -C $TMP/load.context 2>/dev/null; then
+if ! tpm2_load -Q -c "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
+     -C "$TMP"/load.context 2>/dev/null; then
     echo "Loading jwk to TPM2 failed!" >&2
     exit 1
 fi
 
-if ! jwk="$(tpm2_unseal -c $TMP/load.context "${policy_options[@]}" 2>/dev/null)"; then
+if ! jwk="$(tpm2_unseal -c "$TMP"/load.context "${policy_options[@]}" 2>/dev/null)"; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi

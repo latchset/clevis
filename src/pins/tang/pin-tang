@@ -20,23 +20,23 @@
 
 function on_exit() {
     if [ "$PID" ]; then kill $PID; wait $PID || true; fi
-    [ -d "$TMP" ] && rm -rf $TMP
+    [ -d "$TMP" ] && rm -rf "$TMP"
 }
 
 trap 'on_exit' EXIT
 trap 'exit' ERR
 
 TMP="$(mktemp -d)"
-mkdir -p $TMP/db
-mkdir -p $TMP/cache
+mkdir -p "$TMP"/db
+mkdir -p "$TMP"/cache
 
 # Generate the server keys
-tangd-keygen $TMP/db sig exc
-tangd-update $TMP/db $TMP/cache
+tangd-keygen "$TMP"/db sig exc
+tangd-update "$TMP"/db "$TMP"/cache
 
 # Start the server
 port="$(shuf -i 1024-65536 -n 1)"
-$SD_ACTIVATE --inetd -l 127.0.0.1:$port -a tangd $TMP/cache &
+$SD_ACTIVATE --inetd -l 127.0.0.1:$port -a tangd "$TMP"/cache &
 PID=$!
 sleep 0.25
 

@@ -27,8 +27,9 @@ alg_create_key="keyedhash"
 obj_attr="fixedtpm|fixedparent|sensitivedataorigin|noda|adminwithpolicy"
 
 function on_exit() {
-    if ! rm -rf $TMP; then
+    if [ ! -d "$TMP" ] || ! rm -rf "$TMP"; then
         echo "Delete temporary files failed!" >&2
+        echo "You need to clean up: $TMP" >&2
         exit 1
     fi
 }

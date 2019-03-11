@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-[ $# -eq 1 -a "$1" == "--summary" ] && exit 1
+[ $# -eq 1 -a "$1" == "--summary" ] && exit 2
 
 if ! cfg=`jose fmt -j "$1" -Oo- 2>/dev/null`; then
     echo "Configuration is malformed!" >&2

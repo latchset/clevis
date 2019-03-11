@@ -68,15 +68,20 @@ if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
 fi
 
 export TPM2TOOLS_TCTI_NAME=device
-export TPM2TOOLS_DEVICE_FILE=`ls /dev/tpmrm? 2>/dev/null`
+export TPM2TOOLS_DEVICE_FILE=
+for dev in /dev/tpmrm?; do
+    [ -e "$dev" ] || continue
+    TPM2TOOLS_DEVICE_FILE="$dev"
+    break
+done
 
-if [ -z "${TPM2TOOLS_DEVICE_FILE[0]}" ]; then
+if [ -z "$TPM2TOOLS_DEVICE_FILE" ]; then
     echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
     exit 1
 fi
 
-if ! [[ -r "${TPM2TOOLS_DEVICE_FILE[0]}" && -w "${TPM2TOOLS_DEVICE_FILE[0]}" ]]; then
-    echo "The ${TPM2TOOLS_DEVICE_FILE[0]} device must be readable and writable!" >&2
+if ! [[ -r "$TPM2TOOLS_DEVICE_FILE" && -w "$TPM2TOOLS_DEVICE_FILE" ]]; then
+    echo "The $TPM2TOOLS_DEVICE_FILE device must be readable and writable!" >&2
     exit 1
 fi
 

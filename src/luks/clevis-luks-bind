@@ -38,7 +38,7 @@ function usage() {
     echo "  -k KEY  Non-interactively read LUKS password from KEY file"
     echo "  -k -    Non-interactively read LUKS password from standard input"
     echo
-    exit 1
+    exit 2
 }
 
 if [ $# -eq 1 -a "$1" == "--summary" ]; then

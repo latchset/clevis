@@ -32,7 +32,7 @@ function usage() {
     echo
     echo "  -n NAME The name of the unlocked device node"
     echo
-    exit 1
+    exit 2
 }
 
 if [ $# -eq 1 -a "$1" == "--summary" ]; then

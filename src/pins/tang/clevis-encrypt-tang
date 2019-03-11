@@ -52,7 +52,7 @@ if [ -t 0 ]; then
     echo
     echo "    $ curl -f \$URL/adv > adv.jws"
     echo
-    exit 1
+    exit 2
 fi
 
 if ! cfg=`jose fmt -j- -Oo- <<< "$1" 2>/dev/null`; then

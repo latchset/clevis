@@ -55,3 +55,5 @@ echo "Usage: clevis decrypt < JWE > PLAINTEXT"
 echo
 echo "$SUMMARY"
 echo
+
+exit 2

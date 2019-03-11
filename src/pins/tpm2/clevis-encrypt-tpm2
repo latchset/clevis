@@ -113,7 +113,7 @@ fi
 
 trap 'on_exit' EXIT
 
-if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C $TMP/primary.context; then
+if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
@@ -121,7 +121,7 @@ fi
 policy_options=()
 if [ -n "$pcr_ids" ]; then
     if [ -z "$pcr_digest" ]; then
-        if ! tpm2_pcrlist -Q -L "$pcr_bank":"$pcr_ids" -o $TMP/pcr.digest; then
+        if ! tpm2_pcrlist -Q -L "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest; then
             echo "Creating PCR hashes file failed!" >&2
             exit 1
         fi
@@ -132,7 +132,7 @@ if [ -n "$pcr_ids" ]; then
         fi
     fi
 
-    if ! tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" -F $TMP/pcr.digest -f $TMP/pcr.policy; then
+    if ! tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" -F "$TMP"/pcr.digest -f "$TMP"/pcr.policy; then
         echo "create policy fail, please check the environment or parameters!"
         exit 1
     fi
@@ -140,18 +140,18 @@ if [ -n "$pcr_ids" ]; then
     policy_options+=(-L "$TMP/pcr.policy")
 fi
 
-if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c $TMP/primary.context -u $TMP/jwk.pub \
-     -r $TMP/jwk.priv -A "$obj_attr" "${policy_options[@]}" -I- <<< "$jwk"; then
+if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c "$TMP"/primary.context -u "$TMP"/jwk.pub \
+     -r "$TMP"/jwk.priv -A "$obj_attr" "${policy_options[@]}" -I- <<< "$jwk"; then
     echo "Creating TPM2 object for jwk failed!" >&2
     exit 1
 fi
 
-if ! jwk_pub="$(jose b64 enc -I $TMP/jwk.pub)"; then
+if ! jwk_pub="$(jose b64 enc -I "$TMP"/jwk.pub)"; then
     echo "Encoding jwk.pub in Base64 failed!" >&2
     exit 1
 fi
 
-if ! jwk_priv="$(jose b64 enc -I $TMP/jwk.priv)"; then
+if ! jwk_priv="$(jose b64 enc -I "$TMP"/jwk.priv)"; then
     echo "Encoding jwk.priv in Base64 failed!" >&2
     exit 1
 fi

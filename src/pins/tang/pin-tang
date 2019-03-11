@@ -26,7 +26,7 @@ function on_exit() {
 trap 'on_exit' EXIT
 trap 'exit' ERR
 
-TMP=`mktemp -d`
+TMP="$(mktemp -d)"
 mkdir -p $TMP/db
 mkdir -p $TMP/cache
 
@@ -35,23 +35,23 @@ tangd-keygen $TMP/db sig exc
 tangd-update $TMP/db $TMP/cache
 
 # Start the server
-port=`shuf -i 1024-65536 -n 1`
+port="$(shuf -i 1024-65536 -n 1)"
 $SD_ACTIVATE --inetd -l 127.0.0.1:$port -a tangd $TMP/cache &
 PID=$!
 sleep 0.25
 
-thp=`jose jwk thp -i "$TMP/db/sig.jwk"`
+thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
 adv="$TMP/cache/default.jws"
 url="http://localhost:${port}"
 
-cfg=`printf '{"url":"%s","adv":"%s"}' "$url" "$adv"`
-enc=`echo -n "hi" | clevis encrypt tang "$cfg"`
-dec=`echo -n "$enc" | clevis decrypt`
+cfg="$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")"
+enc="$(echo -n "hi" | clevis encrypt tang "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
 test "$dec" == "hi"
 
-cfg=`printf '{"url":"%s","thp":"%s"}' "$url" "$thp"`
-enc=`echo -n "hi" | clevis encrypt tang "$cfg"`
-dec=`echo -n "$enc" | clevis decrypt`
+cfg="$(printf '{"url":"%s","thp":"%s"}' "$url" "$thp")"
+enc="$(echo -n "hi" | clevis encrypt tang "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
 test "$dec" == "hi"
 
 kill -9 $PID

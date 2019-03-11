@@ -36,12 +36,12 @@ fi
 if ! [ -t 0 ]; then
     read -r -d . hdr
 
-    if ! pin=`jose fmt -q "$hdr" -SyOg clevis -Og pin -Su-`; then
+    if ! pin="$(jose fmt -q "$hdr" -SyOg clevis -Og pin -Su-)"; then
         echo "JWE is missing the required 'clevis.pin' header property!" >&2
         exit 1
     fi
 
-    if ! cmd="`findexe clevis-decrypt-$pin`"; then
+    if ! cmd="$(findexe clevis-decrypt-"$pin")"; then
         echo "Unable to locate pin '$pin'!" >&2
         exit 1
     fi

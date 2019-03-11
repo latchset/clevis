@@ -91,10 +91,10 @@ if [ "$luks_type" == "luks1" ]; then
     [ "$state" == "active" ] && KILL=true
 
 elif [ "$luks_type" == "luks2" ]; then
-    dump=`cryptsetup luksDump "$DEV"`
+    dump="$(cryptsetup luksDump "$DEV")"
     grep -q "^\s*$SLT: luks2" <<< "$dump" && KILL=true
-    TOK=`grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<< "$dump" \
-        | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
+    TOK="$(grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<< "$dump" \
+        | sed -rn 's|^\s+([0-9]+): clevis|\1|p')"
 fi
 
 if [ -z "$FRC" ]; then

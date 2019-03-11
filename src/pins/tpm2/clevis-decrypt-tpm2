@@ -39,7 +39,7 @@ if [ -t 0 ]; then
     exit 2
 fi
 
-TPM2TOOLS_INFO=`tpm2_pcrlist -v`
+TPM2TOOLS_INFO="$(tpm2_pcrlist -v)"
 
 if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
     echo "The tpm2 pin requires tpm2-tools version 3" >&2
@@ -66,47 +66,47 @@ fi
 
 read -r -d . hdr
 
-if ! jhd=`jose b64 dec -i- <<< "$hdr"`; then
+if ! jhd="$(jose b64 dec -i- <<< "$hdr")"; then
     echo "Error decoding JWE protected header!" >&2
     exit 1
 fi
 
-if [ `jose fmt -j- -Og clevis -g pin -u- <<< "$jhd"` != "tpm2" ]; then
+if [ "$(jose fmt -j- -Og clevis -g pin -u- <<< "$jhd")" != "tpm2" ]; then
     echo "JWE pin mismatch!" >&2
     exit 1
 fi
 
-if ! hash=`jose fmt -j- -Og clevis -g tpm2 -g hash -Su- <<< "$jhd"`; then
+if ! hash="$(jose fmt -j- -Og clevis -g tpm2 -g hash -Su- <<< "$jhd")"; then
     echo "JWE missing required 'hash' header parameter!" >&2
     exit 1
 fi
 
-if ! key=`jose fmt -j- -Og clevis -g tpm2 -g key -Su- <<< "$jhd"`; then
+if ! key="$(jose fmt -j- -Og clevis -g tpm2 -g key -Su- <<< "$jhd")"; then
     echo "JWE missing required 'key' header parameter!" >&2
     exit 1
 fi
 
-if ! jwk_pub=`jose fmt -j- -Og clevis -g tpm2 -g jwk_pub -Su- <<< "$jhd"`; then
+if ! jwk_pub="$(jose fmt -j- -Og clevis -g tpm2 -g jwk_pub -Su- <<< "$jhd")"; then
     echo "JWE missing required 'key' header parameter!" >&2
     exit 1
 fi
 
-if ! jwk_priv=`jose fmt -j- -Og clevis -g tpm2 -g jwk_priv -Su- <<< "$jhd"`; then
+if ! jwk_priv="$(jose fmt -j- -Og clevis -g tpm2 -g jwk_priv -Su- <<< "$jhd")"; then
     echo "JWE missing required 'key' header parameter!" >&2
     exit 1
 fi
 
-if ! TMP=`mktemp -d`; then
+if ! TMP="$(mktemp -d)"; then
     echo "Creating a temporary dir for TPM files failed!" >&2
     exit 1
 fi
 
 trap 'on_exit' EXIT
 
-pcr_ids=`jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd"` || true
+pcr_ids="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd")" || true
 
 if [ -n "$pcr_ids" ]; then
-    pcr_bank=`jose fmt -j- -Og clevis -g tpm2 -g pcr_bank -Su- <<< "$jhd"`
+    pcr_bank="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_bank -Su- <<< "$jhd")"
     policy_options="-L $pcr_bank:$pcr_ids"
 fi
 
@@ -132,7 +132,7 @@ if ! tpm2_load -Q -c $TMP/primary.context -u $TMP/jwk.pub -r $TMP/jwk.priv \
     exit 1
 fi
 
-if ! jwk=`tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null`; then
+if ! jwk="$(tpm2_unseal -c $TMP/load.context $policy_options 2>/dev/null)"; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi

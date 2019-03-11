@@ -61,7 +61,7 @@ if [ -t 0 ]; then
     exit 2
 fi
 
-TPM2TOOLS_INFO=`tpm2_pcrlist -v`
+TPM2TOOLS_INFO="$(tpm2_pcrlist -v)"
 
 if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
     echo "The tpm2 pin requires tpm2-tools version 3" >&2
@@ -86,27 +86,27 @@ if ! [[ -r "$TPM2TOOLS_DEVICE_FILE" && -w "$TPM2TOOLS_DEVICE_FILE" ]]; then
     exit 1
 fi
 
-if ! cfg=`jose fmt -j "$1" -Oo- 2>/dev/null`; then
+if ! cfg="$(jose fmt -j "$1" -Oo- 2>/dev/null)"; then
     echo "Configuration is malformed!" >&2
     exit 1
 fi
 
-hash=`jose fmt -j- -Og hash -u- <<< "$cfg"` || hash="sha256"
+hash="$(jose fmt -j- -Og hash -u- <<< "$cfg")" || hash="sha256"
 
-key=`jose fmt -j- -Og key -u- <<< "$cfg"` || key="ecc"
+key="$(jose fmt -j- -Og key -u- <<< "$cfg")" || key="ecc"
 
-pcr_bank=`jose fmt -j- -Og pcr_bank -u- <<< "$cfg"` || pcr_bank="sha1"
+pcr_bank="$(jose fmt -j- -Og pcr_bank -u- <<< "$cfg")" || pcr_bank="sha1"
 
-pcr_ids=`jose fmt -j- -Og pcr_ids -u- <<< "$cfg"` || true
+pcr_ids="$(jose fmt -j- -Og pcr_ids -u- <<< "$cfg")" || true
 
-pcr_digest=`jose fmt -j- -Og pcr_digest -u- <<< "$cfg"` || true
+pcr_digest="$(jose fmt -j- -Og pcr_digest -u- <<< "$cfg")" || true
 
-if ! jwk=`jose jwk gen -i '{"alg":"A256GCM"}'`; then
+if ! jwk="$(jose jwk gen -i '{"alg":"A256GCM"}')"; then
     echo "Generating a jwk failed!" >&2
     exit 1
 fi
 
-if ! TMP=`mktemp -d`; then
+if ! TMP="$(mktemp -d)"; then
     echo "Creating a temporary dir for TPM files failed!" >&2
     exit 1
 fi
@@ -145,26 +145,26 @@ if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c $TMP/primary.context -u $
     exit 1
 fi
 
-if ! jwk_pub=`jose b64 enc -I $TMP/jwk.pub`; then
+if ! jwk_pub="$(jose b64 enc -I $TMP/jwk.pub)"; then
     echo "Encoding jwk.pub in Base64 failed!" >&2
     exit 1
 fi
 
-if ! jwk_priv=`jose b64 enc -I $TMP/jwk.priv`; then
+if ! jwk_priv="$(jose b64 enc -I $TMP/jwk.priv)"; then
     echo "Encoding jwk.priv in Base64 failed!" >&2
     exit 1
 fi
 
 jwe='{"protected":{"clevis":{"pin":"tpm2","tpm2":{}}}}'
-jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$hash" -s hash -UUUUo-`
-jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$key" -s key -UUUUo-`
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$hash" -s hash -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$key" -s key -UUUUo-)"
 
 if [ -n "$pcr_ids" ]; then
-    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$pcr_bank" -s pcr_bank -UUUUo-`
-    jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$pcr_ids" -s pcr_ids -UUUUo-`
+    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$pcr_bank" -s pcr_bank -UUUUo-)"
+    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$pcr_ids" -s pcr_ids -UUUUo-)"
 fi
 
-jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_pub" -s jwk_pub -UUUUo-`
-jwe=`jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_priv" -s jwk_priv -UUUUo-`
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_pub" -s jwk_pub -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_priv" -s jwk_priv -UUUUo-)"
 
 exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

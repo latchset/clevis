@@ -58,25 +58,24 @@ while true; do
                 [ "$uuid" == "$UUID" ] || continue
                 metadata=true
 
-                if pt="`luksmeta load -d "$d" -s "$slot" -u "$UUID" | clevis decrypt`"; then
+                if pt="$(luksmeta load -d "$d" -s "$slot" -u "$UUID" | clevis decrypt)"; then
                     echo -n "+$pt" | nc -U -u --send-only "$s"
                     unlocked=true
                     break
                 fi
             done < <(luksmeta show -d "$d")
         elif cryptsetup isLuks --type luks2 "$d"; then
-            ids=`cryptsetup luksDump "$d" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
-            for id in $ids; do
-                tok=`cryptsetup token export --token-id "$id" "$d"`
-                jwe=`jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c`
+            while read -r id; do
+                tok="$(cryptsetup token export --token-id "$id" "$d")"
+                jwe="$(jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c)"
                 metadata=true
 
-                if pt=`echo -n "$jwe" | clevis decrypt`; then
+                if pt="$(echo -n "$jwe" | clevis decrypt)"; then
                     echo -n "+$pt" | nc -U -u --send-only "$s"
                     unlocked=true
                     break
                 fi
-            done
+            done < <(cryptsetup luksDump "$d" | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
         fi
 
         [ "$metadata" == true ] || continue

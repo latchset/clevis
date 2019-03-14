@@ -19,34 +19,12 @@
 #
 
 depends() {
-    echo crypt systemd network
+    echo clevis
     return 0
-}
-
-cmdline() {
-    echo "rd.neednet=1"
 }
 
 install() {
     local ret=0
-
-    cmdline > "${initdir}/etc/cmdline.d/99clevis.conf"
-
-    inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
-    inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
-
-    inst_multiple /etc/services \
-        clevis-decrypt-tang \
-        clevis-decrypt-sss \
-        @libexecdir@/clevis-luks-askpass \
-        clevis-decrypt \
-        cryptsetup \
-        luksmeta \
-        clevis \
-        mktemp \
-        curl \
-        jose \
-        nc
 
     for cmd in clevis-decrypt-tpm2 \
 	tpm2_createprimary \
@@ -60,15 +38,14 @@ install() {
     done
 
     if (($ret == 0)); then
-	inst_multiple clevis-decrypt-tpm2 \
+	inst_multiple \
+	    clevis-decrypt-tpm2 \
 	    tpm2_createprimary \
 	    tpm2_pcrlist \
 	    tpm2_unseal \
 	    tpm2_load
 	inst_libdir_file "libtss2-tcti-device.so*"
     fi
-
-    dracut_need_initqueue
 }
 
 installkernel() {

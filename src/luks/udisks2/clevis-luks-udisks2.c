@@ -322,18 +322,18 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         int r = 0;
 
         if (setgid(gid) != 0 || setegid(gid) != 0)
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
 
         if (setuid(uid) != 0 || seteuid(uid) != 0)
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
 
         r = dup2(push[PIPE_RD], STDIN_FILENO);
         if (r != STDIN_FILENO)
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
 
         r = dup2(pull[PIPE_WR], STDOUT_FILENO);
         if (r != STDOUT_FILENO)
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
 
         safeclose(&push[PIPE_RD]);
         safeclose(&push[PIPE_WR]);
@@ -341,7 +341,7 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         safeclose(&pull[PIPE_WR]);
 
         execle(BINDIR "/clevis", "clevis", "decrypt", NULL, env);
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     safeclose(&push[PIPE_RD]);

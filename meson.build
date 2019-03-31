@@ -29,6 +29,7 @@ add_project_arguments(
   '-Wno-missing-field-initializers',
   '-Wno-unused-parameter',
   '-Wno-unknown-pragmas',
+  '-D_DEFAULT_SOURCE',
   '-D_POSIX_C_SOURCE=200112L',
   '-DBINDIR="' + bindir + '"',
   '-DCLEVIS_USER="' + get_option('user') + '"',

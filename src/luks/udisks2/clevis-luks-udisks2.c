@@ -321,6 +321,12 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         char *const env[] = { "PATH=" BINDIR, NULL };
         int r = 0;
 
+        if (geteuid() != 0) {
+            if (setgroups(1, &gid) != 0) {
+                /* Can fail if missing permissions */
+            }
+        }
+
         if (setgid(gid) != 0 || setegid(gid) != 0)
             exit(EXIT_FAILURE);
 

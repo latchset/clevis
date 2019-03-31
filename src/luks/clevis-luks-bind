@@ -91,14 +91,14 @@ if [ -n "$KEY" ]; then
 fi
 
 # Generate a key with the same entropy as the LUKS Master Key
-dump=`cryptsetup luksDump $DEV`
-if cryptsetup isLuks --type luks1 "$DEV"; then
-    filt=`sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "$dump"`
-else
-    filt=`sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p' <<< "$dump"`
-fi
-bits=`sort -n <<< "$filt" | tail -n 1`
-export key=`pwmake $bits`
+key="$(pwmake "$(
+cryptsetup luksDump "$DEV" \
+    | if cryptsetup isLuks --type luks1 "$DEV"; then
+        sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p'
+    else
+        sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p'
+    fi | sort -n | tail -n 1
+)")"
 
 # Encrypt the new key
 jwe=`echo -n "$key" | clevis encrypt "$PIN" "$CFG"`

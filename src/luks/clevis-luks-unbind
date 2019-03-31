@@ -77,8 +77,8 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
 
 elif cryptsetup isLuks --type luks2 "$DEV"; then
     dump=`cryptsetup luksDump "$DEV"`
-    grep -q "^\s*$SLT: luks2" <<<"$dump" && KILL=true
-    TOK=`grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<<"$dump" \
+    grep -q "^\s*$SLT: luks2" <<< "$dump" && KILL=true
+    TOK=`grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<< "$dump" \
         | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
 
 else

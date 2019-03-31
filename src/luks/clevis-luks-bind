@@ -96,7 +96,7 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
 else
     filt=`sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p' <<< "$dump"`
 fi
-bits=`sort -n <<<"$filt" | tail -n 1`
+bits=`sort -n <<< "$filt" | tail -n 1`
 export key=`pwmake $bits`
 
 # Encrypt the new key
@@ -130,16 +130,16 @@ fi
 if cryptsetup isLuks --type luks1 "$DEV"; then
     if ! echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" -s $SLT 2>/dev/null; then
         echo "Error while saving Clevis metadata in LUKSMeta!" >&2
-        cryptsetup luksRemoveKey "$DEV" <<<"$key"
+        cryptsetup luksRemoveKey "$DEV" <<< "$key"
         exit 1
     fi
 else
-    jwe=`jose jwe fmt -i- <<<"$jwe"` # Convert to JSON Serialization
+    jwe=`jose jwe fmt -i- <<< "$jwe"` # Convert to JSON Serialization
     tok="{\"type\":\"clevis\",\"keyslots\":[\"$SLT\"],\"jwe\":$jwe}"
 
-    if ! cryptsetup token import "$DEV" <<<"$tok" ; then
+    if ! cryptsetup token import "$DEV" <<< "$tok" ; then
         echo "Error while saving Clevis metadata as a LUKS token!" >&2
-        cryptsetup luksRemoveKey "$DEV" <<<"$key"
+        cryptsetup luksRemoveKey "$DEV" <<< "$key"
         exit 1
     fi
 fi

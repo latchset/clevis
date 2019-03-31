@@ -128,18 +128,13 @@ if [ $? -ne 0 ]; then
 fi
 
 if cryptsetup isLuks --type luks1 "$DEV"; then
-    if ! echo -n $jwe | luksmeta save -d "$DEV" -u "$UUID" -s $SLT 2>/dev/null; then
-        echo "Error while saving Clevis metadata in LUKSMeta!" >&2
-        cryptsetup luksRemoveKey "$DEV" <<< "$key"
-        exit 1
-    fi
+    echo -n "$jwe" | luksmeta save -d "$DEV" -u "$UUID" -s "$SLT" 2>/dev/null
 else
-    jwe=`jose jwe fmt -i- <<< "$jwe"` # Convert to JSON Serialization
-    tok="{\"type\":\"clevis\",\"keyslots\":[\"$SLT\"],\"jwe\":$jwe}"
-
-    if ! cryptsetup token import "$DEV" <<< "$tok" ; then
-        echo "Error while saving Clevis metadata as a LUKS token!" >&2
-        cryptsetup luksRemoveKey "$DEV" <<< "$key"
-        exit 1
-    fi
+    printf '{"type":"clevis","keyslots":["%s"],"jwe":%s}' "$SLT" "$(jose jwe fmt -i- <<< "$jwe")" \
+        | cryptsetup token import "$DEV"
+fi
+if [ $? -ne 0 ]; then
+    echo "Error while saving Clevis metadata in LUKSMeta!" >&2
+    echo -n "$key" | cryptsetup luksRemoveKey "$DEV"
+    exit 1
 fi

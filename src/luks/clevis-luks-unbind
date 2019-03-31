@@ -66,14 +66,14 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
         exit 1
     fi
 
-    read -r slot active uuid < <(luksmeta show -d "$DEV" | grep "^$SLT *")
+    read -r slot state uuid < <(luksmeta show -d "$DEV" | grep "^$SLT *")
 
     if [ "$uuid" == "empty" ]; then
         echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2
         exit 1
     fi
 
-    [ "$active" == "active" ] && KILL=true
+    [ "$state" == "active" ] && KILL=true
 
 elif cryptsetup isLuks --type luks2 "$DEV"; then
     dump=`cryptsetup luksDump "$DEV"`

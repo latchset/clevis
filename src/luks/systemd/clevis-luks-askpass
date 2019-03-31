@@ -68,7 +68,7 @@ while true; do
             ids=`cryptsetup luksDump "$d" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`
             for id in $ids; do
                 tok=`cryptsetup token export --token-id "$id" "$d"`
-                jwe=`jose fmt -j- -Og jwe -o- <<<"$tok" | jose jwe fmt -i- -c`
+                jwe=`jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c`
                 metadata=true
 
                 if pt=`echo -n "$jwe" | clevis decrypt`; then

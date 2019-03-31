@@ -68,7 +68,7 @@ if cryptsetup isLuks --type luks1 "$DEV"; then
 elif cryptsetup isLuks --type luks2 "$DEV"; then
     for id in `cryptsetup luksDump "$DEV" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`; do
         tok=`cryptsetup token export --token-id "$id" "$DEV"`
-        jwe=`jose fmt -j- -Og jwe -o- <<<"$tok" | jose jwe fmt -i- -c`
+        jwe=`jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c`
 
         if pt=`echo -n "$jwe" | clevis decrypt`; then
             echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"

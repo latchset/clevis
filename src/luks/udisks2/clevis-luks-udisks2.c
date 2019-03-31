@@ -314,8 +314,10 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         goto error;
 
     chld = fork();
-    if (chld < 0)
+    if (chld < 0) {
+        perror("fork");
         goto error;
+    }
 
     if (chld == 0) {
         char *const env[] = { "PATH=" BINDIR, NULL };
@@ -323,23 +325,32 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
 
         if (geteuid() != 0) {
             if (setgroups(1, &gid) != 0) {
+                perror("setgroups");
                 /* Can fail if missing permissions */
             }
         }
 
-        if (setgid(gid) != 0)
+        if (setgid(gid) != 0) {
+            perror("setgid");
             exit(EXIT_FAILURE);
+        }
 
-        if (setuid(uid) != 0)
+        if (setuid(uid) != 0) {
+            perror("setuid");
             exit(EXIT_FAILURE);
+        }
 
         r = dup2(push[PIPE_RD], STDIN_FILENO);
-        if (r != STDIN_FILENO)
+        if (r != STDIN_FILENO) {
+            perror("dup2");
             exit(EXIT_FAILURE);
+        }
 
         r = dup2(pull[PIPE_WR], STDOUT_FILENO);
-        if (r != STDOUT_FILENO)
+        if (r != STDOUT_FILENO) {
+            perror("dup2");
             exit(EXIT_FAILURE);
+        }
 
         safeclose(&push[PIPE_RD]);
         safeclose(&push[PIPE_WR]);
@@ -347,6 +358,7 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
         safeclose(&pull[PIPE_WR]);
 
         execle(BINDIR "/clevis", "clevis", "decrypt", NULL, env);
+        perror("execle");
         exit(EXIT_FAILURE);
     }
 

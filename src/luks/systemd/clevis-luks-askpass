@@ -47,15 +47,15 @@ while true; do
             esac
         done < "$question"
 
-        [ -z "$d" -o -z "$s" ] && continue
+        [ "$d" -a "$s" ] || continue
 
         if cryptsetup isLuks --type luks1 "$d"; then
             # If the device is not initialized, sliently skip it.
             luksmeta test -d "$d" || continue
 
             while read -r slot state uuid; do
-                [ "$state" != "active" ] && continue
-                [ "$uuid" != "$UUID" ] && continue
+                [ "$state" == "active" ] || continue
+                [ "$uuid" == "$UUID" ] || continue
                 metadata=true
 
                 if pt="`luksmeta load -d "$d" -s "$slot" -u "$UUID" | clevis decrypt`"; then

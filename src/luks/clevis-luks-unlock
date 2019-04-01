@@ -69,27 +69,53 @@ fi
 
 NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 
+luks1_decrypt() {
+    luksmeta load "$@" \
+        | clevis decrypt
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
+luks2_decrypt() {
+    # jose jwe fmt -c outputs extra \n, so clean it up
+    cryptsetup token export "$@" \
+        | jose fmt -j- -Og jwe -o- \
+        | jose jwe fmt -i- -c \
+        | tr -d '\n' \
+        | clevis decrypt
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
 if [ "$luks_type" == "luks1" ]; then
     while read -r slot state uuid; do
         [ "$state" == "active" ] || continue
         [ "$uuid" == "$UUID" ] || continue
 
-        if pt=`luksmeta load -d $DEV -s $slot -u $UUID | clevis decrypt`; then
-            echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
-            exit 0
-        fi
+        pt="$(luks1_decrypt -d $DEV -s $slot -u $UUID)" \
+            || continue
+        exec cryptsetup open -d- "$DEV" "$NAME" < <(
+            echo -n "$pt"
+        )
     done < <(luksmeta show -d "$DEV")
 
 elif [ "$luks_type" == "luks2" ]; then
-    for id in `cryptsetup luksDump "$DEV" | sed -rn 's|^\s+([0-9]+): clevis|\1|p'`; do
-        tok=`cryptsetup token export --token-id "$id" "$DEV"`
-        jwe=`jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c`
-
-        if pt=`echo -n "$jwe" | clevis decrypt`; then
-            echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"
-            exit 0
-        fi
-    done
+    while read -r id; do
+        pt="$(luks2_decrypt --token-id "$id" "$DEV")" \
+            || continue
+        exec cryptsetup open -d- "$DEV" "$NAME" < <(
+            echo -n "$pt"
+        )
+    done < <(cryptsetup luksDump "$DEV" | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
 fi
 
+echo "$DEV could not be opened." >&2
 exit 1

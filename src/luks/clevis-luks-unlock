@@ -57,8 +57,8 @@ NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 
 if cryptsetup isLuks --type luks1 "$DEV"; then
     while read -r slot state uuid; do
-        [ "$state" != "active" ] && continue
-        [ "$uuid" != "$UUID" ] && continue
+        [ "$state" == "active" ] || continue
+        [ "$uuid" == "$UUID" ] || continue
 
         if pt=`luksmeta load -d $DEV -s $slot -u $UUID | clevis decrypt`; then
             echo -n "$pt" | cryptsetup open -d- "$DEV" "$NAME"

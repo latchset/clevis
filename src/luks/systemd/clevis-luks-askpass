@@ -31,6 +31,31 @@ while getopts ":lp:" o; do
     esac
 done
 
+luks1_decrypt() {
+    luksmeta load "$@" \
+        | clevis decrypt
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
+luks2_jwe() {
+    # jose jwe fmt -c outputs extra \n, so clean it up
+    cryptsetup token export "$@" \
+        | jose fmt -j- -Og jwe -o- \
+        | jose jwe fmt -i- -c \
+        | tr -d '\n'
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
 while true; do
     todo=0
 
@@ -58,7 +83,7 @@ while true; do
                 [ "$uuid" == "$UUID" ] || continue
                 metadata=true
 
-                if pt="$(luksmeta load -d "$d" -s "$slot" -u "$UUID" | clevis decrypt)"; then
+                if pt="$(luks1_decrypt -d "$d" -s "$slot" -u "$UUID")"; then
                     echo -n "+$pt" | nc -U -u --send-only "$s"
                     unlocked=true
                     break
@@ -66,8 +91,8 @@ while true; do
             done < <(luksmeta show -d "$d")
         elif cryptsetup isLuks --type luks2 "$d"; then
             while read -r id; do
-                tok="$(cryptsetup token export --token-id "$id" "$d")"
-                jwe="$(jose fmt -j- -Og jwe -o- <<< "$tok" | jose jwe fmt -i- -c)"
+                jwe="$(luks2_jwe --token-id "$id" "$d")" \
+                    || continue
                 metadata=true
 
                 if pt="$(echo -n "$jwe" | clevis decrypt)"; then

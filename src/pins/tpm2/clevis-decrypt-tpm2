@@ -29,7 +29,7 @@ function on_exit() {
     fi
 }
 
-[ $# -eq 1 -a "$1" == "--summary" ] && exit 2
+[ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
 
 if [ -t 0 ]; then
     exec >&2

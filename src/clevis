@@ -21,7 +21,7 @@
 function findexe() {
     [ $# -eq 1 ] || return 1
     while read -r -d: path; do
-        [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
     done <<< "$PATH:"
     return 1
 }
@@ -44,13 +44,13 @@ echo
 
 max=0
 for f in "$0"-*; do
-    [ -f "$f" -a -x "$f" ] || continue
+    [ -f "$f" ] && [ -x "$f" ] || continue
     f="${f##*/}"
     [ ${#f} -gt $max ] && max=${#f}
 done
 
 for f in "$0"-*; do
-    [ -f "$f" -a -x "$f" ] || continue
+    [ -f "$f" ] && [ -x "$f" ] || continue
     summ="$("$f" --summary 2>/dev/null)" || continue
     f="${f##*/}"
     printf "  %-*s %s\n" "$max" "${f//-/ }" "$summ"

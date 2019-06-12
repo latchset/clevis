@@ -23,12 +23,12 @@ SUMMARY="Decrypts using the policy defined at encryption time"
 function findexe() {
     [ $# -eq 1 ] || return 1
     while read -r -d: path; do
-        [ -f "$path/$1" -a -x "$path/$1" ] && echo "$path/$1" && return 0
+        [ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
     done <<< "$PATH:"
     return 1
 }
 
-if [ $# -eq 1 -a "$1" == "--summary" ]; then
+if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
     echo "$SUMMARY"
     exit 0
 fi

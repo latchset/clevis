@@ -72,7 +72,7 @@ while true; do
             esac
         done < "$question"
 
-        [ "$d" -a "$s" ] || continue
+        [ "$d" ] && [ "$s" ] || continue
 
         if cryptsetup isLuks --type luks1 "$d"; then
             # If the device is not initialized, sliently skip it.

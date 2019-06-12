@@ -35,7 +35,7 @@ function usage() {
     exit 2
 }
 
-if [ $# -eq 1 -a "$1" == "--summary" ]; then
+if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
     echo "$SUMMARY"
     exit 0
 fi

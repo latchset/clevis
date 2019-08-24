@@ -18,34 +18,19 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+check() {
+    require_binaries clevis-decrypt-tpm2 tpm2_createprimary tpm2_pcrlist tpm2_unseal tpm2_load || return 1
+    return 0
+}
+
 depends() {
     echo clevis
     return 0
 }
 
 install() {
-    local ret=0
-
-    for cmd in clevis-decrypt-tpm2 \
-	tpm2_createprimary \
-	tpm2_pcrlist \
-	tpm2_unseal \
-	tpm2_load; do
-
-	if ! find_binary "$cmd" &>/dev/null; then
-	    ((ret++))
-	fi
-    done
-
-    if (($ret == 0)); then
-	inst_multiple \
-	    clevis-decrypt-tpm2 \
-	    tpm2_createprimary \
-	    tpm2_pcrlist \
-	    tpm2_unseal \
-	    tpm2_load
-	inst_libdir_file "libtss2-tcti-device.so*"
-    fi
+    inst_multiple clevis-decrypt-tpm2 tpm2_createprimary tpm2_pcrlist tpm2_unseal tpm2_load
+    inst_libdir_file "libtss2-tcti-device.so*"
 }
 
 installkernel() {

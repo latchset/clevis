@@ -61,13 +61,16 @@ if [ -t 0 ]; then
     exit 2
 fi
 
-TPM2TOOLS_INFO="$(tpm2_pcrlist -v)"
+TPM2TOOLS_INFO="$(tpm2_createprimary -v)"
 
-if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
-    echo "The tpm2 pin requires tpm2-tools version 3" >&2
+match='version="(.)\.'
+[[ $TPM2TOOLS_INFO =~ $match ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
+if [[ $TPM2TOOLS_VERSION != 3 ]] && [[ $TPM2TOOLS_VERSION != 4 ]]; then
+    echo "The tpm2 pin requires tpm2-tools version 3 or 4" >&2
     exit 1
 fi
 
+# Old environment variables for tpm2-tools 3.0
 export TPM2TOOLS_TCTI_NAME=device
 export TPM2TOOLS_DEVICE_FILE=
 for dev in /dev/tpmrm?; do
@@ -75,6 +78,9 @@ for dev in /dev/tpmrm?; do
     TPM2TOOLS_DEVICE_FILE="$dev"
     break
 done
+
+# New environment variable for tpm2-tools >= 3.1
+export TPM2TOOLS_TCTI="$TPM2TOOLS_TCTI_NAME:$TPM2TOOLS_DEVICE_FILE"
 
 if [ -z "$TPM2TOOLS_DEVICE_FILE" ]; then
     echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
@@ -113,7 +119,12 @@ fi
 
 trap 'on_exit' EXIT
 
-if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context; then
+case "$TPM2TOOLS_VERSION" in
+    3) tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context || fail=$?;;
+    4) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
+    *) fail=1;;
+esac
+if [ -n "$fail" ]; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
@@ -121,7 +132,12 @@ fi
 policy_options=()
 if [ -n "$pcr_ids" ]; then
     if [ -z "$pcr_digest" ]; then
-        if ! tpm2_pcrlist -Q -L "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest; then
+        case "$TPM2TOOLS_VERSION" in
+            3) tpm2_pcrlist -Q -L "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest || fail=$?;;
+            4) tpm2_pcrread -Q "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest || fail=$?;;
+            *) fail=1;;
+        esac
+        if [ -n "$fail" ]; then
             echo "Creating PCR hashes file failed!" >&2
             exit 1
         fi
@@ -132,7 +148,14 @@ if [ -n "$pcr_ids" ]; then
         fi
     fi
 
-    if ! tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" -F "$TMP"/pcr.digest -f "$TMP"/pcr.policy; then
+    case "$TPM2TOOLS_VERSION" in
+        3) tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" \
+                             -F "$TMP"/pcr.digest -f "$TMP"/pcr.policy || fail=$?;;
+        4) tpm2_createpolicy -Q -g "$hash" --policy-pcr -l "$pcr_bank":"$pcr_ids" \
+                             -f "$TMP"/pcr.digest -L "$TMP"/pcr.policy || fail=$?;;
+        *) fail=1;;
+    esac
+    if [ -n "$fail" ]; then
         echo "create policy fail, please check the environment or parameters!"
         exit 1
     fi
@@ -142,8 +165,14 @@ else
     obj_attr="$obj_attr|userwithauth"
 fi
 
-if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c "$TMP"/primary.context -u "$TMP"/jwk.pub \
-     -r "$TMP"/jwk.priv -A "$obj_attr" "${policy_options[@]}" -I- <<< "$jwk"; then
+case "$TPM2TOOLS_VERSION" in
+    3) tpm2_create -Q -g "$hash" -G "$alg_create_key" -c "$TMP"/primary.context -u "$TMP"/jwk.pub \
+                   -r "$TMP"/jwk.priv -A "$obj_attr" "${policy_options[@]}" -I- <<< "$jwk" || fail=$?;;
+    4) tpm2_create -Q -g "$hash" -C "$TMP"/primary.context -u "$TMP"/jwk.pub \
+                   -r "$TMP"/jwk.priv -a "$obj_attr" "${policy_options[@]}" -i- <<< "$jwk" || fail=$?;;
+    *) fail=1;;
+esac
+if [ -n "$fail" ]; then
     echo "Creating TPM2 object for jwk failed!" >&2
     exit 1
 fi

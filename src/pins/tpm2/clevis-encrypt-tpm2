@@ -24,7 +24,7 @@ auth="o"
 # Algorithm type must be keyedhash for object with user provided sensitive data.
 alg_create_key="keyedhash"
 # Attributes for the created TPM2 object with the JWK as sensitive data.
-obj_attr="fixedtpm|fixedparent|sensitivedataorigin|noda|adminwithpolicy"
+obj_attr="fixedtpm|fixedparent|noda|adminwithpolicy"
 
 function on_exit() {
     if [ ! -d "$TMP" ] || ! rm -rf "$TMP"; then
@@ -138,6 +138,8 @@ if [ -n "$pcr_ids" ]; then
     fi
 
     policy_options+=(-L "$TMP/pcr.policy")
+else
+    obj_attr="$obj_attr|userwithauth"
 fi
 
 if ! tpm2_create -Q -g "$hash" -G "$alg_create_key" -c "$TMP"/primary.context -u "$TMP"/jwk.pub \

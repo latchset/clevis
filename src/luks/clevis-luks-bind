@@ -127,9 +127,9 @@ esac
 
 # Add the new key
 if [ -n "$SLT" ]; then
-    cryptsetup luksAddKey --key-slot "$SLT" "$DEV"
+    cryptsetup luksAddKey --iter-time 1 --key-slot "$SLT" "$DEV"
 else
-    SLT="$(cryptsetup luksAddKey -v "$DEV" \
+    SLT="$(cryptsetup luksAddKey --iter-time 1 -v "$DEV" \
         | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p')"
 fi < <(echo "$old"; echo -n "$key")
 if [ $? -ne 0 ]; then

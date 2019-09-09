@@ -1,8 +1,9 @@
-cmds = ['createprimary', 'pcrlist', 'createpolicy', 'create', 'load', 'unseal']
+cmds = ['tpm2_createprimary', ['tpm2_pcrread', 'tpm2_pcrlist'],
+        'tpm2_createpolicy', 'tpm2_create', 'tpm2_load', 'tpm2_unseal']
 
 all = true
 foreach cmd : cmds
-  all = all and find_program('tpm2_' + cmd, required: false).found()
+  all = all and find_program(cmd, required: false).found()
 endforeach
 
 if all

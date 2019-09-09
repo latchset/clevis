@@ -39,13 +39,16 @@ if [ -t 0 ]; then
     exit 2
 fi
 
-TPM2TOOLS_INFO="$(tpm2_pcrlist -v)"
+TPM2TOOLS_INFO="$(tpm2_createprimary -v)"
 
-if [[ $TPM2TOOLS_INFO != *version=\"3.* ]]; then
-    echo "The tpm2 pin requires tpm2-tools version 3" >&2
+match='version="(.)\.'
+[[ $TPM2TOOLS_INFO =~ $match ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
+if [[ $TPM2TOOLS_VERSION != 3 ]] && [[ $TPM2TOOLS_VERSION != 4 ]]; then
+    echo "The tpm2 pin requires tpm2-tools version 3 or 4" >&2
     exit 1
 fi
 
+# Old environment variables for tpm2-tools 3.0
 export TPM2TOOLS_TCTI_NAME=device
 export TPM2TOOLS_DEVICE_FILE=
 for dev in /dev/tpmrm?; do
@@ -53,6 +56,9 @@ for dev in /dev/tpmrm?; do
     TPM2TOOLS_DEVICE_FILE="$dev"
     break
 done
+
+# New environment variable for tpm2-tools >= 3.1
+export TPM2TOOLS_TCTI="$TPM2TOOLS_TCTI_NAME:$TPM2TOOLS_DEVICE_FILE"
 
 if [ -z "$TPM2TOOLS_DEVICE_FILE" ]; then
     echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
@@ -105,10 +111,10 @@ trap 'on_exit' EXIT
 
 pcr_ids="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_ids -Su- <<< "$jhd")" || true
 
-policy_options=()
+pcr_spec=''
 if [ -n "$pcr_ids" ]; then
     pcr_bank="$(jose fmt -j- -Og clevis -g tpm2 -g pcr_bank -Su- <<< "$jhd")"
-    policy_options+=(-L "$pcr_bank:$pcr_ids")
+    pcr_spec="$pcr_bank:$pcr_ids"
 fi
 
 if ! jose b64 dec -i- -O "$TMP"/jwk.pub <<< "$jwk_pub"; then
@@ -121,19 +127,34 @@ if ! jose b64 dec -i- -O "$TMP"/jwk.priv <<< "$jwk_priv"; then
     exit 1
 fi
 
-if ! tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" \
-     -C "$TMP"/primary.context 2>/dev/null; then
+case "$TPM2TOOLS_VERSION" in
+    3) tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context || fail=$?;;
+    4) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
+    *) fail=1;;
+esac
+if [ -n "$fail" ]; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
 
-if ! tpm2_load -Q -c "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
-     -C "$TMP"/load.context 2>/dev/null; then
+case "$TPM2TOOLS_VERSION" in
+    3) tpm2_load -Q -c "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
+                 -C "$TMP"/load.context || fail=$?;;
+    4) tpm2_load -Q -C "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
+                 -c "$TMP"/load.context || fail=$?;;
+    *) fail=1;;
+esac
+if [ -n "$fail" ]; then
     echo "Loading jwk to TPM2 failed!" >&2
     exit 1
 fi
 
-if ! jwk="$(tpm2_unseal -c "$TMP"/load.context "${policy_options[@]}" 2>/dev/null)"; then
+case "$TPM2TOOLS_VERSION" in
+    3) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-L $pcr_spec})" || fail=$?;;
+    4) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-p pcr:$pcr_spec})" || fail=$?;;
+    *) fail=1;;
+esac
+if [ -n "$fail" ]; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi

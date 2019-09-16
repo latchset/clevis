@@ -84,7 +84,7 @@ while true; do
                 metadata=true
 
                 if pt="$(luks1_decrypt -d "$d" -s "$slot" -u "$UUID")"; then
-                    echo -n "+$pt" | nc -U -u --send-only "$s"
+                    echo -n "+$pt" | ncat -U -u --send-only "$s"
                     unlocked=true
                     break
                 fi
@@ -96,7 +96,7 @@ while true; do
                 metadata=true
 
                 if pt="$(echo -n "$jwe" | clevis decrypt)"; then
-                    echo -n "+$pt" | nc -U -u --send-only "$s"
+                    echo -n "+$pt" | ncat -U -u --send-only "$s"
                     unlocked=true
                     break
                 fi

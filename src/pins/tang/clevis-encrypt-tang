@@ -115,7 +115,11 @@ elif [ "$thp" != "any" ] && \
 fi
 
 ### Perform encryption
-enc="$(jose jwk use -i- -r -u deriveKey -o- <<< "$jwks")"
+if ! enc="$(jose jwk use -i- -r -u deriveKey -o- <<< "$jwks")"; then
+    echo "Key derivation key not available!" >&2
+    exit 1
+fi
+
 jose fmt -j "$enc" -Og keys -A || enc="{\"keys\":[$enc]}"
 
 if ! jwk="$(jose fmt -j- -Og keys -Af- <<< "$enc")"; then

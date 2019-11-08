@@ -22,6 +22,12 @@
 SUMMARY="Binds a LUKS device using the specified policy"
 UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
 
+# We require cryptsetup >= 2.0.4 to fully support LUKSv2.
+# Support is determined at build time.
+function luks2_supported() {
+    return @OLD_CRYPTSETUP@
+}
+
 function usage() {
     exec >&2
     echo
@@ -77,13 +83,17 @@ if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
     usage
 fi
 
-if cryptsetup isLuks --type luks1 "$DEV"; then
-    luks_type=luks1
-elif cryptsetup isLuks --type luks2 "$DEV";then
-    luks_type=luks2
+if luks2_supported; then
+    if cryptsetup isLuks --type luks1 "$DEV"; then
+        luks_type="luks1"
+    elif cryptsetup isLuks --type luks2 "$DEV";then
+        luks_type="luks2"
+    else
+        echo "$DEV is not a supported LUKS device!" >&2
+        exit 1
+    fi
 else
-    echo "$DEV is not a supported LUKS device!" >&2
-    exit 1
+    luks_type="luks1"
 fi
 
 if [ -n "$KEY" ]; then

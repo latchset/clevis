@@ -57,16 +57,19 @@ if ! cryptsetup isLuks "$DEV"; then
     echo "$DEV is not a LUKS device!" >&2
     exit 1
 fi
-
-if cryptsetup isLuks --type luks1 "$DEV"; then
-    luks_type="luks1"
-elif cryptsetup isLuks --type luks2 "$DEV";then
-    luks_type="luks2"
+# Generated at build time.
+if [ -n "@OLD_CRYPTSETUP@" ]; then
+    luks_type=luks1
 else
-    echo "$DEV is not a supported LUKS device!" >&2
-    exit 1
+    if cryptsetup isLuks --type luks1 "$DEV"; then
+        luks_type="luks1"
+    elif cryptsetup isLuks --type luks2 "$DEV";then
+        luks_type="luks2"
+    else
+        echo "$DEV is not a supported LUKS device!" >&2
+        exit 1
+    fi
 fi
-
 NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 
 luks1_decrypt() {

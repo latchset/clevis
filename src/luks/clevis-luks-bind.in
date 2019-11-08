@@ -77,13 +77,18 @@ if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
     usage
 fi
 
-if cryptsetup isLuks --type luks1 "$DEV"; then
+# Generated at build time.
+if [ -n "@OLD_CRYPTSETUP@" ]; then
     luks_type=luks1
-elif cryptsetup isLuks --type luks2 "$DEV";then
-    luks_type=luks2
 else
-    echo "$DEV is not a supported LUKS device!" >&2
-    exit 1
+    if cryptsetup isLuks --type luks1 "$DEV"; then
+        luks_type=luks1
+    elif cryptsetup isLuks --type luks2 "$DEV";then
+        luks_type=luks2
+    else
+        echo "$DEV is not a supported LUKS device!" >&2
+        exit 1
+    fi
 fi
 
 if [ -n "$KEY" ]; then

@@ -92,7 +92,7 @@ if [ "$luks_type" == "luks1" ]; then
         exit 1
     fi
 
-    read -r slot state uuid < <(luksmeta show -d "$DEV" -s "$SLT")
+    read -r slot state uuid < <(luksmeta show -d "$DEV" | grep "^$SLT *")
 
     if [ "$uuid" == "empty" ]; then
         echo "The LUKSMeta slot $SLT on device $DEV is already empty." >&2

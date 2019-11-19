@@ -1,0 +1,143 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# valid_slot() will check whether a given slot is possibly valid, i.e., if it
+# is a numeric value within the specified range.
+valid_slot() {
+    local SLT="${1}"
+    local MAX_SLOTS="${2}"
+    case "${SLT}" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+        *)
+            # We got an integer, now let's make sure it is within the
+            # supported range.
+            if [ "${SLT}" -ge "${MAX_SLOTS}" ]; then
+                return 1
+            fi
+            ;;
+    esac
+}
+
+# clevis_luks_read_slot() will read a particular slot of a given device, which
+# should be either LUKS1 or LUKS2. Returns 1 in case of failure; 0 in case of
+# success.
+clevis_luks_read_slot() {
+    local DEV="${1}"
+    local SLT="${2}"
+
+    if [ -z "${DEV}" ] || [ -z "${SLT}" ]; then
+        echo "Need both a device and a slot as arguments." >&2
+        return 1
+    fi
+
+    local DATA_CODED=''
+    local MAX_LUKS1_SLOTS=8
+    local MAX_LUKS2_SLOTS=32
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        if ! valid_slot "${SLT}" "${MAX_LUKS1_SLOTS}"; then
+            echo "Please, provide a valid key slot number; 0-7 for LUKS1" >&2
+            return 1
+        fi
+
+        if ! luksmeta test -d "${DEV}"; then
+            echo "The ${DEV} device is not valid!" >&2
+            return 1
+        fi
+
+        local uuid
+        # Pattern from luksmeta: active slot uuid.
+        read -r _ _ uuid <<< "$(luksmeta show -d "${DEV}" | grep "^${SLT} *")"
+
+        if [ "${uuid}" = "empty" ]; then
+           echo "The LUKSMeta slot ${SLT} on device ${DEV} is already empty." >&2
+           return 1
+        fi
+
+        if ! DATA_CODED="$(luksmeta load -d "${DEV}" -s "${SLT}")"; then
+            echo "Cannot load data from ${DEV} slot:${SLT}!" >&2
+            return 1
+        fi
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        if ! valid_slot "${SLT}" "${MAX_LUKS2_SLOTS}"; then
+            echo "Please, provide a valid key slot number; 0-31 for LUKS2" >&2
+            return 1
+        fi
+
+        local token_id
+        token_id=$(cryptsetup luksDump "${DEV}" \
+                    | grep -E -B1 "^\s+Keyslot:\s+${SLT}$" \
+                    | head -n 1 | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
+        if [ -z "${token_id}" ]; then
+            echo "Cannot load data from ${DEV} slot:${SLT}. No token found!" >&2
+            return 1
+        fi
+
+        local token
+        token=$(cryptsetup token export --token-id "${token_id}" "${DEV}")
+        DATA_CODED=$(jose fmt -j- -Og jwe -o- <<< "${token}" \
+                     | jose jwe fmt -i- -c)
+
+        if [ -z "${DATA_CODED}" ]; then
+            echo "Cannot load data from ${DEV} slot:${SLT}!" >&2
+            return 1
+        fi
+    else
+        echo "${DEV} is not a supported LUKS device!" >&2
+        return 1
+    fi
+    echo "${DATA_CODED}"
+}
+
+# Generate a key with the same entropy as the LUKS Master key of a given
+# device.
+generate_key() {
+    local DEV="${1}"
+
+    if [ -z "${DEV}" ]; then
+        echo "Please, specify a device." >&2
+        return 1
+    fi
+
+    local dump
+    local filter
+    dump=$(cryptsetup luksDump "${DEV}")
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        filter=$(sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p' <<< "${dump}")
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        filter=$(sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p' <<< "${dump}")
+    else
+        echo "${DEV} is not a supported LUKS device!" >&2
+        return 1
+    fi
+    local bits
+    bits=$(sort -n <<< "${filter}" | tail -n 1)
+    pwmake "${bits}"
+}
+
+findexe() {
+    while read -r -d: path; do
+        [ -f "${path}/${1}" ] && [ -x "${path}/${1}" ] && \
+          echo "${path}/${1}" && return 0
+    done <<< "${PATH}:"
+    return 1
+}
+

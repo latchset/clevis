@@ -1,0 +1,36 @@
+CLEVIS-LUKS-REGEN(1)
+=====================
+:doctype: manpage
+
+
+== NAME
+
+clevis-luks-regen - Regenerates LUKS metadata
+
+== SYNOPSIS
+
+*clevis luks regen* -d DEV -s SLT
+
+== OVERVIEW
+
+The *clevis luks regen* command regenerates the LUKS metadata for a given slot in a LUKS device. It effectively
+performs an operation equivalent to *clevis luks unbind* and *clevis luks bind* for rebinding said slot and device.
+
+== OPTIONS
+
+* *-d* _DEV_ :
+  The bound LUKS device
+
+* *-s* _SLT_ :
+  The slot or key slot number for rebinding. Note that it requires that such slot is currently bound by clevis.
+
+== EXAMPLE
+
+    Regenerate the binding of slot 1 from /dev/sda1:
+
+    # clevis luks regen -d /dev/sda1 -s 1
+
+== SEE ALSO
+
+link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)]
+link:clevis-luks-unbind.1.adoc[*clevis-luks-unbind*(1)]

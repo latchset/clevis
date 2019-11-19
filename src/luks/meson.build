@@ -37,6 +37,11 @@ if libcryptsetup.found() and luksmeta.found() and pwmake.found()
   bins += clevis_luks_bind
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-bind.1')
 
+  bins += join_paths(meson.current_source_dir(), 'clevis-luks-common-functions')
+
+  bins += join_paths(meson.current_source_dir(), 'clevis-luks-regen')
+  mans += join_paths(meson.current_source_dir(), 'clevis-luks-regen.1')
+
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-unlockers.7')
 else
   warning('Will not install LUKS support due to missing dependencies!')

@@ -1,0 +1,71 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Compare two sets of keys"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 1
+fi
+
+if [ -z "$1" ]; then
+    echo "$0 missing the first argument!"
+    exit 1
+fi
+
+if [ -z "$2" ]; then
+    echo "$0 missing the second argument!"
+    exit 1
+fi
+
+ADV_KEYS="$1" # keys from advertisement
+LUKS_KEYS="$2" # keys from luks metadata
+
+### iterate over adv keys and make thumbprints
+CNT=0
+declare -a ADV_KEYS_ARRAY
+while res="$(jose fmt -j- -g keys -g"$CNT" -o- <<< "$ADV_KEYS")"; do
+    thp="$(echo "$res" | jose jwk thp -i-)"
+    ADV_KEYS_ARRAY["$CNT"]="$thp"
+    CNT=$(( CNT + 1 ))
+done
+
+CNT=0
+while key="$(jose fmt -j- -g keys -g"$CNT" -o- <<< "$LUKS_KEYS")"; do
+    thp="$(echo "$key" | jose jwk thp -i-)"
+
+    FOUND=0
+    for k in "${ADV_KEYS_ARRAY[@]}"
+    do
+        if [ "$k" = "$thp" ]; then
+            FOUND=1
+            break
+        fi
+    done
+
+    if [ "$FOUND" -eq "0" ]; then
+        echo "Key \"$thp\" is not in the advertisement and was probably rotated!"
+        echo "$key"
+        echo
+    fi
+    CNT=$(( CNT + 1 ))
+done
+
+exit 0

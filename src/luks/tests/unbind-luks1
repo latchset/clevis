@@ -1,0 +1,74 @@
+#!/bin/bash -ex
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+ADV="${TMP}/adv.jws"
+create_tang_adv "${ADV}"
+CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
+new_device "luks1" "${DEV}"
+
+# Bind, initially.
+if ! clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password." >&2
+fi
+
+SLT=1
+if ! read -r _ state uuid < <(luksmeta show -d "${DEV}" | grep "^${SLT} *"); then
+    error "${TEST}: Error reading LUKSmeta info for slot ${SLT} of ${DEV}." >&2
+fi
+
+if [ "${state}" != "active" ]; then
+    error "${TEST}: state (${state}) is expected to be 'active'." >&2
+fi
+
+if [ "${uuid}" != "${UUID}" ]; then
+    error "${TEST}: UUID ($uuid) is expected to be '${UUID}'." >&2
+fi
+
+# Now unbind.
+if ! clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: Unbind is expected to succeed for device ${DEV} and slot ${SLT}" >&2
+fi
+
+if ! read -r _ state uuid < <(luksmeta show -d "${DEV}" | grep "^${SLT} *"); then
+    error "${TEST}: Error reading LUKSmeta info for slot ${SLT} of ${DEV}." >&2
+fi
+
+if [ "${state}" != "inactive" ]; then
+    error "${TEST}: state (${state}) is expected to be 'inactive'." >&2
+fi
+
+if [ "${uuid}" != "empty" ]; then
+    error "${TEST}: UUID ($uuid) is expected to be 'empty'." >&2
+fi

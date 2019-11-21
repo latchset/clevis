@@ -1,0 +1,67 @@
+#!/bin/bash -ex
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# We require cryptsetup >= 2.0.4 to fully support LUKSv2.
+# Support is determined at build time.
+luks2_supported() {
+    return @OLD_CRYPTSETUP@
+}
+
+# Creates a tang adv to be used in the test.
+create_tang_adv() {
+    local adv="${1}"
+    local SIG="${TMP}/sig.jwk"
+    jose jwk gen -i '{"alg":"ES512"}' > "${SIG}"
+
+    local EXC="${TMP}/exc.jwk"
+    jose jwk gen -i '{"alg":"ECMR"}' > "${EXC}"
+
+    local TEMPLATE='{"protected":{"cty":"jwk-set+json"}}'
+    jose jwk pub -s -i "${SIG}" -i "${EXC}" \
+        | jose jws sig -I- -s "${TEMPLATE}" -k "${SIG}" -o "${adv}"
+}
+
+
+# Creates a new LUKS1 or LUKS2 device to be used.
+new_device() {
+    local LUKS="${1}"
+    local DEV="${2}"
+
+    local DEV_CACHED="${TMP}/${LUKS}.cached"
+
+    # Let's reuse an existing device, if there is one.
+    if [ -f "${DEV_CACHED}" ]; then
+        echo "Reusing cached ${LUKS} device..."
+        cp -f "${DEV_CACHED}" "${DEV}"
+        return 0
+    fi
+
+    fallocate -l16M "${DEV}"
+    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<< "${DEFAULT_PASS}"
+    # Caching the just-formatted device for possible reuse.
+    cp -f "${DEV}" "${DEV_CACHED}"
+}
+
+error() {
+    echo "${1}" >&2
+    exit 1
+}
+
+export DEFAULT_PASS='just-some-test-password-here'

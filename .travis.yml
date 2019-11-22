@@ -1,0 +1,26 @@
+---
+language: c
+
+compiler:
+  - gcc
+
+os: linux
+sudo: required
+services: docker
+env:
+  matrix:
+    - DISTRO=fedora:rawhide
+    - DISTRO=fedora:latest
+    - DISTRO=centos:7
+    - DISTRO=centos:8
+    - DISTRO=debian:testing
+    - DISTRO=debian:latest
+    - DISTRO=ubuntu:devel
+    - DISTRO=ubuntu:rolling
+    - DISTRO=ubuntu:bionic
+
+before_install: ./.travis/docker before_install
+install: ./.travis/docker install
+script: ./.travis/docker script
+after_script: ./.travis/docker after_script
+# vim:set ts=2 sw=2 et:

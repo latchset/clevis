@@ -21,6 +21,9 @@ test('bind-wrong-pass-luks1', find_program('bind-wrong-pass-luks1'), env: env)
 test('bind-luks1', find_program('bind-luks1'), env: env)
 test('unbind-unbound-slot-luks1', find_program('unbind-unbound-slot-luks1'), env: env)
 test('unbind-luks1', find_program('unbind-luks1'), env: env)
+test('bind-key-file-non-interactive', find_program('bind-key-file-non-interactive-luks1'), env: env)
+test('bind-pass-with-newline', find_program('bind-pass-with-newline-luks1'), env: env)
+test('bind-pass-with-newline-keyfile', find_program('bind-pass-with-newline-keyfile-luks1'), env: env)
 
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.

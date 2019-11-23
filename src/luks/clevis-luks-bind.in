@@ -128,20 +128,22 @@ if [ "$luks_type" == "luks1" ] && ! luksmeta test -d "$DEV"; then
     luksmeta init -d "$DEV" "${FRC[@]}"
 fi
 
-# Get the old key
+# Get the existing key.
 case "$KEY" in
-"") read -r -s -p "Enter existing LUKS password: " old; echo;;
- -) old="$(/bin/cat)";;
- *) old="$(/bin/cat "$KEY")";;
+"") read -r -s -p "Enter existing LUKS password: " existing_key; echo;;
+ -) existing_key="$(/bin/cat)";;
+ *) ! IFS= read -rd '' existing_key < "$KEY";;
 esac
 
 # Add the new key
 if [ -n "$SLT" ]; then
-    cryptsetup luksAddKey --key-slot "$SLT" "$DEV"
+    cryptsetup luksAddKey --key-slot "$SLT" --key-file \
+        <(echo -n "$existing_key") "$DEV"
 else
-    SLT="$(cryptsetup luksAddKey -v "$DEV" \
+    SLT="$(cryptsetup luksAddKey \
+        --key-file <(echo -n "${existing_key}") -v "$DEV" \
         | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p')"
-fi < <(echo "$old"; echo -n "$key")
+fi < <(echo -n "${key}")
 if [ $? -ne 0 ]; then
     echo "Error while adding new key to LUKS header!" >&2
     exit 1

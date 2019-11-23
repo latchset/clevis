@@ -18,6 +18,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+error() {
+    echo "${1}" >&2
+    exit 1
+}
+
 # We require cryptsetup >= 2.0.4 to fully support LUKSv2.
 # Support is determined at build time.
 luks2_supported() {
@@ -43,6 +48,12 @@ create_tang_adv() {
 new_device() {
     local LUKS="${1}"
     local DEV="${2}"
+    local PASS="${3}"
+
+    # Using a default password, if none has been provided.
+    if [ -z "${PASS}" ]; then
+        PASS="${DEFAULT_PASS}"
+    fi
 
     local DEV_CACHED="${TMP}/${LUKS}.cached"
 
@@ -54,14 +65,23 @@ new_device() {
     fi
 
     fallocate -l16M "${DEV}"
-    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<< "${DEFAULT_PASS}"
+    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<< "${PASS}"
     # Caching the just-formatted device for possible reuse.
     cp -f "${DEV}" "${DEV_CACHED}"
 }
 
-error() {
-    echo "${1}" >&2
-    exit 1
+# Creates a new LUKS1 or LUKS2 device to be used, using a keyfile.
+new_device_keyfile() {
+    local LUKS="${1}"
+    local DEV="${2}"
+    local KEYFILE="${3}"
+
+    if [[ -z "${KEYFILE}" ]] || [[ ! -f "${KEYFILE}" ]]; then
+        error "Invalid keyfile (${KEYFILE})."
+    fi
+
+    fallocate -l16M "${DEV}"
+    cryptsetup luksFormat --type "${LUKS}" --batch-mode "${DEV}" "${KEYFILE}"
 }
 
 export DEFAULT_PASS='just-some-test-password-here'

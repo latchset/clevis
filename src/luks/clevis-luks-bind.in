@@ -139,12 +139,18 @@ esac
 if [ -n "$SLT" ]; then
     cryptsetup luksAddKey --key-slot "$SLT" "$DEV"
 else
-    SLT="$(cryptsetup luksAddKey -v "$DEV" \
-        | sed -rn 's|^Key slot ([0-9]+) created\.$|\1|p')"
-fi < <(echo "$old"; echo -n "$key")
+    SLT=$(cryptsetup luksAddKey -v "$DEV" < <(echo "$old"; echo -n "$key") \
+	    | sed -rn 's|^Key slot ([0-9]+) (unlocked\|created)\.$|\1|p' | head -1)
+fi
 if [ $? -ne 0 ]; then
     echo "Error while adding new key to LUKS header!" >&2
     exit 1
+fi
+
+if [ -z $SLT ]
+then
+	echo "SLT is blank - Error while adding new key to LUKS header! - exiting" >&2
+	exit 1
 fi
 
 if [ "$luks_type" == "luks1" ]; then

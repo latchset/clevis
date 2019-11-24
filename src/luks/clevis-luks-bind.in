@@ -149,6 +149,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+if [ -z $SLT ]; then
+	echo "Error while adding new key to LUKS header! Key slot is undefined." >&2
+	exit 1
+fi
+
 if [ "$luks_type" == "luks1" ]; then
     echo -n "$jwe" | luksmeta save -d "$DEV" -u "$UUID" -s "$SLT" 2>/dev/null
 else

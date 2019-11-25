@@ -41,3 +41,6 @@ if libcryptsetup.found() and luksmeta.found() and pwmake.found()
 else
   warning('Will not install LUKS support due to missing dependencies!')
 endif
+
+# Tests.
+subdir('tests')

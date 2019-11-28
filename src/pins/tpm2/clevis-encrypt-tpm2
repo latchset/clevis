@@ -103,7 +103,29 @@ key="$(jose fmt -j- -Og key -u- <<< "$cfg")" || key="ecc"
 
 pcr_bank="$(jose fmt -j- -Og pcr_bank -u- <<< "$cfg")" || pcr_bank="sha1"
 
-pcr_ids="$(jose fmt -j- -Og pcr_ids -u- <<< "$cfg")" || true
+# Issue #103: We support passing pcr_ids using both a single string, as in
+# "1,3", as well as an actual JSON array, such as ["1,"3"]. Let's handle both
+# cases here.
+if [[ ${cfg// /} != '{}' ]] \
+    && ! pcr_ids="$(jose fmt -j- -Og pcr_ids -u- 2>/dev/null <<< "$cfg")"; then
+
+    # We failed to parse a string, so let's try to parse a JSON array instead.
+    if jose fmt -j- -Og pcr_ids -A 2>/dev/null <<< "${cfg}"; then
+        # OK, it is an array, so let's get the items and form a string.
+        pcr_ids=
+        for pcr in $(jose fmt -j- -Og pcr_ids -Af- <<< "${cfg}" \
+                     | tr -d '"'); do
+            pcr_ids=$(printf '%s,%s' "${pcr_ids}" "${pcr}")
+        done
+        # Now let's remove the leading comma.
+        pcr_ids=${pcr_ids/#,/}
+    else
+        # Not to add a policy that was not intended, in this case, no policy
+        # at all, let's report the issue and exit.
+        echo "Parsing the requested policy failed!" >&2
+        exit 1
+    fi
+fi
 
 pcr_digest="$(jose fmt -j- -Og pcr_digest -u- <<< "$cfg")" || true
 

@@ -1,0 +1,108 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+
+# Code to return to mark test as skipped.
+SKIP_RET_CODE=77
+
+tpm2_available() {
+    # Old environment variables for tpm2-tools 3.0
+    export TPM2TOOLS_TCTI_NAME=device
+    export TPM2TOOLS_DEVICE_FILE=
+    for dev in /dev/tpmrm?; do
+        [ -e "${dev}" ] || continue
+        TPM2TOOLS_DEVICE_FILE="${dev}"
+        break
+    done
+
+    # New environment variable for tpm2-tools >= 3.1
+    export TPM2TOOLS_TCTI="${TPM2TOOLS_TCTI_NAME}:${TPM2TOOLS_DEVICE_FILE}"
+
+    if [ -z "${TPM2TOOLS_DEVICE_FILE}" ]; then
+        echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
+        return 1
+    fi
+
+    if ! [[ -r "${TPM2TOOLS_DEVICE_FILE}" \
+            && -w "${TPM2TOOLS_DEVICE_FILE}" ]]; then
+        echo "The ${TPM2TOOLS_DEVICE_FILE} device must be readable and writable!" >&2
+        return 1
+    fi
+}
+
+# Checking if we can run this test.
+if ! tpm2_available; then
+    exit ${SKIP_RET_CODE}
+fi
+
+decode_jwe() {
+    local jwe="${1}"
+
+    local coded
+    if ! coded=$(jose jwe fmt -i- <<< "${jwe}"); then
+        return 1
+    fi
+
+    coded=$(jose fmt -j- -g protected -u- <<< "${coded}" | tr -d '"')
+    jose b64 dec -i- <<< "${coded}"
+}
+
+test_pcr_ids() {
+    local orig="${1}"
+    local cfg="${2}"
+    local expected_pcr_ids="${3}"
+
+    local enc
+    if ! enc=$(echo "${orig}" | clevis encrypt tpm2 "${cfg}"); then
+        echo "${TEST}: encrypt failed for cfg: ${cfg}" >&1
+        return 1
+    fi
+
+    local pcr_ids
+    pcr_ids=$(decode_jwe "${enc}" \
+              | jose fmt -j- -Og clevis -Og tpm2 -Og pcr_ids -u- 2>/dev/null)
+
+    local dec
+    dec=$(echo "${enc}" | clevis decrypt)
+
+    if [ "${orig}" != "${dec}" ]; then
+        echo "${TEST}: decoded text (${dec}) does not match original one (${orig})" >&2
+        return 1
+    fi
+
+    if [ "${pcr_ids}" != "${expected_pcr_ids}" ]; then
+        echo "${TEST}: pcr_ids (${pcr_ids}) do not match the expected (${expected_pcr_ids}) result." >&2
+        return 1
+    fi
+}
+
+test_pcr_ids "${orig}" '{}' "" || exit 1
+test_pcr_ids "${orig}" '{                   }' "" || exit 1
+
+# Issue #103: now let's try a few different configs with both strings and
+# arrays and check if we get the expected pcr_ids.
+test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": "4,16"}' "4,16" || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": ["4,16"]}' "4,16" || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
+! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1

@@ -221,4 +221,8 @@ fi
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_pub" -s jwk_pub -UUUUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm2 -q "$jwk_priv" -s jwk_priv -UUUUo-)"
 
+# The on_exit() trap will not be fired after exec, so let's clean up the temp
+# directory at this point.
+[ -d "${TMP}" ] && rm -rf "${TMP}"
+
 exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

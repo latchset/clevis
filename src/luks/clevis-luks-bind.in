@@ -137,38 +137,39 @@ case "$KEY" in
 esac
 
 
-if [ -z $SLT ]; then
-    if [ luks_type == "luks2" ]; then
-            readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
-    else
-            readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
-    fi
-fi
-
 #Add the new key
 if [ -n "$SLT" ]; then
     cryptsetup luksAddKey --key-slot "$SLT" --key-file \
         <(echo -n "$existing_key") "$DEV"
 else
-    cryptsetup luksAddKey --key-file <(echo -n "${existing_key}") -v "$DEV" 
+    if [ $luks_type == "luks2" ]; then
+        readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" \ 
+            | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
+    else
+        readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" \
+            | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
+    fi
+    cryptsetup luksAddKey --key-file <(echo -n "${existing_key}") "$DEV" 
 fi < <(echo -n "${key}")
 if [ $? -ne 0 ]; then
     echo "Error while adding new key to LUKS header!" >&2
     exit 1
 fi
 
-#Find slot used if not defined previously
+#Determine slot used by new key if a desired slot was not specified
 if [ -z $SLT ]; then
-    if [ luks_type == "luks2" ]; then
-            readarray -t usedSlotsAfterAddKey < <(cryptsetup luksDump "${DEV}" | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
+    if [ $luks_type == "luks2" ]; then
+        readarray -t usedSlotsAfterAddKey < <(cryptsetup luksDump "${DEV}" \
+            | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
     else
-            readarray -t usedSlotsAfterAddKey < <(cryptsetup luksDump "${DEV}" | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
+        readarray -t usedSlotsAfterAddKey < <(cryptsetup luksDump "${DEV}" \
+            | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
     fi
     for i in "${usedSlotsAfterAddKey[@]}"; do
-            if [[ ! " ${usedSlotsBeforeAddKey[@]} " =~ " ${i} " ]]; then
-                    SLT=$i
-                    break
-            fi
+        if [[ ! " ${usedSlotsBeforeAddKey[@]} " =~ " ${i} " ]]; then
+            SLT=$i
+            break
+        fi
     done
 fi
 
@@ -176,7 +177,6 @@ if [ -z $SLT ]; then
 	echo "Error while adding new key to LUKS header! Key slot is undefined." >&2
 	exit 1
 fi
-
 
 if [ "$luks_type" == "luks1" ]; then
     echo -n "$jwe" | luksmeta save -d "$DEV" -u "$UUID" -s "$SLT" 2>/dev/null

@@ -157,8 +157,8 @@ if [ $? -ne 0 ]; then
 fi
 
 #Determine slot used by new key if a desired slot was not specified
-if [ -z $SLT ]; then
-    if [ $luks_type == "luks2" ]; then
+if [ -z "$SLT" ]; then
+    if [ "$luks_type" == "luks2" ]; then
         readarray -t usedSlotsAfterAddKey < <(cryptsetup luksDump "${DEV}" \
             | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
     else
@@ -173,7 +173,7 @@ if [ -z $SLT ]; then
     done
 fi
 
-if [ -z $SLT ]; then
+if [ -z "$SLT" ]; then
 	echo "Error while adding new key to LUKS header! Key slot is undefined." >&2
 	exit 1
 fi

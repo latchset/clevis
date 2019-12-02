@@ -6,16 +6,19 @@ actv = find_program(
 kgen = find_program(
   join_paths(libexecdir, 'tangd-keygen'),
   '/usr/libexec/tangd-keygen',
+  '/usr/lib/x86_64-linux-gnu/tangd-keygen',
   required: false
 )
 updt = find_program(
   join_paths(libexecdir, 'tangd-update'),
   '/usr/libexec/tangd-update',
+  '/usr/lib/x86_64-linux-gnu/tangd-update',
   required: false
 )
 tang = find_program(
   join_paths(libexecdir, 'tangd'),
   '/usr/libexec/tangd',
+  '/usr/lib/x86_64-linux-gnu/tangd',
   required: false
 )
 curl = find_program('curl', required: false)
@@ -32,6 +35,7 @@ if curl.found()
       join_paths(meson.source_root(), 'src'),
       meson.current_source_dir(),
       '/usr/libexec',
+      '/usr/lib/x86_64-linux-gnu',
       libexecdir,
       separator: ':'
     )

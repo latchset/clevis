@@ -143,13 +143,13 @@ if [ -n "$SLT" ]; then
         <(echo -n "$existing_key") "$DEV"
 else
     if [ $luks_type == "luks2" ]; then
-        readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" \ 
+        readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" \
             | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
     else
         readarray -t usedSlotsBeforeAddKey < <(cryptsetup luksDump "${DEV}" \
             | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
     fi
-    cryptsetup luksAddKey --key-file <(echo -n "${existing_key}") "$DEV" 
+    cryptsetup luksAddKey --key-file <(echo -n "${existing_key}") "$DEV"
 fi < <(echo -n "${key}")
 if [ $? -ne 0 ]; then
     echo "Error while adding new key to LUKS header!" >&2

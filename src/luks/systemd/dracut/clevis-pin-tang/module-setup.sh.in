@@ -32,5 +32,6 @@ install() {
 
     inst_multiple \
 	clevis-decrypt-tang \
-	curl
+	curl \
+	basename
 }

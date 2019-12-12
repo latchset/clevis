@@ -68,7 +68,7 @@ clevisloop()
         cryptkeyscript='\/lib\/cryptsetup\/askpass'
     fi
 
-    PASSFIFO='/lib/cryptsetup/passfifo'
+    PASSFIFO='/usr/lib/cryptsetup/passfifo'
 
     OLD_CRYPTTAB_SOURCE=""
 

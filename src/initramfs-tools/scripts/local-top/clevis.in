@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash -e
 #
 # Copyright (c) 2017 Red Hat, Inc.
 # Copyright (c) 2017 Shawn Rose
@@ -51,6 +51,31 @@ get_askpass_pid() {
     done
 }
 
+luks1_decrypt() {
+    luksmeta load "$@" \
+        | clevis decrypt
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
+luks2_jwe() {
+    # jose jwe fmt -c outputs extra \n, so clean it up
+    cryptsetup token export "$@" \
+        | jose fmt -j- -Og jwe -o- \
+        | jose jwe fmt -i- -c \
+        | tr -d '\n'
+
+    local rc
+    for rc in "${PIPESTATUS[@]}"; do
+        [ $rc -eq 0 ] || return $rc
+    done
+    return 0
+}
+
 # Wait for askpass, and then try and decrypt immediately. Just in case
 # there are multiple devices that need decrypting, this will loop
 # infinitely (The local-bottom script will kill this after decryption)
@@ -93,16 +118,32 @@ clevisloop()
         OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
 
         UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
-        luksmeta show -d "$CRYPTTAB_SOURCE" | \
-            while read -r slot state uuid; do
+        if cryptsetup isLuks --type luks1 "$CRYPTTAB_SOURCE"; then
+            # If the device is not initialized, sliently skip it.
+            luksmeta test -d "$CRYPTTAB_SOURCE" || continue
 
-            [ "$state" != "active" ] && continue
-            [ "$uuid" != "$UUID" ] && continue
-            luksmeta load -d "$CRYPTTAB_SOURCE" -s "$slot" -u "$UUID" | \
-                clevis decrypt > "$PASSFIFO"
-            break
-        done
+            luksmeta show -d "$CRYPTTAB_SOURCE" |
+                while read -r slot state uuid; do
+                [ "$state" == "active" ] || continue
+                [ "$uuid" == "$UUID" ] || continue
 
+                if pt="$(luks1_decrypt -d "$CRYPTTAB_SOURCE" -s "$slot" -u "$UUID")"; then
+                    echo -n "$pt" > "$PASSFIFO"
+                    break
+                fi
+            done
+        elif cryptsetup isLuks --type luks2 "$CRYPTTAB_SOURCE"; then
+            cryptsetup luksDump "$CRYPTTAB_SOURCE" | sed -rn 's|^\s+([0-9]+): clevis|\1|p' |
+                while read -r id; do
+                jwe="$(luks2_jwe --token-id "$id" "$CRYPTTAB_SOURCE")" \
+                    || continue
+
+                if pt="$(echo -n "$jwe" | clevis decrypt)"; then
+                    echo -n "$pt" > "$PASSFIFO"
+                    break
+                fi
+            done
+        fi
         # Now that the current device has its password, let's sleep a
         # bit. This gives cryptsetup time to actually decrypt the
         # device and prompt for the next password if needed.

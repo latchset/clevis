@@ -202,8 +202,6 @@ if eth_check; then
     # Make sure networking is set up: if booting via nfs, it already is
     # Doesn't seem to work when added to clevisloop for some reason
     [ "$boot" = nfs ] || configure_networking
-else
-    echo No Network Connection
 fi
 
 clevisloop &

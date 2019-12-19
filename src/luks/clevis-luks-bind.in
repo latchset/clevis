@@ -28,7 +28,6 @@ function luks2_supported() {
     return @OLD_CRYPTSETUP@
 }
 
-
 function usage() {
     exec >&2
     echo
@@ -97,6 +96,18 @@ else
     luks_type="luks1"
 fi
 
+if [ "${luks_type}" = "luks1" ]; then
+    # The first free slot, as per cryptsetup. In connection to bug #70, we may
+    # have to wipe out the LUKSMeta slot priot to adding the new key.
+    first_free_cs_slot=$(cryptsetup luksDump "${DEV}" \
+                         | sed -rn 's|^Key Slot ([0-7]): DISABLED$|\1|p' \
+                         | head -n 1)
+    if [ -z "${first_free_cs_slot}" ]; then
+        echo "There are no more free slots in ${DEV}!" >&2
+        exit 1
+    fi
+fi
+
 if [ -n "$KEY" ]; then
     if [ "$KEY" == "-" ]; then
         if [ "$luks_type" == "luks1" ]; then
@@ -136,8 +147,26 @@ case "$KEY" in
  *) ! IFS= read -rd '' existing_key < "$KEY";;
 esac
 
+# Check if the key is valid.
+if ! cryptsetup luksOpen --test-passphrase "${DEV}" \
+        --key-file <(echo -n "${existing_key}"); then
+    exit 1
+fi
 
-#Add the new key
+if [ "$luks_type" == "luks1" ]; then
+    # In certain circumstances, we may have LUKSMeta slots "not in sync" with
+    # cryptsetup, which means we will try to save LUKSMeta metadata over an
+    # already used or partially used slot -- github issue #70.
+    # If that is the case, let's wipe the LUKSMeta slot here prior to saving.
+    if read -r _ state uuid < <(luksmeta show -d "${DEV}" \
+            | grep "^${first_free_cs_slot} *"); then
+        if [ "${state}" = "inactive" ] && [ "${uuid}" = "${UUID}" ]; then
+            luksmeta wipe -f -d "${DEV}" -s "${first_free_cs_slot}"
+        fi
+    fi
+fi
+
+# Add the new key.
 if [ -n "$SLT" ]; then
     cryptsetup luksAddKey --key-slot "$SLT" --key-file \
         <(echo -n "$existing_key") "$DEV"

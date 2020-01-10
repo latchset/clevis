@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/latchset/clevis.svg?branch=master)](https://travis-ci.org/latchset/clevis)
+
 # Clevis
 
 ## Welcome to Clevis!

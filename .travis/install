@@ -1,0 +1,56 @@
+#!/bin/bash -ex
+
+COMMON="meson curl git make file bzip2 jose tang cryptsetup ${CC}"
+
+case "${DISTRO}" in
+debian:*|ubuntu:*)
+    # This solves an intermittant error when fetching packages on debian
+    sed -i 's|httpredir.debian.org|ftp.us.debian.org|g' /etc/apt/sources.list
+    sed -i 's|\/archive.ubuntu|\/us.archive.ubuntu|g' /etc/apt/sources.list
+
+    apt-get clean
+
+    while ! apt-get update; do
+        sleep 5
+    done
+
+    while ! apt-get -y \
+        -o Dpkg::Options::="--force-confdef" \
+        -o Dpkg::Options::="--force-confnew" \
+        dist-upgrade; do
+        sleep 5
+    done
+
+    DEBIAN_FRONTEND=noninteractive apt-get install -y keyboard-configuration \
+        console-setup
+
+    while ! apt-get -y install ${COMMON} \
+        build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
+        luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
+        libudisks2-dev libaudit-dev; do
+
+        sleep 5
+    done
+    ;;
+
+fedora:*)
+    dnf -y clean all
+    dnf -y --setopt=deltarpm=0 update
+    dnf -y install ${COMMON} pkgconfig openssl-devel jansson-devel \
+        findutils libjose-devel luksmeta libluksmeta-devel audit-libs-devel \
+        libudisks2-devel tpm2-tools desktop-file-utils
+    ;;
+
+centos:*)
+    yum -y clean all
+    yum -y --setopt=deltarpm=0 update
+    yum install -y yum-utils
+    yum config-manager -y --set-enabled PowerTools || true
+    yum -y install epel-release
+    yum -y install ${COMMON} pkgconfig openssl-devel openssl zlib-devel \
+        jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
+        audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts
+    sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
+    ;;
+esac
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:

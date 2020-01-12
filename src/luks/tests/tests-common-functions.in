@@ -75,7 +75,9 @@ new_device() {
     fi
 
     fallocate -l16M "${DEV}"
-    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<< "${PASS}"
+    local extra_options='--pbkdf pbkdf2 --pbkdf-force-iterations 1000'
+    cryptsetup luksFormat --type "${LUKS}" ${extra_options} --batch-mode \
+        --force-password "${DEV}" <<< "${PASS}"
     # Caching the just-formatted device for possible reuse.
     cp -f "${DEV}" "${DEV_CACHED}"
 }
@@ -97,7 +99,9 @@ new_device_keyfile() {
     fi
 
     fallocate -l16M "${DEV}"
-    cryptsetup luksFormat --type "${LUKS}" --batch-mode "${DEV}" "${KEYFILE}"
+    local extra_options='--pbkdf pbkdf2 --pbkdf-force-iterations 1000'
+    cryptsetup luksFormat --type "${LUKS}"  ${extra_options} --batch-mode \
+        "${DEV}" "${KEYFILE}"
 }
 
 export DEFAULT_PASS='just-some-test-password-here'

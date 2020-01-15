@@ -23,6 +23,11 @@ error() {
     exit 1
 }
 
+skip_test() {
+    echo "${1}" >&2
+    exit 77
+}
+
 # We require cryptsetup >= 2.0.4 to fully support LUKSv2.
 # Support is determined at build time.
 luks2_supported() {
@@ -43,12 +48,17 @@ create_tang_adv() {
         | jose jws sig -I- -s "${TEMPLATE}" -k "${SIG}" -o "${adv}"
 }
 
-
 # Creates a new LUKS1 or LUKS2 device to be used.
 new_device() {
     local LUKS="${1}"
     local DEV="${2}"
     local PASS="${3}"
+
+    # Some builders fail if the cryptsetup steps are not ran as root, so let's
+    # skip the test now if not running as root.
+    if [ $(id -u) != 0 ]; then
+        skip_test "WARNING: You must be root to run this test; test skipped."
+    fi
 
     # Using a default password, if none has been provided.
     if [ -z "${PASS}" ]; then
@@ -65,7 +75,9 @@ new_device() {
     fi
 
     fallocate -l16M "${DEV}"
-    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<< "${PASS}"
+    local extra_options='--pbkdf pbkdf2 --pbkdf-force-iterations 1000'
+    cryptsetup luksFormat --type "${LUKS}" ${extra_options} --batch-mode \
+        --force-password "${DEV}" <<< "${PASS}"
     # Caching the just-formatted device for possible reuse.
     cp -f "${DEV}" "${DEV_CACHED}"
 }
@@ -76,12 +88,20 @@ new_device_keyfile() {
     local DEV="${2}"
     local KEYFILE="${3}"
 
+    # Some builders fail if the cryptsetup steps are not ran as root, so let's
+    # skip the test now if not running as root.
+    if [ $(id -u) != 0 ]; then
+        skip_test "WARNING: You must be root to run this test; test skipped."
+    fi
+
     if [[ -z "${KEYFILE}" ]] || [[ ! -f "${KEYFILE}" ]]; then
         error "Invalid keyfile (${KEYFILE})."
     fi
 
     fallocate -l16M "${DEV}"
-    cryptsetup luksFormat --type "${LUKS}" --batch-mode "${DEV}" "${KEYFILE}"
+    local extra_options='--pbkdf pbkdf2 --pbkdf-force-iterations 1000'
+    cryptsetup luksFormat --type "${LUKS}"  ${extra_options} --batch-mode \
+        "${DEV}" "${KEYFILE}"
 }
 
 export DEFAULT_PASS='just-some-test-password-here'

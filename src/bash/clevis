@@ -1,26 +1,48 @@
-# bash completion support for clevis
+# bash completion support for clevis.
 
 _clevis()
 {
-    dir=$(dirname $(which clevis))
+    local dir prev cur field
+    dir=$(dirname "$(command -v clevis)")
+    prev=${COMP_WORDS[COMP_CWORD-1]}
     cur=${COMP_WORDS[COMP_CWORD]}
-    field=$(($COMP_CWORD + 1))
+    field=$((COMP_CWORD + 1))
 
-    if [[ ${COMP_WORDS[COMP_CWORD-1]} == "clevis" ]]; then
-       name=clevis-*
+    case "${prev}" in
+    -d)
+        cur=${cur:=/dev/}
+        _filedir
+        return
+        ;;
+    -k)
+        _filedir
+        return
+        ;;
+    esac
+
+    local name suggestions
+    if [[ "${COMP_WORDS[COMP_CWORD-1]}" == "clevis" ]]; then
+        name="clevis-*"
     fi
 
-    if [[ ${COMP_WORDS[COMP_CWORD-2]} == "clevis" ]]; then
-       name=clevis-${COMP_WORDS[COMP_CWORD-1]}-*
+    if [[ "${COMP_WORDS[COMP_CWORD-2]}" == "clevis" ]]; then
+        name="clevis-${COMP_WORDS[COMP_CWORD-1]}-*"
     fi
 
-    suggestions=$(find $dir -name $name | cut -d '-' -f$field | sort | uniq)
+    suggestions=
+    if [[ -n "${name}" ]]; then
+        suggestions=$(find "${dir}" -name "${name}" -executable \
+                      | cut -d '-' -f"${field}" | sort -u)
 
-    if [[ -n $cur ]]; then
-       suggestions=$(for word in ${suggestions[@]}; do echo $word | grep $cur; done)
+        local word
+        if [[ -n "${cur}" ]]; then
+            suggestions=$(for word in "${suggestions[@]}"; do \
+                          echo "${word}" | grep -- "${cur}"; done)
+        fi
     fi
 
-    COMPREPLY=($(compgen -W "$suggestions" -- "$cur"))
+    COMPREPLY=($(compgen -W "${suggestions}" -- "${cur}"))
 }
 
 complete -F _clevis clevis
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:

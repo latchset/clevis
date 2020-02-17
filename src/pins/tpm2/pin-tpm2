@@ -96,6 +96,7 @@ test_pcr_ids() {
 
 test_pcr_ids "${orig}" '{}' "" || exit 1
 test_pcr_ids "${orig}" '{                   }' "" || exit 1
+test_pcr_ids "${orig}" '{"key": "ecc"}' "" || exit 1
 
 # Issue #103: now let's try a few different configs with both strings and
 # arrays and check if we get the expected pcr_ids.

@@ -187,12 +187,20 @@ clevis_all_netbootable_devices() {
 eth_check() {
     for device in $(clevis_all_netbootable_devices); do
         ip link set dev "$device" up
-        sleep 1
-        ETH_HAS_CARRIER=$(cat /sys/class/net/"$device"/carrier)
-        if [ "$ETH_HAS_CARRIER" = '1' ]; then
-            return 0
-        fi
     done
+    # Try if one of the network interfaces set to up appears to have a carrier
+    counter=20
+    while [ $counter -gt 0 ]; do
+        for device in $(clevis_all_netbootable_devices); do
+            ETH_HAS_CARRIER=$(cat /sys/class/net/"$device"/carrier)
+            if [ "$ETH_HAS_CARRIER" = '1' ]; then
+                return 0
+            fi
+        done
+        counter=$(( $counter - 1 ))
+        sleep .5
+    done
+    # Give up ater $counter number of tries
     return 1
 }
 if eth_check; then

@@ -106,7 +106,8 @@ clevisloop()
         done
 
         # Import CRYPTTAB_SOURCE from the askpass process.
-        local "$(grep '^CRYPTTAB_SOURCE=' /proc/"$pid"/environ)"
+        local "$(tr '\0' '\n' < /proc/${pid}/environ | \
+	    grep '^CRYPTTAB_SOURCE=')"
 
         # Make sure that CRYPTTAB_SOURCE is actually a block device
         [ ! -b "$CRYPTTAB_SOURCE" ] && continue

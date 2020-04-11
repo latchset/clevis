@@ -30,7 +30,7 @@ fi
 ninja=$(findexe ninja ninja-build)
 "${ninja}" test
 
-bash <(curl -s https://codecov.io/bash) 2>&1 \
+bash <(curl --retry 10 -s https://codecov.io/bash) 2>&1 \
        | grep -E -v "has arcs (to entry|from exit) block"
 
 # vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:

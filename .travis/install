@@ -21,8 +21,8 @@ debian:*|ubuntu:*)
         sleep 5
     done
 
-    DEBIAN_FRONTEND=noninteractive apt-get install -y keyboard-configuration \
-        console-setup
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y keyboard-configuration console-setup
 
     while ! apt-get -y install ${COMMON} \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \

@@ -36,9 +36,8 @@ debian:*|ubuntu:*)
 fedora:*)
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
-    dnf -y install ${COMMON} pkgconfig openssl-devel jansson-devel \
-        findutils libjose-devel luksmeta libluksmeta-devel audit-libs-devel \
-        libudisks2-devel tpm2-tools desktop-file-utils
+    dnf -y install dnf-utils
+    dnf -y builddep clevis
     ;;
 
 centos:*)

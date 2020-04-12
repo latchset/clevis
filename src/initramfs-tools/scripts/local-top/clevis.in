@@ -33,7 +33,7 @@ get_fifo_path() {
     for fd in /proc/$pid/fd/*; do
         if [ -e "$fd" ]; then
             if [[ $(readlink -f "${fd}") == *"/cryptsetup/passfifo" ]]; then
-                echo $(readlink -f "${fd}")
+                readlink -f "${fd}"
             fi
         fi
     done
@@ -83,13 +83,13 @@ luks2_decrypt() {
         cte=$(cryptsetup token export --token-id "$id" "$CRYPTTAB_SOURCE")
         [ $? -eq 0 ] || continue
 
-        josefmt=$(echo ${cte} | jose fmt -j- -Og jwe -o-)
+        josefmt=$(echo "${cte}" | jose fmt -j- -Og jwe -o-)
         [ $? -eq 0 ] || continue
 
-        josejwe=$(echo ${josefmt} | jose jwe fmt -i- -c)
+        josejwe=$(echo "${josefmt}" | jose jwe fmt -i- -c)
         [ $? -eq 0 ] || continue
 
-        jwe=$(echo ${josejwe} | tr -d '\n')
+        jwe=$(echo "${josejwe}" | tr -d '\n')
         [ $? -eq 0 ] || continue
 
         decrypted=$(echo -n "${jwe}" | clevis decrypt 2>/dev/null)
@@ -109,8 +109,6 @@ luks2_decrypt() {
 # there are multiple devices that need decrypting, this will loop
 # infinitely (The local-bottom script will kill this after decryption)
 clevisloop() {
-    set -e
-
     # Set the path how we want it (Probably not all needed)
     PATH="/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 
@@ -128,8 +126,8 @@ clevisloop() {
         until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
             sleep .1
             pid_fifo=$(get_askpass_pid)
-            pid=$(echo ${pid_fifo} | cut -d' ' -f1)
-            PASSFIFO=$(echo ${pid_fifo} | cut -d' ' -f2-)
+            pid=$(echo "${pid_fifo}" | cut -d' ' -f1)
+            PASSFIFO=$(echo "${pid_fifo}" | cut -d' ' -f2-)
         done
 
         # Import CRYPTTAB_SOURCE from the askpass process.
@@ -147,14 +145,14 @@ clevisloop() {
             # If the device is not initialized, sliently skip it.
             luksmeta test -d "$CRYPTTAB_SOURCE" || continue
 
-            if $(luks1_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"); then
+            if luks1_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"; then
                 echo "Unlocked ${CRYPTTAB_SOURCE} with clevis"
             else
                 OLD_CRYPTTAB_SOURCE=""
                 sleep 5
             fi
         elif cryptsetup isLuks --type luks2 "$CRYPTTAB_SOURCE"; then
-            if $(luks2_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"); then
+            if luks2_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"; then
                 echo "Unlocked ${CRYPTTAB_SOURCE} with clevis"
             else
                 OLD_CRYPTTAB_SOURCE=""

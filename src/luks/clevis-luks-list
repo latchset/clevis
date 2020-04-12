@@ -1,0 +1,77 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017-2019 Red Hat, Inc.
+# Author: Javier Martinez Canillas <javierm@redhat.com>
+# Author: Sergio Correia <scorreia@redhat.com> - LUKS2 support.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. clevis-luks-common-functions
+
+SUMMARY="Lists pins bound to a LUKSv1 or LUKSv2 device"
+
+function usage() {
+    echo >&2
+    echo "Usage: clevis luks list -d DEV [-s SLT]" >&2
+    echo >&2
+    echo "$SUMMARY": >&2
+    echo >&2
+    echo "  -d DEV  The LUKS device to list bound pins" >&2
+    echo >&2
+    echo "  -s SLOT The slot number to list" >&2
+    echo >&2
+    exit 1
+}
+
+if [ ${#} -eq 1 ] && [ "${1}" = "--summary" ]; then
+    echo "${SUMMARY}"
+    exit 0
+fi
+
+while getopts ":d:s:" o; do
+    case "$o" in
+    d) DEV=${OPTARG};;
+    s) SLT=${OPTARG};;
+    *) usage;;
+    esac
+done
+
+if [ -z "${DEV}" ]; then
+    echo "Did not specify a device!" >&2
+    usage
+fi
+
+if cryptsetup isLuks --type luks1 "${DEV}"; then
+    if ! luksmeta test -d "${DEV}" 2>/dev/null; then
+        echo "The ${DEV} device is not valid!" >&2
+        exit 1
+    fi
+fi
+
+if [ -n "${SLT}" ]; then
+    clevis_luks_read_pins_from_slot "${DEV}" "${SLT}"
+else
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}"); then
+        echo "No used slots detected for device ${DEV}!" >&2
+        exit 1
+    fi
+
+    for s in ${used_slots}; do
+        if ! clevis_luks_read_pins_from_slot "${DEV}" "${s}"; then
+            continue
+        fi
+    done
+fi

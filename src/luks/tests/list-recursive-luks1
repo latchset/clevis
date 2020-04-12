@@ -1,0 +1,85 @@
+#!/bin/bash -ex
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+ADV="${TMP}/adv.jws"
+create_tang_adv "${ADV}"
+PIN="sss"
+CFG=$(printf '
+{
+  "t": 1,
+  "pins": {
+    "sss": {
+      "t": 1,
+      "pins": {
+        "sss": {
+          "t": 1,
+          "pins": {
+            "tang": [
+              {
+                "url": "ADDR","adv": "%s"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+' "${ADV}")
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
+new_device "luks1" "${DEV}"
+
+if ! clevis luks bind -f -d "${DEV}" "${PIN}" "${CFG}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password."
+fi
+
+SLT=1
+if ! read -r slot pin cfg < <(clevis luks list -d "${DEV}" -s "${SLT}"); then
+    error "${TEST}: clevis luks list is expected to succeed for device(${DEV}) and slot (${SLT})"
+fi
+
+if [[ "${slot}" != "${SLT}:" ]]; then
+    error "${TEST}: slot (${slot}) is expected to be ${SLT}"
+fi
+
+if [[ "${pin}" != "${PIN}" ]]; then
+    error "${TEST}: pin (${pin}) is expected to be '${PIN}'"
+fi
+
+to_remove_from_cfg=$(printf ',"adv": "%s"' "${ADV}")
+cfg_for_cmp=${cfg//"${to_remove_from_cfg}"/}
+if ! pin_cfg_equal "${cfg}" "${cfg_for_cmp}"; then
+    error "${TEST}: config obtained from clevis luks list (${cfg}) is expected to match the one used to bind the test (${cfg_for_cmp})"
+fi

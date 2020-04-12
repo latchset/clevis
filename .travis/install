@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-COMMON="meson curl git make file bzip2 jose tang cryptsetup ${CC}"
+COMMON="meson curl git make file bzip2 jose tang cryptsetup jq ${CC}"
 
 case "${DISTRO}" in
 debian:*|ubuntu:*)
@@ -36,7 +36,7 @@ debian:*|ubuntu:*)
 fedora:*)
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
-    dnf -y install dnf-utils
+    dnf -y install dnf-utils jq
     dnf -y builddep clevis
     ;;
 

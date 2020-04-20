@@ -5,7 +5,7 @@ CLEVIS-LUKS-UNLOCK(1)
 
 == NAME
 
-clevis-luks-unlock - Unlocks a LUKSv1 device bound with a Clevis policy
+clevis-luks-unlock - Unlocks a LUKS device bound with a Clevis policy
 
 == SYNOPSIS
 
@@ -13,7 +13,7 @@ clevis-luks-unlock - Unlocks a LUKSv1 device bound with a Clevis policy
 
 == OVERVIEW
 
-The *clevis luks unlock* command unlocks a LUKSv1 device using its already
+The *clevis luks unlock* command unlocks a LUKS device using its already
 provisioned Clevis policy. For example:
 
     $ clevis luks unlock -d /dev/sda

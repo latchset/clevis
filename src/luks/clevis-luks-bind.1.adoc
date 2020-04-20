@@ -5,7 +5,7 @@ CLEVIS-LUKS-BIND(1)
 
 == NAME
 
-clevis-luks-bind - Bind a LUKSv1 device using the specified policy
+clevis-luks-bind - Bind a LUKS device using the specified policy
 
 == SYNOPSIS
 
@@ -13,7 +13,7 @@ clevis-luks-bind - Bind a LUKSv1 device using the specified policy
 
 == OVERVIEW
 
-The *clevis luks bind* command binds a LUKSv1 device using the specified
+The *clevis luks bind* command binds a LUKS device using the specified
 policy. This is accomplished with a simple command:
 
     $ clevis luks bind -d /dev/sda tang '{"url":...}'
@@ -22,7 +22,7 @@ This command performs four steps:
 
 1. Creates a new key with the same entropy as the LUKS master key.
 2. Encrypts the new key with Clevis.
-3. Stores the Clevis JWE in the LUKS header with LUKSMeta.
+3. Stores the Clevis JWE in the LUKS header.
 4. Enables the new key for use with LUKS.
 
 This disk can now be unlocked with your existing password as well as with

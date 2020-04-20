@@ -297,12 +297,11 @@ usage:
     fprintf(stderr, "\n");
     fprintf(stderr, "  pins: <object>   Pins used for encrypting fragments (REQUIRED)\n");
     fprintf(stderr, "\n");
-    fprintf(stderr, "Here is an example configuration for two of three servers:\n");
+    fprintf(stderr, "Here is an example configuration for one of two servers:\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "{\n");
-    fprintf(stderr, "  \"t\": 2,\n");
+    fprintf(stderr, "  \"t\": 1,\n");
     fprintf(stderr, "  \"pins\": {\n");
-    fprintf(stderr, "    \"http\": { \"url\": \"https://example.com/escrow/foo\" },\n");
     fprintf(stderr, "    \"tang\": [\n");
     fprintf(stderr, "      { \"url\": \"http://example.com/tang1\" },\n");
     fprintf(stderr, "      { \"url\": \"http://example.com/tang2\" }\n");

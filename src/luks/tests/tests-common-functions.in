@@ -104,4 +104,12 @@ new_device_keyfile() {
         "${DEV}" "${KEYFILE}"
 }
 
+pin_cfg_equal() {
+    local cfg1="${1}"
+    local cfg2="${1}"
+
+    diff <(jq -S . < <(echo -n "${cfg1}")) \
+         <(jq -S . < <(echo -n "${cfg2}"))
+}
+
 export DEFAULT_PASS='just-some-test-password-here'

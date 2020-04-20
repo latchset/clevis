@@ -1,0 +1,283 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# valid_slot() will check whether a given slot is possibly valid, i.e., if it
+# is a numeric value within the specified range.
+valid_slot() {
+    local SLT="${1}"
+    local MAX_SLOTS="${2}"
+    case "${SLT}" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+        *)
+            # We got an integer, now let's make sure it is within the
+            # supported range.
+            if [ "${SLT}" -ge "${MAX_SLOTS}" ]; then
+                return 1
+            fi
+            ;;
+    esac
+}
+
+# clevis_luks_read_slot() will read a particular slot of a given device, which
+# should be either LUKS1 or LUKS2. Returns 1 in case of failure; 0 in case of
+# success.
+clevis_luks_read_slot() {
+    local DEV="${1}"
+    local SLT="${2}"
+
+    if [ -z "${DEV}" ] || [ -z "${SLT}" ]; then
+        echo "Need both a device and a slot as arguments." >&2
+        return 1
+    fi
+
+    local DATA_CODED=''
+    local MAX_LUKS1_SLOTS=8
+    local MAX_LUKS2_SLOTS=32
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        if ! valid_slot "${SLT}" "${MAX_LUKS1_SLOTS}"; then
+            echo "Please, provide a valid key slot number; 0-7 for LUKS1" >&2
+            return 1
+        fi
+
+        if ! luksmeta test -d "${DEV}"; then
+            echo "The ${DEV} device is not valid!" >&2
+            return 1
+        fi
+
+        local CLEVIS_UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
+        local uuid
+        # Pattern from luksmeta: active slot uuid.
+        read -r _ _ uuid <<< "$(luksmeta show -d "${DEV}" | grep "^${SLT} *")"
+
+        if [ "${uuid}" != ${CLEVIS_UUID}"" ]; then
+            echo "Not a clevis slot!" >&2
+            return 1
+        fi
+
+        if ! DATA_CODED="$(luksmeta load -d "${DEV}" -s "${SLT}")"; then
+            echo "Cannot load data from ${DEV} slot:${SLT}!" >&2
+            return 1
+        fi
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        if ! valid_slot "${SLT}" "${MAX_LUKS2_SLOTS}"; then
+            echo "Please, provide a valid key slot number; 0-31 for LUKS2" >&2
+            return 1
+        fi
+
+        local token_id
+        token_id=$(cryptsetup luksDump "${DEV}" \
+                    | grep -E -B1 "^\s+Keyslot:\s+${SLT}$" \
+                    | head -n 1 | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
+        if [ -z "${token_id}" ]; then
+            echo "Cannot load data from ${DEV} slot:${SLT}. No token found!" >&2
+            return 1
+        fi
+
+        local token
+        token=$(cryptsetup token export --token-id "${token_id}" "${DEV}")
+        DATA_CODED=$(jose fmt -j- -Og jwe -o- <<< "${token}" \
+                     | jose jwe fmt -i- -c)
+
+        if [ -z "${DATA_CODED}" ]; then
+            echo "Cannot load data from ${DEV} slot:${SLT}!" >&2
+            return 1
+        fi
+    else
+        echo "${DEV} is not a supported LUKS device!" >&2
+        return 1
+    fi
+    echo "${DATA_CODED}"
+}
+
+# clevis_luks_used_slots() will return the list of used slots for a given LUKS
+# device.
+clevis_luks_used_slots() {
+    local DEV="${1}"
+
+    local slots
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        readarray -t slots < <(cryptsetup luksDump "${DEV}" \
+            | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        readarray -t slots < <(cryptsetup luksDump "${DEV}" \
+            | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
+    else
+        echo "${DEV} is not a supported LUKS device!" >&2
+        return 1
+    fi
+    echo "${slots[@]}"
+}
+
+# clevis_luks_decode_jwe() will decode a given JWE.
+clevis_luks_decode_jwe() {
+    local jwe="${1}"
+
+    local coded
+    if ! coded=$(jose jwe fmt -i- <<< "${jwe}"); then
+        return 1
+    fi
+
+    coded=$(jose fmt -j- -g protected -u- <<< "${coded}" | tr -d '"')
+    jose b64 dec -i- <<< "${coded}"
+}
+
+# clevis_luks_print_pin_config() will print the config of a given pin; i.e.
+# for tang it will display the associated url address, and for tpm2, the
+# properties in place, like the hash, for instance.
+clevis_luks_print_pin_config() {
+    local P="${1}"
+    local decoded="${2}"
+
+    local content
+    if ! content="$(jose fmt -j- -g clevis -g "${P}" -o- <<< "${decoded}")" \
+                    || [ -z "${content}" ]; then
+        return 1
+    fi
+
+    local pin=
+    case "${P}" in
+    tang)
+        local url
+        url="$(jose fmt -j- -g url -u- <<< "${content}")"
+        pin=$(printf '{"url":"%s"}' "${url}")
+        printf "tang '%s'" "${pin}"
+        ;;
+    tpm2)
+        # Valid properties for tpm2 pin are the following:
+        # hash, key, pcr_bank, pcr_ids, pcr_digest.
+        local key
+        local value
+        for key in 'hash' 'key' 'pcr_bank' 'pcr_ids' 'pcr_digest'; do
+            if value=$(jose fmt -j- -g "${key}" -u- <<< "${content}"); then
+                pin=$(printf '%s,"%s":"%s"' "${pin}" "${key}" "${value}")
+            fi
+        done
+        # Remove possible leading comma.
+        pin=${pin/#,/}
+        printf "tpm2 '{%s}'" "${pin}"
+        ;;
+    sss)
+        local threshold
+        threshold=$(jose fmt -j- -Og t -o- <<< "${content}")
+        clevis_luks_process_sss_pin "${content}" "${threshold}"
+        ;;
+    *)
+        printf "unknown pin '%s'" "${P}"
+        ;;
+    esac
+}
+
+# clevis_luks_decode_pin_config() will receive a JWE and extract a pin config
+# from it.
+clevis_luks_decode_pin_config() {
+    local jwe="${1}"
+
+    local decoded
+    if ! decoded=$(clevis_luks_decode_jwe "${jwe}"); then
+        return 1
+    fi
+
+    local P
+    if ! P=$(jose fmt -j- -Og clevis -g pin -u- <<< "${decoded}"); then
+        return 1
+    fi
+
+    clevis_luks_print_pin_config "${P}" "${decoded}"
+}
+
+# clevis_luks_join_sss_cfg() will receive a list of configurations for a given
+# pin and returns it as list, in the format PIN [cfg1, cfg2, ..., cfgN].
+clevis_luks_join_sss_cfg() {
+    local pin="${1}"
+    local cfg="${2}"
+    cfg=$(echo "${cfg}" | tr -d "'" | sed -e 's/^,//')
+    printf '"%s":[%s]' "${pin}" "${cfg}"
+}
+
+# clevis_luks_process_sss_pin() will receive a JWE with information on the sss
+# pin config, and also its associated threshold, and will extract the info.
+clevis_luks_process_sss_pin() {
+    local jwe="${1}"
+    local threshold="${2}"
+
+    local sss_tang
+    local sss_tpm2
+    local sss
+    local pin_cfg
+    local pin
+    local cfg
+
+    local coded
+    for coded in $(jose fmt -j- -Og jwe -Af- <<< "${jwe}"| tr -d '"'); do
+        if ! pin_cfg="$(clevis_luks_decode_pin_config "${coded}")"; then
+            continue
+        fi
+        read -r pin cfg <<< "${pin_cfg}"
+        case "${pin}" in
+        tang)
+            sss_tang="${sss_tang},${cfg}"
+            ;;
+        tpm2)
+            sss_tpm2="${sss_tpm2},${cfg}"
+            ;;
+        sss)
+            sss=$(echo "${cfg}" | tr -d "'")
+            ;;
+        esac
+    done
+
+    cfg=
+    if [ -n "${sss_tang}" ]; then
+        cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tpm2}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tpm2" "${sss_tpm2}")
+    fi
+
+    if [ -n "${sss}" ]; then
+        cfg=$(printf '%s,"sss":%s' "${cfg}" "${sss}")
+    fi
+
+    # Remove possible leading comma.
+    cfg=${cfg/#,/}
+    pin=$(printf '{"t":%d,"pins":{%s}}' "${threshold}" "${cfg}")
+    printf "sss '%s'" "${pin}"
+}
+
+# clevis_luks_read_pins_from_slot() will receive a given device and slot and
+# will then output its associated policy configuration.
+clevis_luks_read_pins_from_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+
+    local jwe
+    if ! jwe=$(clevis_luks_read_slot "${DEV}" "${SLOT}" 2>/dev/null); then
+        return 1
+    fi
+
+    local cfg
+    if ! cfg="$(clevis_luks_decode_pin_config "${jwe}")"; then
+        return 1
+    fi
+    printf "%s: %s\n" "${SLOT}" "${cfg}"
+}

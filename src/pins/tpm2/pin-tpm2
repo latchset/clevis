@@ -102,8 +102,10 @@ test_pcr_ids "${orig}" '{"key": "ecc"}' "" || exit 1
 # arrays and check if we get the expected pcr_ids.
 test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": "4,  16"}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": "4,16"}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": ["4,16"]}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
+test_pcr_ids "${orig}" '{"pcr_ids": [4,  16]}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
 ! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1

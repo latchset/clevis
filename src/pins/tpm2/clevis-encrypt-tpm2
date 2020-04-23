@@ -103,17 +103,21 @@ key="$(jose fmt -j- -Og key -u- <<< "$cfg")" || key="ecc"
 
 pcr_bank="$(jose fmt -j- -Og pcr_bank -u- <<< "$cfg")" || pcr_bank="sha1"
 
+# Trim the spaces from the config, so that we will not have issues parsing
+# the PCR IDs.
+pcr_cfg=${cfg//[[:space:]]/}
 # Issue #103: We support passing pcr_ids using both a single string, as in
-# "1,3", as well as an actual JSON array, such as ["1,"3"]. Let's handle both
+# "1,3", as well as an actual JSON array, such as ["1","3"]. Let's handle both
 # cases here.
-if jose fmt -j- -Og pcr_ids 2>/dev/null <<< "$cfg" \
-    && ! pcr_ids="$(jose fmt -j- -Og pcr_ids -u- 2>/dev/null <<< "$cfg")"; then
+if jose fmt -j- -Og pcr_ids 2>/dev/null <<< "${pcr_cfg}" \
+    && ! pcr_ids="$(jose fmt -j- -Og pcr_ids -u- 2>/dev/null \
+                    <<< "${pcr_cfg}")"; then
 
     # We failed to parse a string, so let's try to parse a JSON array instead.
-    if jose fmt -j- -Og pcr_ids -A 2>/dev/null <<< "${cfg}"; then
+    if jose fmt -j- -Og pcr_ids -A 2>/dev/null <<< "${pcr_cfg}"; then
         # OK, it is an array, so let's get the items and form a string.
         pcr_ids=
-        for pcr in $(jose fmt -j- -Og pcr_ids -Af- <<< "${cfg}" \
+        for pcr in $(jose fmt -j- -Og pcr_ids -Af- <<< "${pcr_cfg}" \
                      | tr -d '"'); do
             pcr_ids=$(printf '%s,%s' "${pcr_ids}" "${pcr}")
         done

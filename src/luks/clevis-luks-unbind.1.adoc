@@ -5,7 +5,7 @@ CLEVIS-LUKS-UNBIND(1)
 
 == NAME
 
-clevis-luks-unbind - Unbinds a pin bound to a LUKSv1 volume
+clevis-luks-unbind - Unbinds a pin bound to a LUKS volume
 
 == SYNOPSIS
 
@@ -13,7 +13,7 @@ clevis-luks-unbind - Unbinds a pin bound to a LUKSv1 volume
 
 == OVERVIEW
 
-The *clevis luks unbind* command unbinds a pin bound to a LUKSv1 volume.
+The *clevis luks unbind* command unbinds a pin bound to a LUKS volume.
 For example:
 
     $ clevis luks unbind -d /dev/sda -s 1
@@ -24,7 +24,8 @@ For example:
   The bound LUKS device
 
 * *-s* _SLT_ :
-  The LUKSMeta slot number for the pin to unbind
+  The slot number for the pin to unbind. When using LUKSv1, this is the
+  the LUKSmeta slot
 
 * *-f* :
   Do not ask for confirmation and wipe slot in batch-mode

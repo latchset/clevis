@@ -34,6 +34,7 @@ For example:
     3: tpm2 '{"hash":"sha256","key":"ecc","pcr_bank":"sha1","pcr_ids":"7"}'
 
 As we can see in the example above, */dev/sda1* has three slots bound each with a different pin.
+
 - Slot #1 is bound with the _sss_ pin, and uses also tang and tpm2 pins in its policy.
 - Slot #2 is bound using the _tang_ pin
 - Slot #3 is bound with the _tpm2_ pin

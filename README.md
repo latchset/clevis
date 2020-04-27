@@ -175,7 +175,7 @@ user intervention.
 
 #### Unlocker: Clevis command
 
-A LUKSv1 device bound to a Clevis policy can also be unlocked by using the clevis
+A LUKS device bound to a Clevis policy can also be unlocked by using the clevis
 luks unlock command.
 
 ```bash

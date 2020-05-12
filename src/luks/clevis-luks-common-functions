@@ -132,11 +132,7 @@ clevis_luks_decode_jwe() {
     local jwe="${1}"
 
     local coded
-    if ! coded=$(jose jwe fmt -i- <<< "${jwe}"); then
-        return 1
-    fi
-
-    coded=$(jose fmt -j- -g protected -u- <<< "${coded}" | tr -d '"')
+    read -r -d . coded <<< "${jwe}"
     jose b64 dec -i- <<< "${coded}"
 }
 
@@ -280,4 +276,39 @@ clevis_luks_read_pins_from_slot() {
         return 1
     fi
     printf "%s: %s\n" "${SLOT}" "${cfg}"
+}
+
+# clevis_luks_unlock_device() does the unlock of the device passed as
+# parameter and returns the decoded passphrase.
+clevis_luks_unlock_device() {
+    local DEV="${1}"
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local slt jwe passphrase
+    for slt in ${used_slots}; do
+        if ! jwe="$(clevis_luks_read_slot "${DEV}" "${slt}" 2>/dev/null)" \
+                   || [ -z "${jwe}" ]; then
+            continue
+        fi
+
+        if ! passphrase="$(clevis decrypt < <(echo -n "${jwe}"))" \
+                           || [ -z "${passphrase}" ]; then
+            continue
+        fi
+
+        if ! cryptsetup luksOpen --test-passphrase "${DEV}" \
+             --key-file <(echo -n "${passphrase}"); then
+            continue
+        fi
+        echo -n "${passphrase}"
+        return 0
+    done
+
+    return 1
 }

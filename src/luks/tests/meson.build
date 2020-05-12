@@ -1,6 +1,39 @@
 # We use jq for comparing the pin config in the clevis luks list tests.
 jq = find_program('jq', required: false)
 
+# We use systemd-socket-activate for running test tang servers.
+actv = find_program(
+  'systemd-socket-activate',
+  'systemd-activate',
+  join_paths('/', 'usr', 'lib', 'systemd', 'systemd-activate'),
+  required: false
+)
+
+kgen = find_program(
+  join_paths(libexecdir, 'tangd-keygen'),
+  join_paths(get_option('prefix'), get_option('libdir'), 'tangd-keygen'),
+  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-keygen'),
+  join_paths('/', 'usr', get_option('libdir'), 'tangd-keygen'),
+  join_paths('/', 'usr', get_option('libexecdir'), 'tangd-keygen'),
+  required: false
+)
+updt = find_program(
+  join_paths(libexecdir, 'tangd-update'),
+  join_paths(get_option('prefix'), get_option('libdir'), 'tangd-update'),
+  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-update'),
+  join_paths('/', 'usr', get_option('libdir'), 'tangd-update'),
+  join_paths('/', 'usr', get_option('libexecdir'), 'tangd-update'),
+  required: false
+)
+tang = find_program(
+  join_paths(libexecdir, 'tangd'),
+  join_paths(get_option('prefix'), get_option('libdir'), 'tangd'),
+  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd'),
+  join_paths('/', 'usr', get_option('libdir'), 'tangd'),
+  join_paths('/', 'usr', get_option('libexecdir'), 'tangd'),
+  required: false
+)
+
 common_functions = configure_file(input: 'tests-common-functions.in',
   output: 'tests-common-functions',
   configuration: luksmeta_data,
@@ -24,6 +57,15 @@ env.prepend('PATH',
   separator: ':'
 )
 
+has_tang = false
+if actv.found() and kgen.found() and updt.found() and tang.found()
+  has_tang = true
+  env.set('SD_ACTIVATE', actv.path())
+  env.set('TANGD_KEYGEN', kgen.path())
+  env.set('TANGD_UPDATE', updt.path())
+  env.set('TANGD', tang.path())
+endif
+
 test('bind-wrong-pass-luks1', find_program('bind-wrong-pass-luks1'), env: env)
 test('bind-luks1', find_program('bind-luks1'), env: env)
 test('unbind-unbound-slot-luks1', find_program('unbind-unbound-slot-luks1'), env: env)
@@ -42,6 +84,10 @@ else
   warning('Will not run "clevis luks list" tests due to missing jq dependency')
 endif
 
+if has_tang
+  test('unlock-tang-luks1', find_program('unlock-tang-luks1'), env: env, timeout: 90)
+endif
+
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.
 # Binding LUKS2 takes longer, so timeout is increased for a few tests.
@@ -55,5 +101,9 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('list-recursive-luks2', find_program('list-recursive-luks2'), env: env, timeout: 60)
     test('list-tang-luks2', find_program('list-tang-luks2'), env: env, timeout: 60)
     test('list-sss-tang-luks2', find_program('list-sss-tang-luks2'), env: env, timeout: 60)
+  endif
+
+  if has_tang
+    test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)
   endif
 endif

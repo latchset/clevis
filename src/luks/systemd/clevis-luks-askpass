@@ -19,7 +19,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
+. clevis-luks-common-functions
 
 shopt -s nullglob
 
@@ -28,87 +28,38 @@ while getopts ":lp:" o; do
     case "$o" in
     l) loop=true;;
     p) path="$OPTARG";;
+    *) ;;
     esac
 done
-
-luks1_decrypt() {
-    luksmeta load "$@" \
-        | clevis decrypt
-
-    local rc
-    for rc in "${PIPESTATUS[@]}"; do
-        [ $rc -eq 0 ] || return $rc
-    done
-    return 0
-}
-
-luks2_jwe() {
-    # jose jwe fmt -c outputs extra \n, so clean it up
-    cryptsetup token export "$@" \
-        | jose fmt -j- -Og jwe -o- \
-        | jose jwe fmt -i- -c \
-        | tr -d '\n'
-
-    local rc
-    for rc in "${PIPESTATUS[@]}"; do
-        [ $rc -eq 0 ] || return $rc
-    done
-    return 0
-}
 
 while true; do
     todo=0
 
     for question in "$path"/ask.*; do
-        metadata=false
         unlocked=false
         d=
         s=
 
-        while read line; do
+        while read -r line; do
             case "$line" in
                 Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
                 Socket=*) s="${line##Socket=}";;
             esac
         done < "$question"
 
-        [ "$d" ] && [ "$s" ] || continue
+        [ -b "${d}" ] || continue
+        [ -S "${s}" ] || continue
 
-        if cryptsetup isLuks --type luks1 "$d"; then
-            # If the device is not initialized, sliently skip it.
-            luksmeta test -d "$d" || continue
-
-            while read -r slot state uuid; do
-                [ "$state" == "active" ] || continue
-                [ "$uuid" == "$UUID" ] || continue
-                metadata=true
-
-                if pt="$(luks1_decrypt -d "$d" -s "$slot" -u "$UUID")"; then
-                    echo -n "+$pt" | ncat -U -u --send-only "$s"
-                    unlocked=true
-                    break
-                fi
-            done < <(luksmeta show -d "$d")
-        elif cryptsetup isLuks --type luks2 "$d"; then
-            while read -r id; do
-                jwe="$(luks2_jwe --token-id "$id" "$d")" \
-                    || continue
-                metadata=true
-
-                if pt="$(echo -n "$jwe" | clevis decrypt)"; then
-                    echo -n "+$pt" | ncat -U -u --send-only "$s"
-                    unlocked=true
-                    break
-                fi
-            done < <(cryptsetup luksDump "$d" | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
+        if pt="$(clevis_luks_unlock_device "${d}")"; then
+            echo -n "+${pt}" | ncat -U -u --send-only "${s}"
+            unlocked=true
         fi
 
-        [ "$metadata" == true ] || continue
         [ "$unlocked" == true ] && continue
         ((todo++))
     done
 
-    if [ $todo -eq 0 ] || [ "$loop" != true ]; then
+    if [ "$todo" -eq 0 ] || [ "$loop" != true ]; then
         break;
     fi
 

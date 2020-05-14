@@ -24,11 +24,10 @@ depends() {
 }
 
 install() {
-    inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
-    inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
-
     inst_multiple \
-	/etc/services \
+        "$systemdsystemunitdir/clevis-luks-askpass.path" \
+        "$systemdsystemunitdir/clevis-luks-askpass.service" \
+        /etc/services \
         @libexecdir@/clevis-luks-askpass \
         clevis-decrypt \
         cryptsetup \
@@ -38,5 +37,5 @@ install() {
         jose \
         ncat
 
-    dracut_need_initqueue
+    systemctl -q --root "$initdir" add-wants sysinit.target clevis-luks-askpass.path
 }

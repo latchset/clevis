@@ -1,6 +1,8 @@
 [Unit]
 Description=Clevis LUKS systemd-ask-password Responder
-Requires=network-online.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=systemd-ask-password-console.service systemd-ask-password-plymouth.service shutdown.target
 After=network-online.target
 
 [Service]

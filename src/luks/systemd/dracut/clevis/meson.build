@@ -9,13 +9,6 @@ if dracut.found()
     install_dir: dracutdir,
     configuration: data,
   )
-
-  configure_file(
-    input: 'clevis-hook.sh.in',
-    output: 'clevis-hook.sh',
-    install_dir: dracutdir,
-    configuration: data,
-  )
 else
   warning('Will not install dracut module due to missing dependencies!')
 endif

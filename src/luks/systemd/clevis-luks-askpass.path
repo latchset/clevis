@@ -1,7 +1,8 @@
 [Unit]
 Description=Clevis systemd-ask-password Watcher
-Before=remote-fs-pre.target
-Wants=remote-fs-pre.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=basic.target shutdown.target remote-fs-pre.target
 
 [Path]
 PathChanged=/run/systemd/ask-password

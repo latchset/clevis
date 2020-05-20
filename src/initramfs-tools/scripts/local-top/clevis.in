@@ -197,7 +197,11 @@ clevis_all_netbootable_devices() {
         # attribute on it)
         device=$(basename "$device")
         ip -o link show "$device" | grep -q -w master && continue
-        DEVICE="$DEVICE $device"
+        if [ -z "$DEVICE" ]; then
+            DEVICE="$device"
+        else
+            DEVICE="$DEVICE $device"
+        fi
     done
     echo "$DEVICE"
 }
@@ -217,7 +221,14 @@ eth_check() {
 if eth_check; then
     # Make sure networking is set up: if booting via nfs, it already is
     # Doesn't seem to work when added to clevisloop for some reason
-    [ "$boot" = nfs ] || configure_networking
+    if [ "$boot" != nfs ]; then
+        clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
+        if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
+            echo ""
+            echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+        fi
+        configure_networking
+    fi
 fi
 
 clevisloop &

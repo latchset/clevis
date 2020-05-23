@@ -1,0 +1,99 @@
+#!/bin/bash
+
+set -eu
+
+# Copyright (c) 2020 Christoph Biedl
+# Author: Christoph Biedl <debian.axhn@manchmal.in-ulm.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+on_exit() {
+    [ "${TMP:-}" ] || return 0
+    [ -e "$TMP" ] || return 0
+    if mountpoint -q "$TMP" ; then
+        if ! umount "$TMP" ; then
+            echo "Failed to umount $device" >&2
+            echo "You need to clean up: $TMP" >&2
+            return 1
+        fi
+    fi
+    # --one-file-system is not available in busybox rm
+    rm -rf "$TMP"
+}
+
+[ $# -eq 1 ] && [ "${1:-}" = "--summary" ] && exit 2
+
+if [ -t 0 ] ; then
+    echo >&2
+    echo 'Usage: clevis decrypt medium < JWE > PLAINTEXT' >&2
+    echo >&2
+    exit 1
+fi
+
+read -d . hdr64
+if ! hdr="$(jose fmt --quote="$hdr64" --string --b64load --object --output=-)" ; then
+    echo 'JWE header corrupt' >&2
+    exit 1
+fi
+
+if [ "$(jose fmt --json="$hdr" --get clevis --get pin --unquote=-)" != 'medium' ] ; then
+    echo 'JWE pin mismatch!' >&2
+    exit 1
+fi
+
+if ! device="$(jose fmt --json="$hdr" --get clevis --get medium --get device --unquote=-)" ; then
+    echo 'JWE missing 'clevis.medium.device' header parameter!' >&2
+    exit 1
+fi
+if ! file="$(jose fmt --json="$hdr" --get clevis --get medium --get file --unquote=-)" ; then
+    echo 'JWE missing 'clevis.medium.file' header parameter!' >&2
+    exit 1
+fi
+if ! fstype="$(jose fmt --json="$hdr" --get clevis --get medium --get fstype --unquote=-)" ; then
+    echo 'JWE missing 'clevis.medium.fstype' header parameter!' >&2
+    exit 1
+fi
+if ! options="$(jose fmt --json="$hdr" --get clevis --get medium --get options --unquote=-)" ; then
+    echo 'JWE missing 'clevis.medium.options' header parameter!' >&2
+    exit 1
+fi
+
+if [ "$options" ] ; then
+    options="ro,$options"
+else
+    options='ro'
+fi
+
+TMP="$(mktemp -d)"
+trap 'on_exit' EXIT
+
+if ! mount -t "$fstype" -o "$options" "$device" "$TMP" ; then
+    echo "Failed to mount $device" >&2
+    exit 1
+fi
+if [ ! -f "$TMP/$file" ] ; then
+    echo "The key file $file does not exist on $device" >&2
+    exit 1
+fi
+jwk="$(cat "$TMP/$file")"
+if ! umount "$TMP" ; then
+    echo "Failed to umount $device" >&2
+    exit 1
+fi
+
+# clean up tempdir
+on_exit
+
+( printf '%s' "$jwk$hdr64." ; cat ) | exec jose jwe dec --key=- --input=-

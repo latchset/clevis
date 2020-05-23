@@ -1,0 +1,67 @@
+#!/bin/sh
+
+set -ex
+
+# Copyright (c) 2020 Christoph Biedl
+# Author: Christoph Biedl <debian.axhn@manchmal.in-ulm.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+if [ $(id -u) != 0 ]; then
+    echo 'WARNING: You must be root to run this test; test skipped.' >&2
+    exit 77
+fi
+
+on_exit() {
+    [ "${TMP:-}" ] || return 0
+    if mountpoint -q "$MP" ; then
+        if ! umount "$MP" ; then
+            echo "Failed to umount $device" >&2
+            echo "You need to clean up: $TMP" >&2
+            return 1
+        fi
+    fi
+    if [ "${device:-}" ] ; then
+        losetup -d "$device"
+    fi
+    rm --one-file-system -rf "$TMP"
+}
+
+TMP="$(mktemp -d)"
+trap 'on_exit' EXIT
+
+mp="$TMP/mount"
+image="$TMP/image"
+
+fallocate --length=1M "$image"
+device="$(losetup --find --show "$image")"
+mkfs.ext4 -L key-medium -O ^has_journal "$device"
+
+cfg="$(printf '{"device":"%s","file":"keyfile"}' "$device")"
+inp='hi'
+enc="$(printf '%s' "$inp" | clevis encrypt medium "$cfg")"
+dec="$(printf '%s' "$enc" | clevis decrypt)"
+test "$dec" = "$inp"
+
+# Use UUID instead of device name
+blkid="$TMP/blkid"
+blkid -o export "$device" >"$blkid"
+. "$blkid"
+
+cfg="$(printf '{"device":"%s","file":"keyfile2"}' "UUID=$UUID")"
+inp='hi'
+enc="$(printf '%s' "$inp" | clevis encrypt medium "$cfg")"
+dec="$(printf '%s' "$enc" | clevis decrypt)"
+test "$dec" = "$inp"

@@ -1,0 +1,40 @@
+#%# Of course you should provide some test
+#%#
+#!/bin/sh
+
+#%# Maximum verbosity is desired
+set -ex
+
+# Copyright (c) @year@ @name@
+# Author: @name@ <@email@>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+#%# A simple test will encrypt a text, decrypt, and compare.
+#%# Some work might be necessary to set up a test bed.
+#%#
+#%# Feel free to peek into other tests to get an idea what can be done.
+#%#
+#!# Your test might require root privileges but your script might
+#!# not have them. So probe, and exit mit the magical code 77 to skip
+#!# that test instead of failing.
+
+#%# Create your configuration
+cfg="$(printf '{"@mand1@":"%s","@mand2@":"%s"}' "@@" "@@")"
+#%# The input
+inp='hi'
+enc="$(printf '%s' "$inp" | clevis encrypt @pin@ "$cfg")"
+dec="$(printf '%s' "$enc" | clevis decrypt)"
+test "$dec" = "$inp"

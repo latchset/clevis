@@ -22,6 +22,7 @@ following sections describe them for the supported platforms.
 * [tang](https://github.com/latchset/tang)
 * [curl](https://github.com/curl/curl)
 * [tpm2-tools](https://github.com/tpm2-software/tpm2-tools)
+* [ncat](https://nmap.org/ncat/) (for clevis-luks-askpass)
 
 ### Fedora
 

@@ -330,6 +330,11 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
             }
         }
 
+        if (initgroups(CLEVIS_USER, gid) != 0) {
+            perror("initgroups");
+            exit(EXIT_FAILURE);
+        }
+
         if (setgid(gid) != 0) {
             perror("setgid");
             exit(EXIT_FAILURE);

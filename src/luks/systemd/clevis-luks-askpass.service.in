@@ -1,5 +1,5 @@
 [Unit]
-Description=Clevis LUKS systemd-ask-password Responder
+Description=Forward Password Requests to Clevis
 Documentation=man:clevis-luks-unlockers(7)
 DefaultDependencies=no
 

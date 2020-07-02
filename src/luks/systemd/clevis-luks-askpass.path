@@ -1,5 +1,5 @@
 [Unit]
-Description=Clevis systemd-ask-password Watcher
+Description=Forward Password Requests to Clevis Directory Watch
 Documentation=man:clevis-luks-unlockers(7)
 DefaultDependencies=no
 Before=cryptsetup-pre.target

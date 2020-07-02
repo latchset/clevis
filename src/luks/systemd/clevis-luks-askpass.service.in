@@ -1,7 +1,6 @@
 [Unit]
 Description=Clevis LUKS systemd-ask-password Responder
-Requires=network-online.target
-After=network-online.target
+DefaultDependencies=no
 
 [Service]
 Type=oneshot

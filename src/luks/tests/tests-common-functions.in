@@ -105,11 +105,20 @@ new_device_keyfile() {
 }
 
 pin_cfg_equal() {
-    local cfg1="${1}"
-    local cfg2="${1}"
+    # Let's remove the single quotes from the pin configuration.
+    local cfg1="${1//\'/}"
+    local cfg2="${2//\'/}"
 
-    diff <(jq -S . < <(echo -n "${cfg1}")) \
-         <(jq -S . < <(echo -n "${cfg2}"))
+    # Now we sort and present them in compact form.
+    local sorted_cfg1 sorted_cfg2
+    sorted_cfg1="$(jq --compact-output --sort-keys . < <(echo -n "${cfg1}"))"
+    sorted_cfg2="$(jq --compact-output --sort-keys . < <(echo -n "${cfg2}"))"
+
+    # And we finally compare.
+    if [ "${sorted_cfg1}" = "${sorted_cfg2}" ]; then
+        return 0
+    fi
+    return 1
 }
 
 export DEFAULT_PASS='just-some-test-password-here'

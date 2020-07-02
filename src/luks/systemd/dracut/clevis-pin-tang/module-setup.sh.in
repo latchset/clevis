@@ -23,13 +23,7 @@ depends() {
     return 0
 }
 
-cmdline() {
-    echo "rd.neednet=1"
-}
-
 install() {
-    cmdline > "${initdir}/etc/cmdline.d/99clevis-pin-tang.conf"
-
     inst_multiple \
 	clevis-decrypt-tang \
 	curl

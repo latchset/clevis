@@ -42,6 +42,7 @@ kill "$pid"
 
 for iface in /sys/class/net/*; do
     if [ -e "$iface" ]; then
+        iface=$(basename "$iface")
         ip link  set   dev "$iface" down
         ip addr  flush dev "$iface"
         ip route flush dev "$iface"

@@ -3,7 +3,7 @@
 # Clevis
 
 ## Welcome to Clevis!
-Clevis is a plugable framework for automated decryption. It can be used to
+Clevis is a pluggable framework for automated decryption. It can be used to
 provide automated decryption of data or even automated unlocking of LUKS
 volumes.
 
@@ -54,10 +54,10 @@ parameter needed in this case is the URL of the Tang server. During the
 encryption process, the Tang pin requests the key advertisement from the
 server and asks you to trust the keys. This works similarly to SSH.
 
-Alternatively, you can manually load the advertisment using the `adv`
+Alternatively, you can manually load the advertisement using the `adv`
 parameter. This parameter takes either a string referencing the file where the
-advertisement is stored, or the JSON contents of the advertisment itself. When
-the advertisment is specified manually like this, Clevis presumes that the
+advertisement is stored, or the JSON contents of the advertisement itself. When
+the advertisement is specified manually like this, Clevis presumes that the
 advertisement is trusted.
 
 #### PIN: TPM2
@@ -170,7 +170,7 @@ desktop session. The unlocker should be started automatically.
 This unlocker works almost exactly the same as the Dracut unlocker. If you
 insert a removable storage device that has been bound with Clevis, we will
 attempt to unlock it automatically in parallel with a desktop password prompt.
-If automatic unlocking succeeds, the password prompt will be dissmissed without
+If automatic unlocking succeeds, the password prompt will be dismissed without
 user intervention.
 
 #### Unlocker: Clevis command

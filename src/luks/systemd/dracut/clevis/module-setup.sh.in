@@ -28,7 +28,7 @@ install() {
     inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
 
     inst_multiple \
-	/etc/services \
+        /etc/services \
         @libexecdir@/clevis-luks-askpass \
         clevis-luks-common-functions \
         head grep sed \

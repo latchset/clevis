@@ -1,0 +1,113 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+on_exit() {
+    [ ! -d "${TMP}" ] && return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'on_exit' ERR
+
+TMP="$(mktemp -d)"
+
+port=$(get_random_port)
+tang_run "${TMP}" "${port}" &
+tang_wait_until_ready "${port}"
+
+url="http://${TANG_HOST}:${port}"
+cfg=$(printf '{"url":"%s"}' "$url")
+
+test_tang() {
+    local url="${1}"
+    local cfg data pt
+    cfg=$(printf '{"url":"%s"}' "$url")
+
+    for data in "foo" "bar" "foo bar" "some-password-here"; do
+        if ! pt="$(echo "${data}" | clevis encrypt tang "${cfg}" -y \
+                   | clevis decrypt)"; then
+            error "${TEST}: tang - encrypt should succeed."
+        fi
+        if ["${pt}" != "${data}" ]; then
+            error "${TEST}: tang - pt(${pt}) != data("${data}")."
+        fi
+    done
+}
+
+test_sss() {
+    local url="${1}"
+    local sss1 sss2 data pt
+    sss1=$(printf '{"t":1, "pins": {"tang": [{"url": "%s"}]}}' "${url}")
+    sss2=$(printf '{"t":2, "pins": {"tang": [{"url": "%s"}, {"url": "%s"}]}}' \
+           "${url}" "${url}")
+
+    for data in "foo" "bar" "foo bar" "some-password-here"; do
+        if ! pt="$(echo "${data}" | clevis encrypt sss "${sss1}" -y \
+                   | clevis decrypt)"; then
+            error "${TEST}: sss1 - encrypt should succeed."
+        fi
+        if ["${pt}" != "${data}" ]; then
+            error "${TEST}: sss1 - pt(${pt}) != data("${data}")."
+        fi
+
+        if ! pt="$(echo "${data}" | clevis encrypt sss "${sss2}" -y \
+                   | clevis decrypt)"; then
+            error "${TEST}: sss2 - encrypt should succeed."
+        fi
+        if ["${pt}" != "${data}" ]; then
+            error "${TEST}: sss2 - pt(${pt}) != data("${data}")."
+        fi
+    done
+}
+
+test_tang "${url}"
+test_sss "${url}"
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+new_device "luks1" "${DEV}"
+
+# tang.
+if ! clevis luks bind -y -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded (tang - $DEV)."
+fi
+
+if ! clevis_luks_unlock_device "${DEV}"; then
+    error "${TEST}: we were unable to unlock ${DEV} (tang)."
+fi
+
+# sss.
+new_device "luks1" "${DEV}"
+
+sss=$(printf '{"t":2, "pins": {"tang": [{"url": "%s"}, {"url": "%s"}]}}' \
+             "${url}" "${url}")
+
+if ! clevis luks bind -y -d "${DEV}" sss "${sss}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded (sss - $DEV)."
+fi
+
+if ! clevis_luks_unlock_device "${DEV}"; then
+    error "${TEST}: we were unable to unlock ${DEV} (sss)."
+fi

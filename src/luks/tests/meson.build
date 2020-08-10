@@ -87,6 +87,7 @@ endif
 
 if has_tang
   test('unlock-tang-luks1', find_program('unlock-tang-luks1'), env: env, timeout: 90)
+  test('assume-yes', find_program('assume-yes'), env: env, timeout: 60)
 endif
 
 # LUKS2 tests go here, and they get included if we get support for it, based
@@ -106,5 +107,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
 
   if has_tang
     test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)
+    test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 60)
   endif
+
 endif

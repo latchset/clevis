@@ -31,13 +31,15 @@ function luks2_supported() {
 function usage() {
     exec >&2
     echo
-    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] -d DEV PIN CFG"
+    echo "Usage: clevis luks bind [-y] [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] -d DEV PIN CFG"
     echo
     echo "$SUMMARY":
     echo
     echo "  -f           Do not prompt for LUKSMeta initialization"
     echo
     echo "  -d DEV       The LUKS device on which to perform binding"
+    echo
+    echo "  -y           Automatically answer yes for all questions"
     echo
     echo "  -s SLT       The LUKS slot to use"
     echo
@@ -55,13 +57,16 @@ if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
 fi
 
 FRC=()
-while getopts ":hfd:s:k:t:" o; do
+YES=()
+while getopts ":hfyd:s:k:t:" o; do
     case "$o" in
     f) FRC+=(-f);;
     d) DEV="$OPTARG";;
     s) SLT="$OPTARG";;
     k) KEY="$OPTARG";;
     t) TOKEN_ID="$OPTARG";;
+    y) FRC+=(-f)
+       YES+=(-y);;
     *) usage;;
     esac
 done
@@ -144,7 +149,7 @@ cryptsetup luksDump "$DEV" \
 )")"
 
 # Encrypt the new key
-jwe="$(echo -n "$key" | clevis encrypt "$PIN" "$CFG")"
+jwe="$(echo -n "$key" | clevis encrypt "$PIN" "$CFG" "${YES}")"
 
 # If necessary, initialize the LUKS volume
 if [ "$luks_type" == "luks1" ] && ! luksmeta test -d "$DEV"; then

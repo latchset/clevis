@@ -28,9 +28,13 @@ fi
 if [ -t 0 ]; then
     exec >&2
     echo
-    echo "Usage: clevis encrypt tang CONFIG < PLAINTEXT > JWE"
+    echo "Usage: clevis encrypt tang CONFIG [-y] < PLAINTEXT > JWE"
     echo
     echo "$SUMMARY"
+    echo
+    echo "  -y              Use this option for skipping the advertisement"
+    echo "                  trust check. This can be useful in automated"
+    echo "                  deployments"
     echo
     echo "This command uses the following configuration properties:"
     echo
@@ -59,6 +63,9 @@ if ! cfg="$(jose fmt -j- -Oo- <<< "$1" 2>/dev/null)"; then
     echo "Configuration is malformed!" >&2
     exit 1
 fi
+
+trust=
+[ -n "${2}" ] && [ "${2}" == "-y" ] && trust=yes
 
 if ! url="$(jose fmt -j- -Og url -u- <<< "$cfg")"; then
     echo "Missing the required 'url' property!" >&2
@@ -100,18 +107,20 @@ if ! jose jws ver -i "$jws" -k- -a <<< "$ver"; then
 fi
 
 ### Check advertisement trust
-if [ -z "$thp" ]; then
-    echo "The advertisement contains the following signing keys:" >&2
-    echo >&2
-    jose jwk thp -i- <<< "$ver" >&2
-    echo >&2
-    read -r -p "Do you wish to trust these keys? [ynYN] " ans < /dev/tty
-    [[ "$ans" =~ ^[yY]$ ]] || exit 1
+if [ -z "${trust}" ]; then
+    if [ -z "$thp" ]; then
+        echo "The advertisement contains the following signing keys:" >&2
+        echo >&2
+        jose jwk thp -i- <<< "$ver" >&2
+        echo >&2
+        read -r -p "Do you wish to trust these keys? [ynYN] " ans < /dev/tty
+        [[ "$ans" =~ ^[yY]$ ]] || exit 1
 
-elif [ "$thp" != "any" ] && \
-    ! jose jwk thp -i- -f "$thp" -o /dev/null <<< "$ver"; then
-    echo "Trusted JWK '$thp' did not sign the advertisement!" >&2
-    exit 1
+    elif [ "$thp" != "any" ] && \
+        ! jose jwk thp -i- -f "$thp" -o /dev/null <<< "$ver"; then
+        echo "Trusted JWK '$thp' did not sign the advertisement!" >&2
+        exit 1
+    fi
 fi
 
 ### Perform encryption

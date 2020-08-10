@@ -86,9 +86,9 @@ npins(json_t *pins)
 }
 
 static json_t *
-encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
+encrypt_frag(json_t *sss, const char *pin, const json_t *cfg, int assume_yes)
 {
-    char *args[] = { "clevis", "encrypt", (char *) pin, NULL, NULL };
+    char *args[] = { "clevis", "encrypt", (char *) pin, NULL, NULL, NULL };
     json_auto_t *jwe = json_string("");
     str_auto_t *str = NULL;
     uint8_t *pnt = NULL;
@@ -100,6 +100,10 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
     str = args[3] = json_dumps(cfg, JSON_SORT_KEYS | JSON_COMPACT);
     if (!str)
         return NULL;
+
+    if (assume_yes) {
+        args[4] = "-y";
+    }
 
     pnt = sss_point(sss, &pntl);
     if (!pnt)
@@ -141,7 +145,7 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
 }
 
 static json_t *
-encrypt_frags(json_int_t t, json_t *pins)
+encrypt_frags(json_int_t t, json_t *pins, int assume_yes)
 {
     const char *pname = NULL;
     json_auto_t *sss = NULL;
@@ -176,7 +180,7 @@ encrypt_frags(json_int_t t, json_t *pins)
         json_array_foreach(pcfgs, i, pcfg) {
             json_auto_t *jwe = NULL;
 
-            jwe = encrypt_frag(sss, pname, pcfg);
+            jwe = encrypt_frag(sss, pname, pcfg, assume_yes);
             if (!jwe)
                 return NULL;
 
@@ -205,14 +209,24 @@ main(int argc, char *argv[])
     const char *iv = NULL;
     json_t *pins = NULL;
     json_int_t t = 1;
+    int assume_yes = 0;
 
     if (argc == 2 && strcmp(argv[1], "--summary") == 0) {
         fprintf(stdout, "%s\n", SUMMARY);
         return EXIT_SUCCESS;
     }
 
-    if (isatty(STDIN_FILENO) || argc != 2)
-        goto usage;
+    if (isatty(STDIN_FILENO) || argc != 2) {
+        if (argc != 3) {
+            goto usage;
+        }
+
+        if (strcmp(argv[2], "-y") == 0) {
+            assume_yes = 1;
+        } else if (strlen(argv[2]) > 0) {
+            goto usage;
+        }
+    }
 
     /* Parse configuration. */
     cfg = json_loads(argv[1], 0, NULL);
@@ -232,7 +246,7 @@ main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    sss = encrypt_frags(t, pins);
+    sss = encrypt_frags(t, pins, assume_yes);
     if (!sss)
         return EXIT_FAILURE;
 
@@ -291,7 +305,7 @@ main(int argc, char *argv[])
 
 usage:
     fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: clevis encrypt sss CONFIG < PLAINTEXT > JWE\n");
+    fprintf(stderr, "Usage: clevis encrypt sss CONFIG [-y] < PLAINTEXT > JWE\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "%s\n", SUMMARY);
     fprintf(stderr, "\n");

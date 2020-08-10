@@ -9,7 +9,7 @@ clevis-encrypt-tang - Encrypts using a Tang binding server policy
 
 == SYNOPSIS
 
-*clevis encrypt tang* CONFIG < PT > JWE
+*clevis encrypt tang* CONFIG [-y] < PT > JWE
 
 == OVERVIEW
 
@@ -75,6 +75,15 @@ This command uses the following configuration properties:
 
 * *adv* (object) :
   A trusted advertisement (raw JSON)
+
+== OPTIONS
+
+* *-y* :
+  Automatically answer yes for all questions. Use this option for skipping
+  the advertisement trust check. This can be useful in automated deployments:
+
+    $ clevis encrypt tang '{"url":...}' -y < PT > JWE
+
 
 == SEE ALSO
 

@@ -5,11 +5,11 @@ CLEVIS-ENCRYPT-SSS(1)
 
 == NAME
 
-clevis-encrypt-sss - Encrypts using a Shamir's Secret Sharing policy 
+clevis-encrypt-sss - Encrypts using a Shamir's Secret Sharing policy
 
 == SYNOPSIS
 
-*clevis encrypt sss* CONFIG < PT > JWE
+*clevis encrypt sss* CONFIG [-y] < PT > JWE
 
 == OVERVIEW
 
@@ -51,6 +51,16 @@ The format of the *pins* property is as follows:
 
 When the list version of the format is used, multiple pins of that type will
 receive key fragments.
+
+== OPTIONS
+
+* *-y* :
+  Automatically answer yes for all questions. For the _tang_ pin, it will
+  skip the advertisement trust check, which can be useful in automated
+  deployments:
+
+    $ cfg='{"t":1,"pins":{"tang":[{"url":...},{"url":...}]}}'
+    $ clevis encrypt sss "$cfg" -y < PT > JWE
 
 == SEE ALSO
 

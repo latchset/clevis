@@ -9,7 +9,7 @@ clevis-luks-bind - Bind a LUKS device using the specified policy
 
 == SYNOPSIS
 
-*clevis luks bind* [-f] -d DEV [-t TKN_ID] [-s SLT] [-k KEY] PIN CFG
+*clevis luks bind* [-f] [-y] -d DEV [-t TKN_ID] [-s SLT] [-k KEY] PIN CFG
 
 == OVERVIEW
 
@@ -33,6 +33,11 @@ Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlock
 
 * *-f* :
   Do not prompt for LUKSMeta initialization
+
+* *-y* :
+  Automatically answer yes for all questions. When using _tang_, it
+  causes the advertisement trust check to be skipped, which can be
+  useful in automated deployments
 
 * *-d* _DEV_ :
   The LUKS device on which to perform binding

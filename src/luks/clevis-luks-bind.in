@@ -76,6 +76,9 @@ fi
 if ! PIN="${@:$((OPTIND++)):1}" || [ -z "$PIN" ]; then
     echo "Did not specify a pin!" >&2
     usage
+elif ! EXE=$(command -v clevis-encrypt-"${PIN}") || [ -z "${EXE}" ]; then
+    echo "'${PIN}' is not a valid pin!" >&2
+    usage
 fi
 
 if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then

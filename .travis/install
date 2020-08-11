@@ -27,7 +27,7 @@ debian:*|ubuntu:*)
     while ! apt-get -y install ${COMMON} \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
-        libudisks2-dev libaudit-dev; do
+        libudisks2-dev libaudit-dev systemd; do
 
         sleep 5
     done

@@ -1,0 +1,40 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+CFG='{"t":1, "pins":{"tang":[{"url":"foo bar"}]}}'
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+new_device "luks1" "${DEV}"
+
+if clevis luks bind -f -d "${DEV}" sss "${CFG}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is not expected to succeed when given a bad sss config." >&2
+fi

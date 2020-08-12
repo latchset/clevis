@@ -75,6 +75,7 @@ test('bind-pass-with-newline', find_program('bind-pass-with-newline-luks1'), env
 test('bind-pass-with-newline-keyfile', find_program('bind-pass-with-newline-keyfile-luks1'), env: env)
 # Bug #70.
 test('bind-already-used-luksmeta-slot', find_program('bind-already-used-luksmeta-slot'), env: env, timeout: 60)
+test('bad-sss', find_program('bad-sss'), env: env)
 
 if jq.found()
   test('list-recursive-luks1', find_program('list-recursive-luks1'), env: env)

@@ -95,6 +95,7 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
     FILE *pipe = NULL;
     size_t pntl = 0;
     pid_t pid = 0;
+    int status = 0;
 
     str = args[3] = json_dumps(cfg, JSON_SORT_KEYS | JSON_COMPACT);
     if (!str)
@@ -132,7 +133,10 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg)
     }
 
     fclose(pipe);
-    waitpid(pid, NULL, 0);
+    waitpid(pid, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        return NULL;
+    }
     return json_incref(jwe);
 }
 

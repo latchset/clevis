@@ -20,3 +20,5 @@ e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"test":[{},{"fail":true}]}}')"
 
 e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"test":[{"fail":true},{"fail":true}]}}')"
 ! echo "$e" | clevis decrypt
+
+! e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"tang":[{"url":"foo bar"}]}}')"

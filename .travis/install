@@ -34,6 +34,14 @@ debian:*|ubuntu:*)
     ;;
 
 fedora:*)
+    # Ugly: we may need to update rawhide keys after branching.
+    if grep -q Rawhide /etc/fedora-release; then
+        V=$(grep VERSION_ID /etc/os-release | cut -d'=' -f2)
+        NEXT=$((V+1))
+        dnf update -y --nogpgcheck fedora-gpg-keys || true
+        dnf update -y fedora-repos --release ${NEXT} || true
+    fi
+
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq

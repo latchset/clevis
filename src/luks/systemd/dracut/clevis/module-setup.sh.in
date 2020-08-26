@@ -38,8 +38,9 @@ install() {
         /etc/services \
         @libexecdir@/clevis-luks-askpass \
         clevis-luks-common-functions \
-        head grep sed \
+        head grep sed cut \
         clevis-decrypt \
+        clevis-luks-list \
         cryptsetup \
         luksmeta \
         clevis \

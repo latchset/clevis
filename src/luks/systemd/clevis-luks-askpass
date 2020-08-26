@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/bin/bash
+set -eu
 # vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
 # Copyright (c) 2016 Red Hat, Inc.
@@ -21,25 +22,24 @@
 
 . clevis-luks-common-functions
 
-shopt -s nullglob
-
+loop=
 path=/run/systemd/ask-password
 while getopts ":lp:" o; do
-    case "$o" in
+    case "${o}" in
     l) loop=true;;
-    p) path="$OPTARG";;
+    p) path="${OPTARG}";;
     *) ;;
     esac
 done
 
 while true; do
-    todo=0
+    for question in "${path}"/ask.*; do
+        # question will expand to itself, in case no files match, so we verify
+        # whether it actually exists, before proceeding.
+        [ ! -e "${question}" ] && continue
 
-    for question in "$path"/ask.*; do
-        unlocked=false
         d=
         s=
-
         while read -r line; do
             case "$line" in
                 Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
@@ -50,16 +50,22 @@ while true; do
         [ -b "${d}" ] || continue
         [ -S "${s}" ] || continue
 
-        if pt="$(clevis_luks_unlock_device "${d}")"; then
-            echo -n "+${pt}" | ncat -U -u --send-only "${s}"
-            unlocked=true
+        if ! pt="$(clevis_luks_unlock_device "${d}")" || [ -z "${pt}" ]; then
+            continue
         fi
 
-        [ "$unlocked" == true ] && continue
-        ((todo++))
+        uuid="$(cryptsetup luksUUID "${d}")"
+        if ! printf '+%s' "${pt}" | ncat -U -u --send-only "${s}"; then
+            echo "Unable to unlock ${d} (UUID=${uuid}) with recovered passphrase" >&2
+            continue
+        fi
+
+        echo "Unlocked ${d} (UUID=${uuid}) successfully" >&2
     done
 
-    if [ "$todo" -eq 0 ] || [ "$loop" != true ]; then
+    [ "${loop}" != true ] && break
+    # Checking for pending devices to be unlocked.
+    if remaining=$(clevis_devices_to_unlock) && [ -z "${remaining}" ]; then
         break;
     fi
 

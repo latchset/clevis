@@ -47,9 +47,8 @@ You can enable late boot unlocking by executing the following command:
 
     $ sudo systemctl enable clevis-luks-askpass.path
 
-After a reboot, Clevis will attempt to unlock all *_netdev* devices listed in
-*/etc/crypttab* when systemd prompts for their passwords. This implies that
-systemd support for *_netdev* is required.
+After a reboot, Clevis will attempt to unlock all devices listed in
+*/etc/crypttab* that have clevis bindings when systemd prompts for their passwords.
 
 == DESKTOP UNLOCKING
 

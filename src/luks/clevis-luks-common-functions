@@ -312,3 +312,66 @@ clevis_luks_unlock_device() {
 
     return 1
 }
+
+# clevis_map_device() tries to map the device received as a parameter to a
+# block device. As per crypttab(5), we support /path/to/encrypted/blockdev
+# or UUID=<uuid>.
+clevis_map_device() {
+    local CDEV="${1}"
+
+    if [[ "${CDEV}" == UUID=* ]]; then
+        CDEV=/dev/disk/by-uuid/${CDEV#UUID=}
+    fi
+
+    if [[ "${CDEV}" == /* ]] && [ -b "${CDEV}" ]; then
+        echo "${CDEV}"
+    else
+      # Invalid crypttab entry.
+      return 1
+    fi
+}
+
+# clevis_is_luks_device_by_uuid_open() checks whether the LUKS device whose
+# UUID was passed as a parameter is already open.
+clevis_is_luks_device_by_uuid_open() {
+    local dev_luks_uuid="${1}"
+    [ -z "${dev_luks_uuid}" ] && return 1
+    dev_luks_uuid="$(echo "${dev_luks_uuid}" | sed -e 's/-//g')"
+    test -b /dev/disk/by-id/dm-uuid-*"${dev_luks_uuid}"*
+}
+
+# clevis_devices_to_unlock() returns a list of devices to be unlocked, as per
+# the info from crypttab.
+clevis_devices_to_unlock() {
+    [ ! -r /etc/crypttab ] && return 1
+
+    local dev clevis_devices crypt_device dev_uuid bindings
+    clevis_devices=
+
+    # Build list of devices to unlock.
+    while read -r _ crypt_device _; do
+        if ! dev=$(clevis_map_device "${crypt_device}") \
+                   || [ -z "${dev}" ]; then
+            # Unable to get the device - maybe it's not available, e.g. a
+            # device on a volume group that has not been activated yet.
+            # Add it to the list anyway, since it's a pending device.
+            clevis_devices="${clevis_devices} ${dev}"
+            continue
+        fi
+
+        # Check if this device has clevis bindings.
+        if ! bindings="$(clevis luks list -d "${dev}" 2>/dev/null)" \
+                         || [ -z "${bindings}" ]; then
+            continue
+        fi
+
+        # Check if this device is already open.
+        dev_uuid="$(cryptsetup luksUUID "${dev}")"
+        if clevis_is_luks_device_by_uuid_open "${dev_uuid}"; then
+            continue
+        fi
+
+        clevis_devices="${clevis_devices} ${dev}"
+    done < /etc/crypttab
+    echo "${clevis_devices}" | sed -e 's/^ //'
+}

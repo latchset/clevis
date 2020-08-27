@@ -18,6 +18,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# First try to use the new version of the PIN implementation
+if command -v clevis-pin-tpm2 >/dev/null;
+then
+    exec clevis-pin-tpm2 decrypt $@
+fi
+
 # The owner hierarchy is the one that should be used by the Operating System.
 auth="o"
 

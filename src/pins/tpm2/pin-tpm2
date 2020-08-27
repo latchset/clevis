@@ -94,6 +94,17 @@ test_pcr_ids() {
     fi
 }
 
+test_enc_dec() {
+    local cfg="${1}"
+    output=$(echo Working | clevis encrypt tpm2 "${cfg}" | clevis decrypt)
+
+    if [ "$output" != "Working" ]; then
+        echo "Output after decrypting doesn't match: ${output} != 'Working'"
+        return 1
+    fi
+}
+
+test_enc_dec '{}' || exit 1
 test_pcr_ids "${orig}" '{}' "" || exit 1
 test_pcr_ids "${orig}" '{                   }' "" || exit 1
 test_pcr_ids "${orig}" '{"key": "ecc"}' "" || exit 1
@@ -109,3 +120,58 @@ test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": [4,  16]}' "4,16" || exit 1
 test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
 ! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1
+
+# Test with policies if we have the PIN rewrite available
+if ! $(which clevis-pin-tpm2 >/dev/null 2>&1);
+then
+    echo "No PIN rewrite available"
+    exit 0
+fi
+if ! $(which clevis-pin-tpm2-signtool >/dev/null 2>&1);
+then
+    echo "No policy signtool available"
+    exit 0
+fi
+
+function on_exit() {
+    popd
+    if [ ! -d "$TMP" ] || ! rm -rf "$TMP"; then
+        echo "Delete temporary files failed!" >&2
+        echo "You need to clean up: $TMP" >&2
+        exit 1
+    fi
+}
+if ! TMP="$(mktemp -d)"; then
+    echo "Creating a temporary dir for TPM files failed!" >&2
+    exit 1
+fi
+trap 'on_exit' EXIT
+pushd $TMP
+
+clevis-pin-tpm2-signtool >policy_working.json << EOP
+---
+- policy_ref:
+  steps:
+    - PCRs:
+        hash_algorithm: sha256
+        selection:
+          - pcr_id: 21
+            value: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+          - pcr_id: 22
+            value: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+EOP
+clevis-pin-tpm2-signtool >policy_broken.json << EOP
+---
+- policy_ref:
+  steps:
+    - PCRs:
+        hash_algorithm: sha256
+        selection:
+          - pcr_id: 21
+            value: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"
+          - pcr_id: 22
+            value: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+EOP
+
+test_enc_dec '{"policy_pubkey_path":"./publickey.json", "policy_ref": "", "policy_path": "./policy_working.json"}' || exit 1
+! test_enc_dec '{"policy_pubkey_path":"./publickey.json", "policy_ref": "", "policy_path": "./policy_broken.json"}' || exit 1

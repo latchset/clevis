@@ -18,8 +18,9 @@ if jansson.found() and libcrypto.found()
   mans += join_paths(src, 'clevis-encrypt-sss.1')
 
   env = environment()
-  env.append('PATH',
+  env.prepend('PATH',
     join_paths(meson.source_root(), 'src'),
+    join_paths(meson.source_root(), 'src', 'pins', 'tang'),
     meson.current_build_dir(),
     '/usr/libexec',
     libexecdir,

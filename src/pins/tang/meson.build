@@ -31,7 +31,7 @@ if curl.found()
   if actv.found() and kgen.found() and updt.found() and tang.found()
     env = environment()
     env.set('SD_ACTIVATE', actv.path())
-    env.append('PATH',
+    env.prepend('PATH',
       join_paths(meson.source_root(), 'src'),
       meson.current_source_dir(),
       '/usr/libexec',

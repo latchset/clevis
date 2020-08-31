@@ -206,29 +206,49 @@ clevis_all_netbootable_devices() {
     echo "$DEVICE"
 }
 
-# Check if network is up before trying to configure it.
-eth_check() {
-    for device in $(clevis_all_netbootable_devices); do
-        ip link set dev "$device" up
-        sleep 1
-        ETH_HAS_CARRIER=$(cat /sys/class/net/"$device"/carrier)
-        if [ "$ETH_HAS_CARRIER" = '1' ]; then
-            return 0
-        fi
-    done
-    return 1
+get_specified_device() {
+    local dev="$(echo $IP | cut -d: -f6)"
+    [ -z "$dev" ] || echo $dev
 }
-if eth_check; then
-    # Make sure networking is set up: if booting via nfs, it already is
-    # Doesn't seem to work when added to clevisloop for some reason
-    if [ "$boot" != nfs ]; then
-        clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
-        if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
-            echo ""
-            echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+
+# Workaround configure_networking() not waiting long enough for an interface
+# to appear. This code can be removed once that has been fixed in all the
+# distro releases we care about.
+wait_for_device() {
+    local device="$(get_specified_device)"
+    local ret=0
+
+    if [ -n "$device" ]; then
+        log_begin_msg "clevis: Waiting for interface ${device} to become available"
+        local netdev_wait=0
+        while [ $netdev_wait -lt 10 ]; do
+            if [ -e "/sys/class/net/${device}" ]; then
+                break
+            fi
+            netdev_wait=$((netdev_wait + 1))
+            sleep 1
+        done
+        if [ ! -e "/sys/class/net/${device}" ]; then
+            log_failure_msg "clevis: Interface ${device} did not appear in time"
+            ret=1
         fi
-        configure_networking
+        log_end_msg
     fi
+
+    wait_for_udev 10
+
+    return $ret
+}
+
+# Make sure networking is set up: if booting via nfs, it already is
+# Doesn't seem to work when added to clevisloop for some reason
+if [ "$boot" != nfs ] && wait_for_device; then
+    clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
+    if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
+        echo ""
+        echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+    fi
+    configure_networking
 fi
 
 clevisloop &

@@ -10,6 +10,7 @@ kgen = find_program(
   join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-keygen'),
   join_paths('/', 'usr', get_option('libdir'), 'tangd-keygen'),
   join_paths('/', 'usr', get_option('libexecdir'), 'tangd-keygen'),
+  '/usr/lib/x86_64-linux-gnu/tangd-keygen',
   required: false
 )
 updt = find_program(
@@ -18,6 +19,7 @@ updt = find_program(
   join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-update'),
   join_paths('/', 'usr', get_option('libdir'), 'tangd-update'),
   join_paths('/', 'usr', get_option('libexecdir'), 'tangd-update'),
+  '/usr/lib/x86_64-linux-gnu/tangd-update',
   required: false
 )
 tang = find_program(
@@ -26,6 +28,7 @@ tang = find_program(
   join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd'),
   join_paths('/', 'usr', get_option('libdir'), 'tangd'),
   join_paths('/', 'usr', get_option('libexecdir'), 'tangd'),
+  '/usr/lib/x86_64-linux-gnu/tangd',
   required: false
 )
 curl = find_program('curl', required: false)

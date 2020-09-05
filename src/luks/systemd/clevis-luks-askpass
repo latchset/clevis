@@ -22,6 +22,9 @@ set -eu
 
 . clevis-luks-common-functions
 
+# Make sure to exit cleanly if SIGTERM is received.
+trap 'echo "Exiting due to SIGTERM" && exit 0' TERM
+
 loop=
 path=/run/systemd/ask-password
 while getopts ":lp:" o; do

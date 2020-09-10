@@ -41,8 +41,9 @@ CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
 # LUKS2.
 
 DEV="${TMP}/luks2-device"
+TOKEN_ID=5
 new_device "luks2" "${DEV}"
 
-if ! clevis luks bind -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+if ! clevis luks bind -d "${DEV}" -t "$TOKEN_ID" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
     error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password." >&2
 fi

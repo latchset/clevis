@@ -102,6 +102,11 @@ else
     luks_type="luks1"
 fi
 
+if [ "$luks_type" = "luks1" -a -n "$TOKEN_ID" ]; then
+    echo "$DEV is a LUKS1 device; -t is only supported in LUKS2"
+    exit 1
+fi
+
 if [ "${luks_type}" = "luks1" ]; then
     # The first free slot, as per cryptsetup. In connection to bug #70, we may
     # have to wipe out the LUKSMeta slot priot to adding the new key.

@@ -59,6 +59,8 @@ fi
 copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
 copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
 copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"
+copy_exec @bindir@/clevis-luks-common-functions || die 1 "@bindir@/clevis-luks-common-functions not found"
+copy_exec @bindir@/clevis-luks-list || die 1 "@bindir@/clevis-luks-list not found"
 if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
     copy_exec @bindir@/clevis-decrypt-tpm2 || die 1 "@bindir@/clevis-decrypt-tpm2 not found"
     tpm2_creatprimary_bin=$(find_binary "tpm2_createprimary")

@@ -105,6 +105,12 @@ luks2_decrypt() {
     return 1
 }
 
+has_tang_pin() {
+    local dev="$1"
+
+    clevis luks list -d "${dev}" | grep -q tang
+}
+
 # Wait for askpass, and then try and decrypt immediately. Just in case
 # there are multiple devices that need decrypting, this will loop
 # infinitely (The local-bottom script will kill this after decryption)
@@ -120,6 +126,7 @@ clevisloop() {
     fi
 
     OLD_CRYPTTAB_SOURCE=""
+    local netcfg_attempted=0
 
     while true; do
 
@@ -142,6 +149,11 @@ clevisloop() {
         # Make the source has changed if needed
         [ "$CRYPTTAB_SOURCE" = "$OLD_CRYPTTAB_SOURCE" ] && continue
         OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
+
+        if [ $netcfg_attempted -eq 0 ] && has_tang_pin ${CRYPTTAB_SOURCE}; then
+            netcfg_attempted=1
+            do_configure_networking
+        fi
 
         if cryptsetup isLuks --type luks1 "$CRYPTTAB_SOURCE"; then
             # If the device is not initialized, sliently skip it.
@@ -240,16 +252,18 @@ wait_for_device() {
     return $ret
 }
 
-# Make sure networking is set up: if booting via nfs, it already is
-# Doesn't seem to work when added to clevisloop for some reason
-if [ "$boot" != nfs ] && wait_for_device; then
-    clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
-    if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
-        echo ""
-        echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+do_configure_networking() {
+    # Make sure networking is set up: if booting via nfs, it already is
+    # Doesn't seem to work when added to clevisloop for some reason
+    if [ "$boot" != nfs ] && wait_for_device; then
+        clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
+        if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
+            echo ""
+            echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+        fi
+        configure_networking
     fi
-    configure_networking
-fi
+}
 
 clevisloop &
 echo $! >/run/clevis.pid

@@ -37,11 +37,11 @@ Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlock
 * *-d* _DEV_ :
   The LUKS device on which to perform binding
 
-* *-t* _TKN_ID_ :
-  The LUKS token ID to use; only available for LUKS2
-
 * *-s* _SLT_ :
   The LUKSMeta slot to use for metadata storage
+
+* *-t* _TKN_ID_ :
+  The LUKS token ID to use; only available for LUKS2
 
 * *-k* _KEY_ :
   Non-interactively read LUKS password from KEY file

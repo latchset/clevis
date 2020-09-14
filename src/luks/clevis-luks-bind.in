@@ -39,9 +39,9 @@ function usage() {
     echo
     echo "  -d DEV       The LUKS device on which to perform binding"
     echo
-    echo "  -s SLT       The LUKS slot to use; only available for LUKS2"
+    echo "  -s SLT       The LUKS slot to use"
     echo
-    echo "  -t TOKEN_ID  The LUKS token ID to use"
+    echo "  -t TKN_ID    The LUKS token ID to use; only available for LUKS2"
     echo
     echo "  -k KEY       Non-interactively read LUKS password from KEY file"
     echo "  -k -         Non-interactively read LUKS password from standard input"

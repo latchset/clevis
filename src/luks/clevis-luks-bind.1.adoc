@@ -9,7 +9,7 @@ clevis-luks-bind - Bind a LUKS device using the specified policy
 
 == SYNOPSIS
 
-*clevis luks bind* [-f] -d DEV [-s SLT] [-k KEY] PIN CFG
+*clevis luks bind* [-f] -d DEV [-t TKN_ID] [-s SLT] [-k KEY] PIN CFG
 
 == OVERVIEW
 
@@ -39,6 +39,9 @@ Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlock
 
 * *-s* _SLT_ :
   The LUKSMeta slot to use for metadata storage
+
+* *-t* _TKN_ID_ :
+  The LUKS token ID to use; only available for LUKS2
 
 * *-k* _KEY_ :
   Non-interactively read LUKS password from KEY file

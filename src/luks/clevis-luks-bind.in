@@ -31,18 +31,20 @@ function luks2_supported() {
 function usage() {
     exec >&2
     echo
-    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] -d DEV PIN CFG"
+    echo "Usage: clevis luks bind [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] -d DEV PIN CFG"
     echo
     echo "$SUMMARY":
     echo
-    echo "  -f      Do not prompt for LUKSMeta initialization"
+    echo "  -f           Do not prompt for LUKSMeta initialization"
     echo
-    echo "  -d DEV  The LUKS device on which to perform binding"
+    echo "  -d DEV       The LUKS device on which to perform binding"
     echo
-    echo "  -s SLT  The LUKS slot to use"
+    echo "  -s SLT       The LUKS slot to use"
     echo
-    echo "  -k KEY  Non-interactively read LUKS password from KEY file"
-    echo "  -k -    Non-interactively read LUKS password from standard input"
+    echo "  -t TKN_ID    The LUKS token ID to use; only available for LUKS2"
+    echo
+    echo "  -k KEY       Non-interactively read LUKS password from KEY file"
+    echo "  -k -         Non-interactively read LUKS password from standard input"
     echo
     exit 2
 }
@@ -53,12 +55,13 @@ if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
 fi
 
 FRC=()
-while getopts ":hfd:s:k:" o; do
+while getopts ":hfd:s:k:t:" o; do
     case "$o" in
     f) FRC+=(-f);;
     d) DEV="$OPTARG";;
     s) SLT="$OPTARG";;
     k) KEY="$OPTARG";;
+    t) TOKEN_ID="$OPTARG";;
     *) usage;;
     esac
 done
@@ -97,6 +100,11 @@ if luks2_supported; then
     fi
 else
     luks_type="luks1"
+fi
+
+if [ "$luks_type" = "luks1" -a -n "$TOKEN_ID" ]; then
+    echo "$DEV is a LUKS1 device; -t is only supported in LUKS2"
+    exit 1
 fi
 
 if [ "${luks_type}" = "luks1" ]; then
@@ -214,7 +222,7 @@ if [ "$luks_type" == "luks1" ]; then
     echo -n "$jwe" | luksmeta save -d "$DEV" -u "$UUID" -s "$SLT" 2>/dev/null
 else
     printf '{"type":"clevis","keyslots":["%s"],"jwe":%s}' "$SLT" "$(jose jwe fmt -i- <<< "$jwe")" \
-        | cryptsetup token import "$DEV"
+        | cryptsetup token import $([ -n "$TOKEN_ID" ] && echo '--token-id '$TOKEN_ID) "$DEV"
 fi
 if [ $? -ne 0 ]; then
     echo "Error while saving Clevis metadata in LUKSMeta!" >&2

@@ -112,7 +112,7 @@ if [ "${luks_type}" = "luks1" ]; then
     # have to wipe out the LUKSMeta slot priot to adding the new key.
     first_free_cs_slot=$(cryptsetup luksDump "${DEV}" \
                          | sed -rn 's|^Key Slot ([0-7]): DISABLED$|\1|p' \
-                         | head -n 1)
+                         | sed -n 1p)
     if [ -z "${first_free_cs_slot}" ]; then
         echo "There are no more free slots in ${DEV}!" >&2
         exit 1

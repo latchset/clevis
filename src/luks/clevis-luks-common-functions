@@ -86,7 +86,7 @@ clevis_luks_read_slot() {
         local token_id
         token_id=$(cryptsetup luksDump "${DEV}" \
                     | grep -E -B1 "^\s+Keyslot:\s+${SLT}$" \
-                    | head -n 1 | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
+                    | sed -n 1p | sed -rn 's|^\s+([0-9]+): clevis|\1|p')
         if [ -z "${token_id}" ]; then
             echo "Cannot load data from ${DEV} slot:${SLT}. No token found!" >&2
             return 1

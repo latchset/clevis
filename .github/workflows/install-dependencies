@@ -1,0 +1,52 @@
+#!/bin/bash -ex
+
+COMMON="meson curl git make file bzip2 jose tang cryptsetup jq ${CC}"
+
+case "${DISTRO}" in
+debian:*|ubuntu:*)
+    apt-get clean
+
+    while ! apt-get update; do
+        sleep 5
+    done
+
+    while ! apt-get -y \
+        -o Dpkg::Options::="--force-confdef" \
+        -o Dpkg::Options::="--force-confnew" \
+        dist-upgrade; do
+        sleep 5
+    done
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y keyboard-configuration console-setup
+
+    while ! apt-get -y install ${COMMON} \
+        build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
+        luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
+        libudisks2-dev libaudit-dev systemd; do
+
+        sleep 5
+    done
+    ;;
+
+fedora:*)
+    printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
+    dnf -y clean all
+    dnf -y --setopt=deltarpm=0 update
+    dnf -y install dnf-utils jq
+    dnf -y builddep clevis
+    ;;
+
+centos:*)
+    yum -y clean all
+    yum -y --setopt=deltarpm=0 update
+    yum install -y yum-utils
+    yum config-manager -y --set-enabled PowerTools || true
+    yum -y install epel-release
+    yum -y install ${COMMON} pkgconfig openssl-devel openssl zlib-devel \
+        jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
+        audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts
+    sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
+    ;;
+esac
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:

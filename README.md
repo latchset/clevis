@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/latchset/clevis.svg?branch=master)](https://travis-ci.org/latchset/clevis)
+[![ci](https://github.com/latchset/clevis/workflows/ci/badge.svg)](https://github.com/latchset/clevis/actions)
 
 # Clevis
 

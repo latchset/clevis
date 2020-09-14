@@ -254,7 +254,6 @@ wait_for_device() {
 
 do_configure_networking() {
     # Make sure networking is set up: if booting via nfs, it already is
-    # Doesn't seem to work when added to clevisloop for some reason
     if [ "$boot" != nfs ] && wait_for_device; then
         clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
         if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then

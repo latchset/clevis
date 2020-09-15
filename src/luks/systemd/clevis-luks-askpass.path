@@ -6,7 +6,8 @@ Before=cryptsetup-pre.target
 Wants=cryptsetup-pre.target
 
 [Path]
-PathChanged=/run/systemd/ask-password
+DirectoryNotEmpty=/run/systemd/ask-password
+MakeDirectory=yes
 
 [Install]
 WantedBy=cryptsetup.target

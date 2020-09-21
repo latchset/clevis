@@ -4,5 +4,5 @@ Documentation=man:clevis-luks-unlockers(7)
 DefaultDependencies=no
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=@libexecdir@/clevis-luks-askpass -l

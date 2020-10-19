@@ -1,5 +1,5 @@
 [![build](https://github.com/latchset/clevis/workflows/build/badge.svg)](https://github.com/latchset/clevis/actions)
-[![Build Status](https://travis-ci.org/latchset/clevis.svg?branch=master)](https://travis-ci.org/latchset/clevis)
+[![dracut](https://img.shields.io/travis/latchset/clevis/master.svg?label=dracut+unlocker)](https://travis-ci.org/latchset/clevis)
 
 # Clevis
 

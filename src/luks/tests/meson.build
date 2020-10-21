@@ -90,6 +90,8 @@ if has_tang
   test('assume-yes', find_program('assume-yes'), env: env, timeout: 60)
 endif
 
+test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env)
+
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.
 # Binding LUKS2 takes longer, so timeout is increased for a few tests.
@@ -110,4 +112,5 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 60)
   endif
 
+test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
 endif

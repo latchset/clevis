@@ -18,6 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+CLEVIS_UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
+
 # valid_slot() will check whether a given slot is possibly valid, i.e., if it
 # is a numeric value within the specified range.
 valid_slot() {
@@ -63,7 +65,6 @@ clevis_luks_read_slot() {
             return 1
         fi
 
-        local CLEVIS_UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
         local uuid
         # Pattern from luksmeta: active slot uuid.
         read -r _ _ uuid <<< "$(luksmeta show -d "${DEV}" | grep "^${SLT} *")"
@@ -111,20 +112,25 @@ clevis_luks_read_slot() {
 # clevis_luks_used_slots() will return the list of used slots for a given LUKS
 # device.
 clevis_luks_used_slots() {
-    local DEV="${1}"
+    local DEV="${1:-}"
+    [ -z "${DEV}" ] && return 1
 
-    local slots
+    local used_slots
     if cryptsetup isLuks --type luks1 "${DEV}"; then
-        readarray -t slots < <(cryptsetup luksDump "${DEV}" \
-            | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p')
+        if ! used_slots=$(cryptsetup luksDump "${DEV}" 2>/dev/null \
+                          | sed -rn 's|^Key Slot ([0-7]): ENABLED$|\1|p'); then
+            return 1
+        fi
     elif cryptsetup isLuks --type luks2 "${DEV}"; then
-        readarray -t slots < <(cryptsetup luksDump "${DEV}" \
-            | sed -rn 's|^\s+([0-9]+): luks2$|\1|p')
+        if ! used_slots=$(cryptsetup luksDump "${DEV}" 2>/dev/null \
+                          | sed -rn 's|^\s+([0-9]+): luks2$|\1|p'); then
+            return 1
+        fi
     else
         echo "${DEV} is not a supported LUKS device!" >&2
         return 1
     fi
-    echo "${slots[@]}"
+    echo "${used_slots}"
 }
 
 # clevis_luks_decode_jwe() will decode a given JWE.
@@ -374,4 +380,246 @@ clevis_devices_to_unlock() {
         clevis_devices="${clevis_devices} ${dev}"
     done < /etc/crypttab
     echo "${clevis_devices}" | sed -e 's/^ //'
+}
+
+# clevis_luks1_save_slot() works with LUKS1 devices and it saves a given JWE
+# to a specific device and slot. The last parameter indicates whether we
+# should overwrite existing metadata.
+clevis_luks1_save_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+    local JWE="${3}"
+    local SHOULD_OVERWRITE="${4:-}"
+
+    luksmeta test -d "${DEV}" || return 1
+
+    if luksmeta load -d "${DEV}" -s "${SLOT}" -u "${CLEVIS_UUID}" \
+                        >/dev/null 2>/dev/null; then
+        [ -z "${SHOULD_OVERWRITE}" ] && return 1
+        if ! luksmeta wipe -f -d "${DEV}" -s "${SLOT}" \
+                           -u "${CLEVIS_UUID}"; then
+            echo "Error wiping slot ${SLOT} from ${DEV}" >&2
+            return 1
+        fi
+    fi
+
+    if ! echo -n "${JWE}" | luksmeta save -d "${DEV}" -s "${SLOT}" \
+                                          -u "${CLEVIS_UUID}"; then
+        echo "Error saving metadata to LUKSMeta slot ${SLOT} from ${DEV}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# clevis_luks2_save_slot() works with LUKS2 devices and it saves a given JWE
+# to a specific device and slot. The last parameter indicates whether we
+# should overwrite existing metadata.
+clevis_luks2_save_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+    local TKN_ID="${3}"
+    local JWE="${4}"
+    local SHOULD_OVERWRITE="${5:-}"
+
+    # Sanitize clevis LUKS2 tokens. Remove "orphan" clevis tokens, i.e.,
+    # tokens that are not linked to any key slots.
+    local token array_len
+    for token in $(cryptsetup luksDump "${DEV}" \
+                   | sed -rn 's|^\s+([0-9]+): clevis|\1|p'); do
+        # Let's check the length of the "keyslots" array. If zero, it means
+        # no key slots are linked, which is a problem.
+        if ! array_len=$(cryptsetup token export --token-id \
+                         "${token}" "${DEV}" \
+                         | jose fmt --json=- --get keyslots --array --length \
+                         --output=-) || [ "${array_len}" -eq 0 ]; then
+            # Remove bad token.
+            cryptsetup token remove --token-id "${token}" "${DEV}"
+        fi
+    done
+
+
+    if ! token="$(cryptsetup luksDump "${DEV}" \
+                  | grep -E -B1 "^\s+Keyslot:\s+${SLOT}$" \
+                  | sed -rn 's|^\s+([0-9]+): clevis|\1|p')"; then
+        echo "Error trying to read token from LUKS2 device ${DEV}, slot ${SLOT}" >&2
+        return 1
+    fi
+
+    if [ -n "${token}" ]; then
+        [ -z "${SHOULD_OVERWRITE}" ] && return 1
+        if ! cryptsetup token remove --token-id "${token}" "${DEV}"; then
+            echo "Error while removing token ${token} from LUKS2 device ${DEV}" >&2
+            return 1
+        fi
+    fi
+
+    if [ -n "${SHOULD_OVERWRITE}" ] && [ -n "${TKN_ID}" ]; then
+        cryptsetup token remove --token-id "${TKN_ID}" "${DEV}" || :
+    fi
+
+    local metadata
+    metadata=$(printf '{"type":"clevis","keyslots":["%s"],"jwe":%s}' \
+               "${SLOT}" "$(jose jwe fmt --input="${JWE}")")
+    if ! printf '%s' "${metadata}" | cryptsetup token import \
+                $([ -n "${TKN_ID}" ] && printf -- '--token-id %s' "${TKN_ID}") \
+                "${DEV}"; then
+        echo "Error saving metadata to LUKS2 header in device ${DEV}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# clevis_luks_save_slot() saves a given JWE to a LUKS device+slot. It can also
+# overwrite existing metadata.
+clevis_luks_save_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+    local TKN_ID="${3}"
+    local JWE="${4}"
+    local SHOULD_OVERWRITE="${5:-}"
+
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        clevis_luks1_save_slot "${DEV}" "${SLOT}" "${JWE}" \
+                               "${SHOULD_OVERWRITE}" || return 1
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        clevis_luks2_save_slot "${DEV}" "${SLOT}" "${TKN_ID}" "${JWE}" \
+                               "${SHOULD_OVERWRITE}" || return 1
+    else
+        return 1
+    fi
+    return 0
+}
+
+# clevis_luks1_backup_dev() backups the LUKSMeta slots from a LUKS device,
+# which can be restored with clevis_luks1_restore_dev().
+clevis_luks1_backup_dev() {
+    local DEV="${1}"
+    local TMP="${2}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${TMP}" ] && return 1
+
+    luksmeta test -d "${DEV}" || return 0
+    touch "${TMP}/initialized"
+
+    local used_slots slt uuid jwe fname
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    for slt in ${used_slots}; do
+        if ! uuid=$(luksmeta show -d "${DEV}" -s "${slt}") \
+                    || [ -z "${uuid}" ]; then
+            continue
+        fi
+        if ! jwe=$(luksmeta load -d "${DEV}" -s "${slt}") \
+                   || [ -z "${jwe}" ]; then
+            continue
+        fi
+
+        fname=$(printf "slot_%s_%s" "${slt}" "${uuid}")
+        printf "%s" "${jwe}" > "${TMP}/${fname}"
+    done
+    return 0
+}
+
+# clevis_luks1_restore_dev() takes care of restoring the LUKSMeta slots from
+# a LUKS device that was backup'ed by clevis_luks1_backup_dev().
+clevis_luks1_restore_dev() {
+    local DEV="${1}"
+    local TMP="${2}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${TMP}" ] && return 1
+
+    [ -e "${TMP}/initialized" ] || return 0
+    luksmeta test -d "${DEV}" || luksmeta init -f -d "${DEV}"
+
+    local slt uuid jwe fname
+    for fname in "${TMP}"/slot_*; do
+        [ -f "${fname}" ] || break
+        if ! slt=$(echo "${fname}" | cut -d '_' -f 2) \
+                   || [ -z "${slt}" ]; then
+            continue
+        fi
+        if ! uuid=$(echo "${fname}" | cut -d '_' -f 3) \
+                    || [ -z "${uuid}" ]; then
+            continue
+        fi
+        if ! jwe=$(cat "${fname}") || [ -z "${jwe}" ]; then
+            continue
+        fi
+        if ! clevis_luks1_save_slot "${DEV}" "${slt}" \
+                                    "${jwe}" "overwrite"; then
+            echo "Error restoring LUKSmeta slot ${slt} from ${DEV}" >&2
+            return 1
+        fi
+    done
+    return 0
+}
+
+# clevis_luks_backup_dev() backups a particular LUKS device, which can then
+# be restored with clevis_luks_restore_dev().
+clevis_luks_backup_dev() {
+    local DEV="${1}"
+    local TMP="${2}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${TMP}" ] && return 1
+
+    printf '%s' "${DEV}" > "${TMP}/device"
+
+    local HDR
+    HDR="${TMP}/$(basename "${DEV}").header"
+    if ! cryptsetup luksHeaderBackup "${DEV}" --batch-mode \
+            --header-backup-file "${HDR}"; then
+        echo "Error backing up LUKS header from ${DEV}" >&2
+        return 1
+    fi
+
+    # If LUKS1, we need to manually back up (and later restore) the
+    # LUKSmeta slots. For LUKS2, simply saving the header also saves
+    # the associated tokens.
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        if ! clevis_luks1_backup_dev "${DEV}" "${TMP}"; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# clevis_luks_restore_dev() restores a given device that was backup'ed by
+# clevis_luks_backup_dev().
+clevis_luks_restore_dev() {
+    local TMP="${1}"
+
+    [ -z "${TMP}" ] && return 1
+    [ -r "${TMP}"/device ] || return 1
+
+    local DEV
+    DEV="$(cat "${TMP}"/device)"
+
+    local HDR
+    HDR="${TMP}/$(basename "${DEV}").header"
+    if [ ! -e "${HDR}" ]; then
+        echo "LUKS header backup does not exist" >&2
+        return 1
+    fi
+
+    if ! cryptsetup luksHeaderRestore "${DEV}" --batch-mode \
+            --header-backup-file "${HDR}"; then
+        echo "Error restoring LUKS header from ${DEV}" >&2
+        return 1
+    fi
+
+    # If LUKS1, we need to manually back up (and later restore) the
+    # LUKSmeta slots. For LUKS2, simply saving the header also saves
+    # the associated tokens.
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        if ! clevis_luks1_restore_dev "${DEV}" "${TMP}"; then
+            return 1
+        fi
+    fi
+    return 0
 }

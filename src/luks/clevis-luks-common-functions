@@ -284,6 +284,54 @@ clevis_luks_read_pins_from_slot() {
     printf "%s: %s\n" "${SLOT}" "${cfg}"
 }
 
+# clevis_luks_check_valid_key_or_keyfile() receives a devices and either a
+# passphrase or keyfile and then checks whether it is able to unlock the
+# device wih the received passphrase/keyfile.
+clevis_luks_check_valid_key_or_keyfile() {
+    local DEV="${1}"
+    local KEY="${2:-}"
+    local KEYFILE="${3:-}"
+    local SLT="${4:-}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${KEYFILE}" ] && [ -z "${KEY}" ] && return 1
+
+    local extra_args
+    extra_args="$([ -n "${SLT}" ] && printf -- '--key-slot %s' "${SLT}")"
+    if [ -n "${KEYFILE}" ]; then
+        cryptsetup open --test-passphrase "${DEV}" --key-file "${KEYFILE}" \
+                   ${extra_args}
+        return
+    fi
+
+    printf '%s' "${KEY}" | cryptsetup open --test-passphrase "${DEV}" \
+                                      ${extra_args}
+}
+
+# clevis_luks_unlock_device_by_slot() does the unlock of the device and slot
+# passed as parameters and returns the decoded passphrase.
+clevis_luks_unlock_device_by_slot() {
+    local DEV="${1}"
+    local SLT="${2}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${SLT}" ] && return 1
+
+    local jwe passphrase
+    if ! jwe="$(clevis_luks_read_slot "${DEV}" "${SLT}" 2>/dev/null)" \
+                || [ -z "${jwe}" ]; then
+        return 1
+    fi
+
+    if ! passphrase="$(printf '%s' "${jwe}" | clevis decrypt 2>/dev/null)" \
+                       || [ -z "${passphrase}" ]; then
+        return 1
+    fi
+
+    clevis_luks_check_valid_key_or_keyfile "${DEV}" "${passphrase}" || return 1
+    printf '%s' "${passphrase}"
+}
+
 # clevis_luks_unlock_device() does the unlock of the device passed as
 # parameter and returns the decoded passphrase.
 clevis_luks_unlock_device() {
@@ -296,26 +344,15 @@ clevis_luks_unlock_device() {
         return 1
     fi
 
-    local slt jwe passphrase
+    local slt pt
     for slt in ${used_slots}; do
-        if ! jwe="$(clevis_luks_read_slot "${DEV}" "${slt}" 2>/dev/null)" \
-                   || [ -z "${jwe}" ]; then
-            continue
+        if ! pt=$(clevis_luks_unlock_device_by_slot "${DEV}" "${slt}") \
+                  || [ -z "${pt}" ]; then
+             continue
         fi
-
-        if ! passphrase="$(clevis decrypt < <(echo -n "${jwe}"))" \
-                           || [ -z "${passphrase}" ]; then
-            continue
-        fi
-
-        if ! cryptsetup luksOpen --test-passphrase "${DEV}" \
-             --key-file <(echo -n "${passphrase}"); then
-            continue
-        fi
-        echo -n "${passphrase}"
+        printf '%s' "${pt}"
         return 0
     done
-
     return 1
 }
 
@@ -454,7 +491,7 @@ clevis_luks2_save_slot() {
     fi
 
     if [ -n "${SHOULD_OVERWRITE}" ] && [ -n "${TKN_ID}" ]; then
-        cryptsetup token remove --token-id "${TKN_ID}" "${DEV}" || :
+        cryptsetup token remove --token-id "${TKN_ID}" "${DEV}" 2>/dev/null || :
     fi
 
     local metadata
@@ -570,6 +607,8 @@ clevis_luks_backup_dev() {
 
     printf '%s' "${DEV}" > "${TMP}/device"
 
+    printf '%s' "${DEV}" > "${TMP}/device"
+
     local HDR
     HDR="${TMP}/$(basename "${DEV}").header"
     if ! cryptsetup luksHeaderBackup "${DEV}" --batch-mode \
@@ -621,5 +660,328 @@ clevis_luks_restore_dev() {
             return 1
         fi
     fi
+    return 0
+}
+
+# clevis_luks_get_existing_key() may try to recover a valid password from
+# existing bindings and additionally prompt the user for the passphrase.
+clevis_luks_get_existing_key() {
+    local DEV="${1}"
+    local PROMPT="${2}"
+    local RECOVER="${3:-}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local pt
+    if [ -n "${RECOVER}" ] && pt="$(clevis_luks_unlock_device "${DEV}")" \
+                           && [ -n "${pt}" ]; then
+        printf '%s' "${pt}"
+        return 0
+    fi
+
+    # Let's prompt the user for the password.
+    read -r -s -p "${PROMPT}" pt; echo >&2
+
+    # Check if key is valid.
+    clevis_luks_check_valid_key_or_keyfile "${DEV}" "${pt}" || return 1
+    printf '%s' "${pt}"
+}
+
+# clevis_luks_luksmeta_sync_fix() makes sure LUKSmeta slots are sync'ed with
+# cryptsetup, in order to prevent issues when saving clevis metadata.
+clevis_luks_luksmeta_sync_fix() {
+    local DEV="${DEV}"
+    [ -z "${DEV}" ] && return 1
+
+    # This applies only to LUKS1 devices.
+    cryptsetup isLuks --type luks1 "${DEV}" || return 0
+
+    # No issues if the LUKSmeta metadata is not initialized.
+    luksmeta test -d "${DEV}" || return 0
+
+    local first_free_slot
+    if ! first_free_slot=$(clevis_luks_first_free_slot "${DEV}") \
+                           || [ -z "${first_free_slot}" ]; then
+        echo "There are possibly no free slots in ${DEV}" >&2
+        return 1
+    fi
+
+    # In certain circumstances, we may have LUKSMeta slots "not in sync" with
+    # cryptsetup, which means we will try to save LUKSMeta metadata over an
+    # already used or partially used slot -- github issue #70.
+    # If that is the case, let's wipe the LUKSMeta slot here prior to using
+    # the LUKSMeta slot.
+    local lmeta_slot lmeta_status lmeta_uuid
+    lmeta_slot="$(luksmeta show -d "${DEV}" | grep "^${first_free_slot}")"
+    # 1   active cb6e8904-81ff-40da-a84a-07ab9ab5715e
+    # 2 inactive cb6e8904-81ff-40da-a84a-07ab9ab5715e
+    lmeta_status="$(echo "${lmeta_slot}" | awk '{print $2}')"
+    [ "${lmeta_status}" != 'inactive' ] && return 0
+
+    lmeta_uuid="$(echo "${lmeta_slot}" | awk '{print $3}')"
+    [ "${lmeta_uuid}" != "${CLEVIS_UUID}" ] && return 0
+
+    luksmeta wipe -f -d "${DEV}" -s "${first_free_slot}"
+}
+
+# clevis_luks_add_key() adds a new key to a key slot.
+clevis_luks_add_key() {
+    local DEV="${1}"
+    local SLT="${2}"
+    local NEWKEY="${3}"
+    local KEY="${4}"
+    local KEYFILE="${5:-}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${NEWKEY}" ] && return 1
+    [ -z "${KEY}" ] && [ -z "${KEYFILE}" ] && return 1
+
+    local extra_args='' input
+    input="$(printf '%s\n%s' "${KEY}" "${NEWKEY}")"
+    if [ -n "${KEYFILE}" ]; then
+        extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
+        input="$(printf '%s' "${NEWKEY}")"
+    fi
+
+    printf '%s' "${input}" | cryptsetup luksAddKey --batch-mode \
+                                         --key-slot "${SLT}" \
+                                         "${DEV}" \
+                                         ${extra_args}
+}
+
+# clevis_luks_update_key() will update a key slot with a new key.
+clevis_luks_update_key() {
+    local DEV="${1}"
+    local SLT="${2}"
+    local NEWKEY="${3}"
+    local KEY="${4}"
+    local KEYFILE="${5:-}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${NEWKEY}" ] && return 1
+
+    # Update the key slot with the new key. If we have the key for this slot,
+    # the change happens in-place. Otherwise, we kill the slot and re-add it.
+    local in_place
+    clevis_luks_check_valid_key_or_keyfile "${DEV}" \
+                                           "${KEY}" "${KEYFILE}" \
+                                           "${SLT}" 2>/dev/null \
+                                           && in_place=true
+
+    local input extra_args=
+    input="$(printf '%s\n%s' "${KEY}" "${NEWKEY}")"
+    if [ -n "${KEYFILE}" ]; then
+        extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
+        input="$(printf '%s' "${NEWKEY}")"
+    fi
+
+    if [ -n "${in_place}" ]; then
+        printf '%s' "${input}" | cryptsetup luksChangeKey "${DEV}" \
+                                            --key-slot "${SLT}" \
+                                            --batch-mode ${extra_args}
+        return
+    fi
+
+    if ! printf '%s' "${input}" | cryptsetup luksKillSlot "${DEV}" \
+                                                          "${SLT}" \
+                                                          ${extra_args}; then
+        echo "Error wiping slot ${SLT} from ${DEV}" >&2
+        return 1
+    fi
+    clevis_luks_add_key "${DEV}" "${SLT}" "${NEWKEY}" "${KEY}" "${KEYFILE}"
+}
+
+# clevis_luks_save_key_to_slot() will save a new key to a slot. It can either
+# add a new key to a slot or updating an already used slot.
+clevis_luks_save_key_to_slot() {
+    local DEV="${1}"
+    local SLT="${2}"
+    local NEWKEY="${3}"
+    local KEY="${4}"
+    local KEYFILE="${5:-}"
+    local OVERWRITE="${6:-}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${SLT}" ] && return 1
+    [ -z "${NEWKEY}" ] && return 1
+
+    # Make sure LUKSmeta slots are in sync with cryptsetup, to avoid the
+    # problem reported in github issue #70. Applies to LUKS1 only.
+    clevis_luks_luksmeta_sync_fix "${DEV}"
+
+    # Let's check if we are adding a new key or updating an existing one.
+    local update
+    update="$(clevis_luks_used_slots "${DEV}" | grep "^${SLT}$")"
+    if [ -n "${update}" ]; then
+        # Replace an existing key.
+        [ -n "${OVERWRITE}" ] || return 1
+
+        clevis_luks_update_key "${DEV}" "${SLT}" \
+                               "${NEWKEY}" "${KEY}" "${KEYFILE}"
+        return
+    fi
+
+    # Add a new key.
+    clevis_luks_add_key "${DEV}" "${SLT}" \
+                        "${NEWKEY}" "${KEY}" "${KEYFILE}"
+}
+
+# clevis_luks_generate_key() generates a new key for use with clevis.
+clevis_luks_generate_key() {
+    local DEV="${1}"
+    [ -z "${DEV}" ] && return 1
+
+    local dump filter bits
+    dump=$(cryptsetup luksDump "${DEV}")
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        filter="$(echo "${dump}" | sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p')"
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        filter="$(echo -n "${dump}" | \
+                  sed -rn 's|^\s+Key:\s+([0-9]+) bits\s*$|\1|p')"
+    else
+        return 1
+    fi
+
+    bits="$(echo -n "${filter}" | sort -n | tail -n 1)"
+    pwmake "${bits}"
+}
+
+# clevis_luks_token_id_by_slot() returns the token ID linked to a
+# particular LUKS2 key slot.
+clevis_luks_token_id_by_slot() {
+    local DEV="${1}"
+    local SLT="${2}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${SLT}" ] && return 1
+
+    cryptsetup isLuks --type luks1 "${DEV}" && echo && return
+    local tkn_id
+    tkn_id="$(cryptsetup luksDump "${DEV}" \
+              | grep -E -B1 "^\s+Keyslot:\s+${SLT}$" \
+              | sed -rn 's|^\s+([0-9]+): clevis|\1|p')"
+
+    printf '%s' "${tkn_id}"
+}
+
+# clevis_luks_cleanup() removes the temporary directory used to store the data
+# relevant to device backup and restore.
+clevis_luks_cleanup() {
+    [ -z "${CLEVIS_TMP_DIR}" ] && return 0
+    [ -d "${CLEVIS_TMP_DIR}" ] || return 0
+
+    if ! rm -rf "${CLEVIS_TMP_DIR}"; then
+        echo "Deleting temporary files failed!" >&2
+        echo "You may need to clean up '${CLEVIS_TMP_DIR}'" >&2
+        exit 1
+    fi
+    unset CLEVIS_TMP_DIR
+}
+
+# clevis_luks_first_free_slot() returns the first key slot that is available
+# in a LUKS device.
+clevis_luks_first_free_slot() {
+    local DEV="${1}"
+    [ -z "${DEV}" ] && return 1
+    local first_free_slot
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        first_free_slot=$(cryptsetup luksDump "${DEV}" \
+                          | sed -rn 's|^Key Slot ([0-7]): DISABLED$|\1|p' \
+                          | head -n 1)
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        local used_slots slt
+        used_slots="$(clevis_luks_used_slots "${DEV}")"
+        for slt in $(seq 0 31); do
+            if ! echo "${used_slots}" | grep -q "^${slt}$"; then
+                first_free_slot="${slt}"
+                break
+            fi
+        done
+    else
+        echo "Unsupported device ${DEV}" >&2
+        return 1
+    fi
+    echo "${first_free_slot}"
+}
+
+# clevis_luks_do_bind() creates or updates a particular binding.
+clevis_luks_do_bind() {
+    local DEV="${1}"
+    local SLT="${2}"
+    local TKN_ID="${3}"
+    local PIN="${4}"
+    local CFG="${5}"
+    local YES="${6:-}"
+    local OVERWRITE="${7:-}"
+    local KEY="${8:-}"
+    local KEYFILE="${9:-}"
+
+    [ -z "${DEV}" ] && return 1
+    [ -z "${PIN}" ] && return 1
+    [ -z "${CFG}" ] && return 1
+
+
+    if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" \
+                                                "${KEY}" \
+                                                "${KEYFILE}" \
+                    && ! KEY="$(clevis_luks_get_existing_key "${DEV}" \
+                                "Enter existing LUKS password: " \
+                                "recover")" || [ -z "${KEY}" ]; then
+        return 1
+    fi
+
+    local newkey jwe
+    if ! newkey="$(clevis_luks_generate_key "${DEV}")" \
+                   || [ -z "${newkey}" ]; then
+        echo "Unable to generate a new key" >&2
+        return 1
+    fi
+
+    # Encrypt the new key.
+    jwe="$(printf '%s' "${newkey}" | clevis encrypt "${PIN}" "${CFG}" ${YES})"
+
+    # We can proceed to binding, after backing up the LUKS header and
+    # metadata.
+    local CLEVIS_TMP_DIR
+
+    if ! CLEVIS_TMP_DIR="$(mktemp -d)" || [ -z "${CLEVIS_TMP_DIR}" ]; then
+        echo "Unable to create a a temporary dir for device backup/restore" >&2
+        return 1
+    fi
+    export CLEVIS_TMP_DIR
+    trap 'clevis_luks_cleanup' EXIT
+
+    # Backup LUKS header.
+    if ! clevis_luks_backup_dev "${DEV}" "${CLEVIS_TMP_DIR}"; then
+        echo "Unable to back up LUKS header from ${DEV}" >&2
+        return 1
+    fi
+
+    if [ -z "${SLT}" ] && ! SLT=$(clevis_luks_first_free_slot "${DEV}") \
+                                  || [ -z "${SLT}" ]; then
+        echo "Unable to find a free slot in ${DEV}" >&2
+        return 1
+    fi
+
+    [ -z "${TKN_ID}" ] && ! TKN_ID="$(clevis_luks_token_id_by_slot "${DEV}" \
+                                      "${SLT}")" && return 1
+
+    if ! clevis_luks_save_key_to_slot "${DEV}" "${SLT}" \
+                                      "${newkey}" "${KEY}" "${KEYFILE}" \
+                                      "${OVERWRITE}"; then
+        echo "Unable to save/update key slot; operation cancelled" >&2
+        clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :
+        return 1
+    fi
+
+    if ! clevis_luks_save_slot "${DEV}" "${SLT}" "${tkn_id}" \
+                               "${jwe}" "${OVERWRITE}"; then
+        echo "Unable to update metadata; operation cancelled" >&2
+        clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :
+        return 1
+    fi
+
+    clevis_luks_cleanup
+    trap - EXIT
     return 0
 }

@@ -121,6 +121,122 @@ pin_cfg_equal() {
     return 1
 }
 
+compare_luks_header() {
+    DEV1="${1}"
+    DEV2="${2}"
+    TMP="${3}"
+
+    cryptsetup luksHeaderBackup "${DEV1}" \
+               --header-backup-file "${TMP}"/check-header1
+    cryptsetup luksHeaderBackup "${DEV2}" \
+               --header-backup-file "${TMP}"/check-header2
+
+    local cs1 cs2
+    cs1=$(cksum "${TMP}"/check-header1 | cut -d' ' -f 1)
+    cs2=$(cksum "${TMP}"/check-header2 | cut -d' ' -f 1)
+    rm -f "${TMP}"/check-header{1,2}
+
+    if [ "${cs1}" == "${cs2}" ]; then
+        return 0
+    fi
+    return 1
+}
+
+used_luks1_metadata_slots() {
+    DEV="${1}"
+    if ! luksmeta test -d "${DEV}"; then
+        echo ""
+        return 0
+    fi
+
+    local clevis_uuid="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
+    luksmeta show -d "${DEV}" \
+        | sed -rn "s|^([0-9]+)\s+active\s+${clevis_uuid}$|\1|p" \
+        | tr '\n' ' ' | sed 's/ $//'
+}
+
+used_luks2_metadata_slots() {
+    DEV="${1}"
+    cryptsetup luksDump "${DEV}" \
+        | grep -E -A1 "^\s+[0-9]+:\s+clevis$" \
+        | sed -rn 's|^\s+Keyslot:\s+([0-9]+)$|\1|p' | sort -n \
+        | tr '\n' ' ' | sed 's/ $//'
+}
+
+used_luks2_metadata_tokens() {
+    DEV="${1}"
+    cryptsetup luksDump "${DEV}" \
+        | grep -E -B1 "^\s+Keyslot:\s+[0-9]+$" \
+        | sed -rn 's|^\s+([0-9]+): clevis|\1|p' \
+        | tr '\n' ' ' | sed 's/ $//'
+}
+
+compare_luks1_metadata() {
+    DEV1="${1}"
+    DEV2="${2}"
+
+    # If both are non-initialized, metadata is the same.
+    ! luksmeta test -d "${DEV1}" && ! luksmeta test -d "${DEV2}" && return 0
+    # Otherwise, metadata differ.
+    ! luksmeta test -d "${DEV1}" && return 1
+    ! luksmeta test -d "${DEV2}" && return 1
+
+    local slt1 slt2
+    slt1=$(used_luks1_metadata_slots "${DEV1}")
+    slt2=$(used_luks1_metadata_slots "${DEV2}")
+
+    if [ "${slt1}" != "${slt2}" ]; then
+        echo "used slots did not match ($slt1) ($slt2)" >&2
+        return 1
+    fi
+
+    local slt md1 md2
+    for slt in ${slt1}; do
+        md1="$(luksmeta load -d "${DEV}" -s "${slt}")"
+        md2="$(luksmeta load -d "${DEV2}" -s "${slt}")"
+        if [ "${md1}" != "${md2}" ]; then
+            echo "metadata in slot ${slt} did not match" >&2
+            return 1
+        fi
+    done
+    return 0
+}
+
+compare_luks2_metadata() {
+    DEV1="${1}"
+    DEV2="${2}"
+
+    local slt1 slt2
+    slt1=$(used_luks2_metadata_slots "${DEV1}")
+    slt2=$(used_luks2_metadata_slots "${DEV2}")
+
+    if [ "${slt1}" != "${slt2}" ]; then
+        echo "used slots did not match ($slt1) ($slt2)" >&2
+        return 1
+    fi
+
+    local tkn1 tkn2
+    tkn1=$(used_luks2_metadata_tokens "${DEV1}")
+    tkn2=$(used_luks2_metadata_tokens "${DEV2}")
+
+    if [ "${tkn1}" != "${tkn2}" ]; then
+        echo "used tokens did not match ($tkn1) ($tkn2)" >&2
+        return 1
+    fi
+
+    local tkn md1 md2
+    for tkn in ${tkn1}; do
+        md1="$(cryptsetup token export --token-id "${tkn}" "${DEV1}")"
+        md2="$(cryptsetup token export --token-id "${tkn}" "${DEV2}")"
+        if [ "${md1}" != "${md2}" ]; then
+            echo "metadata in token ${tkn} did not match" >&2
+            return 1
+        fi
+    done
+    return 0
+}
+
+
 # Get a random port to be used with a test tang server.
 get_random_port() {
     shuf -i 1024-65535 -n 1

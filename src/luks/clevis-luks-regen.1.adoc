@@ -1,0 +1,51 @@
+CLEVIS-LUKS-REGEN(1)
+=====================
+:doctype: manpage
+
+
+== NAME
+
+clevis-luks-regen - Regenerates a clevis binding
+
+== SYNOPSIS
+
+*clevis luks regen* [-q] -d DEV -s SLT
+
+== OVERVIEW
+
+The *clevis luks regen* command regenerates the clevis binding for a given slot in a LUKS device, using the same configuration of the
+existing binding. Its operation can be compared to performing *clevis luks unbind* and *clevis luks bind* for rebinding said slot and device.
+This is useful when rotating tang keys.
+
+== OPTIONS
+
+* *-d* _DEV_ :
+  The bound LUKS device
+
+* *-s* _SLT_ :
+  The slot or key slot number for rebinding. Note that it requires that such slot is currently bound by clevis.
+
+* *-q*:
+  Do not prompt for confirmation.
+
+== EXAMPLE
+
+    Let's start by using clevis luks list to see the current binding configuration in /dev/sda1:
+
+    # clevis luks list -d /dev/sda1
+    1: tang '{"url":"http://tang.server"}'
+    2: tpm2 '{"hash":"sha256","key":"ecc"}'
+
+    We see that slot 1 in /dev/sda1 has a tang binding with the following configuration:
+    '{"url":"http://tang.server"}'
+
+    Now let's do the rebinding of slot 1:
+    # clevis luks regen -d /dev/sda1 -s 1
+
+    After a successful operation, we will have the new binding using the same configuration that was already in place.
+
+== SEE ALSO
+
+link:clevis-luks-list.1.adoc[*clevis-luks-list*(1)]
+link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)]
+link:clevis-luks-unbind.1.adoc[*clevis-luks-unbind*(1)]

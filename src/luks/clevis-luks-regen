@@ -1,0 +1,93 @@
+#!/bin/bash -e
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. clevis-luks-common-functions
+
+SUMMARY="Regenerate clevis binding"
+
+if [ "${1}" = "--summary" ]; then
+    echo "${SUMMARY}"
+    exit 0
+fi
+
+usage_and_exit () {
+    exec >&2
+    echo "Usage: clevis luks regen [-q] -d DEV -s SLOT"
+    echo
+    echo "${SUMMARY}"
+    echo
+    echo "  -d DEV  The LUKS device on which to perform rebinding"
+    echo
+    echo "  -s SLT  The LUKS slot to use"
+    echo
+    echo "  -q      Do not prompt for confirmation"
+    echo
+    exit "${1}"
+}
+
+QOPT=
+while getopts ":hqd:s:" o; do
+    case "${o}" in
+    d) DEV="${OPTARG}";;
+    h) usage_and_exit 0;;
+    s) SLT="${OPTARG}";;
+    q) QOPT="-q";;
+    *) usage_and_exit 1;;
+    esac
+done
+
+if [ -z "${DEV}" ]; then
+    echo "Did not specify a device!" >&2
+    exit 1
+fi
+
+if [ -z "${SLT}" ]; then
+    echo "Did not specify a slot!" >&2
+    exit 1
+fi
+
+# Get pin and configuration.
+if ! pin_cfg="$(clevis luks list -d "${DEV}" -s "${SLT}")" \
+                || [ -z "${pin_cfg}" ]; then
+    return 1
+fi
+
+pin="$(echo "${pin_cfg}" | cut -d' ' -f2)"
+cfg="$(echo "${pin_cfg}" | cut -d' ' -f3 | sed -e "s/'//g")"
+if [ -z "${pin}" ] || [ -z "${cfg}" ]; then
+    echo "Invalid pin or configuration" >&2
+    exit 1
+fi
+
+echo "Regenerating binding (device ${DEV}, slot ${SLT}):"
+echo "Pin: ${pin}, Config: '${cfg}'"
+
+if [ -z "${QOPT}" ]; then
+    read -r -p "Do you want to proceed? [ynYN] " ans
+    [ "${ans}" != "y" ] && [ "${ans}" != "Y" ] && exit 0
+fi
+
+if ! clevis_luks_do_bind "${DEV}" "${SLT}" "" "${pin}" "${cfg}" \
+                         "-y" "overwrite"; then
+    echo "Unable to regenerate binding in ${DEV}:${SLT}" >&2
+    exit 1
+fi
+echo "Binding regenerated successfully" >&2

@@ -1,0 +1,213 @@
+#!/bin/bash -e
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2018, 2020 Red Hat, Inc.
+# Author: Radovan Sroka <rsroka@redhat.com>
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. clevis-luks-common-functions
+
+SUMMARY="Report tang keys' rotations"
+
+if [ "${1}" = "--summary" ]; then
+    echo "${SUMMARY}"
+    exit 0
+fi
+
+report_compare() {
+    local adv_keys="${1}"
+    local mdata_keys="${2}"
+    [ -z "${adv_keys}" ] && return 1
+    [ -z "${mdata_keys}" ] && return 1
+
+    local thp keys
+    for thp in $(printf '%s' "${mdata_keys}" | jose jwk thp --input=-); do
+        if ! printf '%s' "${adv_keys}" | jose jwk thp --input=- \
+                                              --find "${thp}" >/dev/null; then
+            keys="$(printf '%s %s' "${keys}" "${thp}")"
+        fi
+    done
+    printf '%s' "${keys}"
+}
+
+report_tang() {
+    local content="${1}"
+    [ -z "${content}" ] && return 1
+
+    local url
+    if ! url="$(jose fmt --json="${content}" --get url --unquote=-)" \
+                || [ -z "${url}" ]; then
+        echo "Invalid tang metadata; URL not found" >&2
+        return 1
+    fi
+
+    local jws
+    if ! jws="$(curl -sfg "${url}/adv")"; then
+        echo "Unable to fetch advertisement (${url}/adv)" >&2
+        return 1
+    fi
+
+    local adv_keys
+    if ! adv_keys="$(jose fmt --json="${jws}" --object --get payload \
+                     --string --b64load --object --get keys \
+                     --array --unwind --output=-)"; then
+        echo "Advertisement is malformed" >&2
+        return 1
+    fi
+
+    # Check advertisement validity.
+    local ver
+    if ! ver="$(printf '%s' "${adv_keys}" | jose jwk use --input=- \
+                                                 --required \
+                                                 --use=verify \
+                                                 --output=-)"; then
+        echo "Unable to validate advertisement" >&2
+        return 1
+    fi
+    if ! printf '%s' "${ver}" | jose jws ver --input="${jws}" --key=- \
+                                     --all; then
+        echo "Advertisement is missing signatures" >&2
+        return 1
+    fi
+    local mdata_keys
+    if ! mdata_keys="$(jose fmt --json="${content}" --get adv --output=-)" \
+                       || [ -z "${mdata_keys}" ]; then
+        echo "Keys from clevis metadata not found" >&2
+        return 1
+    fi
+    report_compare "${adv_keys}" "${mdata_keys}"
+}
+
+report_sss() {
+    local content="${1}"
+    [ -z "${content}" ] && return 1
+
+    local jwe
+    for jwe in $(jose fmt --json="${content}" --get jwe --foreach=-); do
+        jwe="$(printf '%s' "${jwe}" | sed -e 's/"//g')"
+        report_decode "${jwe}"
+    done
+}
+
+report_decode() {
+    local data64="${1}"
+    [ -z "${data64}" ] && return 1
+
+    local data
+    if ! data="$(clevis_luks_decode_jwe "${data64}")" || [ -z "${data}" ]; then
+        echo "Unable to decode metadata" >&2
+        exit 1
+    fi
+
+    local pin
+    if ! pin="$(jose fmt --json="${data}" --get clevis --get pin --unquote=-)" \
+                || [ -z "${pin}" ]; then
+        echo "Pin not found in clevis metadata" >&2
+        exit 1
+    fi
+
+    local content
+    if ! content="$(jose fmt --json="${data}" --get clevis --get "${pin}" \
+                    --output=-)" || [ -z "${content}" ]; then
+        echo "Invalid pin metadata; no content found" >&2
+        return 1
+    fi
+
+    case "${pin}" in
+    tang)
+        report_tang "${content}"
+        ;;
+    sss)
+        report_sss "${content}"
+        ;;
+    esac
+}
+
+usage_and_exit () {
+    exec >&2
+    echo "Usage: clevis luks report [-q] [-r] -d DEV -s SLOT"
+    echo
+    echo "${SUMMARY}"
+    echo
+    echo "  -d DEV  The LUKS device to check for key rotations"
+    echo
+    echo "  -s SLT  The LUKS slot to use"
+    echo
+    echo "  -q      Quiet mode; do not prompt for using 'clevis luks regen'"
+    echo
+    echo "  -r      Regenerate binding with 'clevis luks regen -q -d DEV -s SLOT'"
+    echo
+    exit "${1}"
+}
+
+while getopts "hd:s:rq" o; do
+    case "${o}" in
+    d) DEV="${OPTARG}";;
+    h) usage_and_exit 0;;
+    r) ROPT="regen";;
+    s) SLT="${OPTARG}";;
+    q) QOPT="quiet";;
+    *) usage_and_exit 1;;
+    esac
+done
+
+if [ -z "${DEV}" ]; then
+    echo "Did not specify a device!" >&2
+    exit 1
+fi
+
+if [ -z "${SLT}" ]; then
+    echo "Did not specify a slot!" >&2
+    exit 1
+fi
+
+if ! data64="$(clevis_luks_read_slot "${DEV}" "${SLT}")" \
+               || [ -z "${data64}" ]; then
+    # Error message was already displayed by clevis_luks_read_slot(),
+    # at this point.
+    exit 1
+fi
+
+if ! keys="$(report_decode "${data64}")"; then
+    echo "Unable to verify whether there are rotated keys" >&2
+    exit 1
+fi
+
+# No rotated keys.
+[ -z "${keys}" ] && exit 0
+
+echo "The following keys are not in the current advertisement and were probably rotated:"
+for k in ${keys}; do
+    printf '  %s\n' "${k}"
+done
+
+
+if [ -z "${QOPT}" ] && [ -z "${ROPT}" ]; then
+    read -r -p "Do you want to regenerate the binding with \"clevis luks regen -q -d ${DEV} -s ${SLT}\"? [ynYN] " ans
+    if [ "${ans}" = "y" ] || [ "${ans}" = "Y" ]; then
+        ROPT="regen"
+    fi
+fi
+
+if [ "${ROPT}" = "regen" ]; then
+    if ! EXE="$(command -v clevis-luks-regen)" || [ -z "${EXE}" ]; then
+        echo "Unable to find clevis luks regen" >&2
+        exit 1
+    fi
+    exec "${EXE}" -q -d "${DEV}" -s "${SLT}"
+fi
+exit 1

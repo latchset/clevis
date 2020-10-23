@@ -90,6 +90,8 @@ if has_tang
   test('assume-yes', find_program('assume-yes'), env: env, timeout: 60)
   test('regen-inplace-luks1', find_program('regen-inplace-luks1'), env: env, timeout: 90)
   test('regen-not-inplace-luks1', find_program('regen-not-inplace-luks1'), env: env, timeout: 90)
+  test('report-tang-luks1', find_program('report-tang-luks1'), env: env, timeout: 90)
+  test('report-sss-luks1', find_program('report-sss-luks1'), env: env, timeout: 90)
 endif
 
 test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env)
@@ -114,6 +116,8 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 60)
     test('regen-inplace-luks2', find_program('regen-inplace-luks2'), env: env, timeout: 120)
     test('regen-not-inplace-luks2', find_program('regen-not-inplace-luks2'), env: env, timeout: 120)
+    test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)
+    test('report-sss-luks2', find_program('report-sss-luks2'), env: env, timeout: 120)
   endif
 
 test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)

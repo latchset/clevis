@@ -1,0 +1,75 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST="${0}"
+. tests-common-functions
+. clevis-luks-common-functions
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+port=$(get_random_port)
+tang_run "${TMP}" "${port}" &
+tang_wait_until_ready "${port}"
+
+url="http://${TANG_HOST}:${port}"
+adv="${TMP}/adv"
+tang_get_adv "${port}" "${adv}"
+
+cfg=$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+new_device "luks1" "${DEV}"
+
+SLT=3
+if ! clevis luks bind -f -d "${DEV}" -s "${SLT}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+
+# Report should return 0, as no keys are rotated.
+if ! clevis luks report -q -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: report should have succeeded, since no keys were rotated"
+fi
+
+# Now let's rotate the keys.
+tang_new_keys "${TMP}" "rotate-keys"
+
+# Report should now return 1.
+if clevis luks report -q -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: report should have indicated keys were rotated"
+fi
+
+# Now let's regen the keys.
+if ! clevis luks report -q -r -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: report with regen should have succeeded"
+fi
+
+# Report should return 0 again.
+if ! clevis luks report -q -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: report should have succeeded after regen"
+fi

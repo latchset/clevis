@@ -971,6 +971,7 @@ clevis_luks_do_bind() {
                                       "${OVERWRITE}"; then
         echo "Unable to save/update key slot; operation cancelled" >&2
         clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :
+        rm -rf "${CLEVIS_TMP_DIR}"
         return 1
     fi
 
@@ -978,6 +979,7 @@ clevis_luks_do_bind() {
                                "${jwe}" "${OVERWRITE}"; then
         echo "Unable to update metadata; operation cancelled" >&2
         clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :
+        rm -rf "${CLEVIS_TMP_DIR}"
         return 1
     fi
 

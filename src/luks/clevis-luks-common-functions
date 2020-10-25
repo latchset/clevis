@@ -386,6 +386,7 @@ clevis_is_luks_device_by_uuid_open() {
 # clevis_devices_to_unlock() returns a list of devices to be unlocked, as per
 # the info from crypttab.
 clevis_devices_to_unlock() {
+    local list_open_devices="${1:-}"
     [ ! -r /etc/crypttab ] && return 1
 
     local dev clevis_devices crypt_device dev_uuid bindings
@@ -408,10 +409,12 @@ clevis_devices_to_unlock() {
             continue
         fi
 
-        # Check if this device is already open.
-        dev_uuid="$(cryptsetup luksUUID "${dev}")"
-        if clevis_is_luks_device_by_uuid_open "${dev_uuid}"; then
-            continue
+        if [ -z "${list_open_devices}" ]; then
+            # Check if this device is already open.
+            dev_uuid="$(cryptsetup luksUUID "${dev}")"
+            if clevis_is_luks_device_by_uuid_open "${dev_uuid}"; then
+                continue
+            fi
         fi
 
         clevis_devices="${clevis_devices} ${dev}"

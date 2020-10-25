@@ -23,7 +23,22 @@ depends() {
     return 0
 }
 
+have_tang_bindings() {
+    . clevis-luks-common-functions
+    local dev
+    for dev in $(clevis_devices_to_unlock "list-open-devices"); do
+        if clevis luks list -d "${dev}" | grep -q tang; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 install() {
+    if [ "${hostonly_cmdline}" = "yes" ] && have_tang_bindings; then
+        echo "rd.neednet=1" > "${initdir}/etc/cmdline.d/99clevis-pin-tang.conf"
+    fi
+
     inst_multiple \
 	clevis-decrypt-tang \
 	curl

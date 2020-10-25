@@ -35,6 +35,7 @@ fi
 TMP="$(mktemp -d)"
 
 DEV="${TMP}/luks2-device"
+SLT=2
 new_device "luks2" "${DEV}"
 if clevis luks unbind -d "${DEV}" -s "${SLT}"; then
     error "${TEST}: Unbind is expected to fail for device ${DEV} and slot ${SLT}" >&2

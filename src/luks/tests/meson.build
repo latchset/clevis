@@ -95,7 +95,7 @@ if has_tang
   test('edit-tang-luks1', find_program('edit-tang-luks1'), env: env, timeout: 150)
 endif
 
-test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env)
+test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env, timeout: 60)
 
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.
@@ -114,7 +114,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
 
   if has_tang
     test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)
-    test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 60)
+    test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 90)
     test('regen-inplace-luks2', find_program('regen-inplace-luks2'), env: env, timeout: 120)
     test('regen-not-inplace-luks2', find_program('regen-not-inplace-luks2'), env: env, timeout: 120)
     test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)

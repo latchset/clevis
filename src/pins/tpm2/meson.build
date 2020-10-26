@@ -31,4 +31,4 @@ env.prepend('PATH',
   join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
   separator: ':'
 )
-test('pin-tpm2', find_program('pin-tpm2'), env: env, timeout: 90)
+test('pin-tpm2', find_program('pin-tpm2'), env: env, timeout: 120)

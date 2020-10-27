@@ -1,0 +1,180 @@
+#!/bin/bash -e
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. clevis-luks-common-functions
+
+SUMMARY="Edit a binding from a clevis-bound slot in a LUKS device"
+
+usage() {
+    exec >&2
+    echo "Usage: clevis luks edit [-f] -d DEV -s SLT [-c CONFIG]"
+    echo
+    echo "${SUMMARY}"
+    echo
+    echo "'clevis luks edit' uses the text editor defined in the EDITOR environment variable."
+    echo "                   If EDITOR is not defined, it will attempt to use 'vi' as default editor."
+    echo
+    echo "  -d DEV     The LUKS device to edit clevis-bound pins"
+    echo
+    echo "  -s SLOT    The slot to use when editing the clevis binding"
+    echo
+    echo "  -f         Proceed with the edit operation even if the configuration is unchanged"
+    echo
+    echo "  -c CONFIG  The updated config to use"
+    echo
+    exit 1
+}
+
+on_exit() {
+    [ -d "${CLEVIS_EDIT_TMP}" ] && rm -rf "${CLEVIS_EDIT_TMP}"
+}
+
+validate_cfg() {
+    local json="${1}"
+    [ -z "${json}" ] && return 1
+    jose fmt --json="${json}" --object 2>/dev/null
+}
+
+edit_cfg() {
+    local cfg_file="${1}"
+    local editor="${EDITOR:-vi}"
+
+    if ! command -v "${editor}" >/dev/null; then
+        echo "Editor '${editor}' not found. " >&2
+        echo "Please define a valid text editor with the EDITOR environment variable." >&2
+        exit 1
+    fi
+
+    "${editor}" "${cfg_file}" || true
+    if ! validate_cfg "${cfg_file}"; then
+        local ans=
+        while true; do
+            read -r -p \
+              "Malformed configuration. Would you like to edit again? [ynYN] " \
+            ans
+            [ "${ans}" != "y" ] && [ "${ans}" != "Y" ] && return 1
+            break
+        done
+        edit_cfg "${cfg_file}"
+    fi
+    return 0
+}
+
+if [ "${#}" -eq 1 ] && [ "${1}" = "--summary" ]; then
+    echo "${SUMMARY}"
+    exit 0
+fi
+
+CFG=
+FRC=
+while getopts ":fd:s:c:" o; do
+    case "$o" in
+    d) DEV=${OPTARG};;
+    s) SLT=${OPTARG};;
+    c) CFG=${OPTARG};;
+    f) FRC=-f;;
+    *) usage;;
+    esac
+done
+
+if [ -z "${DEV}" ]; then
+    echo "Did not specify a device!" >&2
+    usage
+fi
+
+if [ -z "${SLT}" ]; then
+    echo "Did not specify a slot!" >&2
+    usage
+fi
+
+if ! binding="$(clevis luks list -d "${DEV}" -s "${SLT}" 2>/dev/null)" \
+                || [ -z "${binding}" ]; then
+    echo "Error retrieving current configuration from ${DEV}:${SLT}" >&2
+    exit 1
+fi
+
+pin="$(echo "${binding}" | cut -d' ' -f2)"
+cfg="$(echo "${binding}" | cut -d' ' -f3 | sed -e "s/'//g")"
+
+if ! pretty_cfg="$(printf '%s' "${cfg}" | jq --monochrome-output .)" \
+                   || [ -z "${pretty_cfg}" ]; then
+    echo "Error reading the configuration from ${DEV}:${SLT}" >&2
+    exit 1
+fi
+
+if ! CLEVIS_EDIT_TMP="$(mktemp -d)" || [ -z "${CLEVIS_EDIT_TMP}" ]; then
+    echo "Creating a temporary dir for editing binding failed" >&2
+    exit 1
+fi
+
+trap 'on_exit' EXIT
+
+if [ -z "${CFG}" ]; then
+    CFG_FILE="${CLEVIS_EDIT_TMP}/cfg"
+    echo "${pretty_cfg}" > "${CFG_FILE}"
+
+    edit_cfg "${CFG_FILE}" || exit 1
+
+    if ! new_cfg="$(jq . -S < "${CFG_FILE}")" || [ -z "${new_cfg}" ]; then
+        echo "Error reading the updated config for ${DEV}:${SLT}" >&2
+        exit 1
+    fi
+else
+    if ! validate_cfg "${CFG}"; then
+        echo "Invalid configuration given as parameter with -c" >&2
+        exit 1
+    fi
+    new_cfg="$(printf '%s' "${CFG}" | jq --sort-keys --monochrome-output .)"
+fi
+
+if [ "${new_cfg}" = "$(printf '%s' "${pretty_cfg}" \
+                       | jq --sort-keys --monochrome-output .)" ] \
+        && [ -z "${FRC}" ]; then
+    echo "No changes detected; exiting" >&2
+    exit 1
+fi
+
+if ! jcfg="$(jose fmt --json="${new_cfg}" --object --output=- 2>/dev/null)" \
+             || [ -z "${jcfg}" ]; then
+    echo "Error preparing the configuration for the binding update" >&2
+    exit 1
+fi
+
+if [ -z "${CFG}" ]; then
+    printf "Pin: %s\nNew config:\n%s\n" "${pin}" "${new_cfg}"
+    while true; do
+        read -r -p \
+          "Would you like to proceed with the updated configuration? [ynYN] " \
+        ans
+        [ "${ans}" != "y" ] && [ "${ans}" != "Y" ] && exit 0
+        break
+    done
+fi
+
+# Remove temporary directory.
+rm -rf "${CLEVIS_EDIT_TMP}"
+
+echo "Updating binding..."
+if ! clevis_luks_do_bind "${DEV}" "${SLT}" "" "${pin}" "${new_cfg}" \
+                         "-y" "overwrite" 2>/dev/null; then
+    echo "Unable to update binding in ${DEV}:${SLT}. Operation cancelled." >&2
+    exit 1
+fi
+echo "Binding edited successfully" >&2

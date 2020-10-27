@@ -47,6 +47,8 @@ if libcryptsetup.found() and luksmeta.found() and pwmake.found()
 
   bins += join_paths(meson.current_source_dir(), 'clevis-luks-report')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-report.1')
+
+  bins += join_paths(meson.current_source_dir(), 'clevis-luks-edit')
 else
   warning('Will not install LUKS support due to missing dependencies!')
 endif

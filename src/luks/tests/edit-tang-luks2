@@ -1,0 +1,118 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+on_exit() {
+    local d
+    for d in "${TMP}" "${TMP2}"; do
+        [ ! -d "${d}" ] && continue
+        tang_stop "${d}"
+        rm -rf "${d}"
+    done
+}
+
+trap 'on_exit' EXIT
+trap 'on_exit' ERR
+
+TMP="$(mktemp -d)"
+
+port=$(get_random_port)
+tang_run "${TMP}" "${port}" &
+tang_wait_until_ready "${port}"
+
+url="http://${TANG_HOST}:${port}"
+
+cfg=$(printf '{"url":"%s"}' "${url}")
+
+# LUKS2.
+DEV="${TMP}/luks2-device"
+new_device "luks2" "${DEV}"
+
+if ! clevis luks bind -y -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+
+# Now let's try to change the config but using the same one we already have.
+if clevis luks edit -d "${DEV}" -s 1 -c "${cfg}"; then
+    error "${TEST}: edit should have failed because the config is the same."
+fi
+
+# And now, just a broken config.
+new_cfg=$(printf '{"url&:"%s"}' "${url}")
+if clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have failed because of invalid JSON"
+fi
+
+# Now let's have another tang instance running and change the config to use
+# the new one.
+port2=$(get_random_port)
+TMP2="$(mktemp -d)"
+tang_run "${TMP2}" "${port2}" &
+tang_wait_until_ready "${port2}"
+new_url="http://${TANG_HOST}:${port2}"
+new_cfg=$(printf '{"url":"%s"}' "${new_url}")
+
+if ! clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have succeeded."
+fi
+
+# Now we test an invalid server.
+new_cfg='{"url":"localhost:1"}'
+
+if clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should not have succeeded with a wrong server."
+fi
+
+# Make sure we can still unlock the device.
+if ! clevis_luks_unlock_device "${DEV}" >/dev/null; then
+    error "${TEST}: we should have been able to unlock the device"
+fi
+
+# And now let's use sss and start with a single tang server, then add a second
+# one.
+new_device "luks2" "${DEV}"
+cfg=$(printf '{"t":1,"pins":{"tang":[{"url":"%s"}]}}' "${url}")
+if ! clevis luks bind -y -d "${DEV}" sss "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+new_cfg=$(printf '{"t":1,"pins":{"tang":[{"url":"%s"},{"url":"%s"}]}}' \
+          "${url}" "${new_url}")
+
+if ! clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have succeeded and added a new tang server"
+fi
+
+# Now let's change the threshold to 2.
+new_cfg=$(printf '{"t":2,"pins":{"tang":[{"url":"%s"},{"url":"%s"}]}}' \
+          "${url}" "${new_url}")
+
+if ! clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have succeeded and added a new tang server"
+fi
+
+# And finally, let's try a broken config, with a wrong threshold.
+new_cfg=$(printf '{"t":3,"pins":{"tang":[{"url":"%s"},{"url":"%s"}]}}' \
+          "${url}" "${new_url}")
+if clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have failed because threshold > number of servers"
+fi

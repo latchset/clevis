@@ -1,0 +1,69 @@
+CLEVIS-LUKS-EDIT(1)
+===================
+:doctype: manpage
+
+
+== NAME
+
+clevis-luks-edit - Edit a binding from a clevis-bound slot in a LUKS device
+
+== SYNOPSIS
+
+*clevis luks edit* [-f] -d DEV -s SLT [-c CONFIG]
+
+== OVERVIEW
+
+The *clevis luks edit* command edits clevis bindings from a LUKS device.
+For example:
+
+    clevis luks edit -d /dev/sda1 -s 1
+
+== OPTIONS
+
+* *-d* _DEV_ :
+  The LUKS device to edit clevis-bound pins
+
+* *-s* _SLT_ :
+  The slot to use when editing the clevis binding
+
+* *-f* :
+  Proceed with the edit operation even if the config is unchanged
+
+* *-c* _CONFIG_ :
+  The updated config to use
+
+
+== EXAMPLES
+
+    clevis luks list -d /dev/sda1
+    1: tang '{"url":"addr"}'
+
+As we can see in the example above, */dev/sda1* has one slots bound, in this case, to a _tang_ pin.
+
+We can edit this binding by issuing the following command:
+
+    clevis luks edit -d /dev/sda1 -s 1
+
+This will open a text editor -- the one set in the $EDITOR environment variable, or _vi_, as a fallback -- with the current
+configuration of this binding to be edited. In this case, we should have the following:
+
+    {
+        "url": "addr"
+    }
+
+Once at the editor, we can edit the pin configuration. For _tang_, we could edit the _url_, for instance. After completing the change,
+save the file and exit. The updated configuration will be validated for JSON, and if there are no errors, you will be shown the
+updated configuration and prompted whether to proceed.
+
+By proceeding, the binding will be updated. There may be required to provide a valid LUKS passphrase for the device.
+
+In the second example, we will update the same device and slot, but we will be providing the updated configuration as well:
+
+    clevis luks edit -d /dev/sda1 -s 1 -c '{"url":"new-addr-here"}'
+
+In this case, the binding update will be done in non-interactive mode. Note that it may also be required to provide a LUKS
+passphrase for the device.
+
+== SEE ALSO
+
+link:clevis-luks-list.1.adoc[*clevis-luks-list*(1)],

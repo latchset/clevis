@@ -71,8 +71,8 @@ TPM2TOOLS_INFO="$(tpm2_createprimary -v)"
 
 match='version="(.)\.'
 [[ $TPM2TOOLS_INFO =~ $match ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
-if [[ $TPM2TOOLS_VERSION != 3 ]] && [[ $TPM2TOOLS_VERSION != 4 ]]; then
-    echo "The tpm2 pin requires tpm2-tools version 3 or 4" >&2
+if [[ $TPM2TOOLS_VERSION -lt 3 ]] || [[ $TPM2TOOLS_VERSION -gt 5 ]]; then
+    echo "The tpm2 pin requires a tpm2-tools version between 3 and 5" >&2
     exit 1
 fi
 
@@ -153,7 +153,7 @@ trap 'on_exit' EXIT
 
 case "$TPM2TOOLS_VERSION" in
     3) tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context || fail=$?;;
-    4) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
+    4|5) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
     *) fail=1;;
 esac
 if [ -n "$fail" ]; then
@@ -166,7 +166,7 @@ if [ -n "$pcr_ids" ]; then
     if [ -z "$pcr_digest" ]; then
         case "$TPM2TOOLS_VERSION" in
             3) tpm2_pcrlist -Q -L "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest || fail=$?;;
-            4) tpm2_pcrread -Q "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest || fail=$?;;
+            4|5) tpm2_pcrread -Q "$pcr_bank":"$pcr_ids" -o "$TMP"/pcr.digest || fail=$?;;
             *) fail=1;;
         esac
         if [ -n "$fail" ]; then
@@ -183,8 +183,8 @@ if [ -n "$pcr_ids" ]; then
     case "$TPM2TOOLS_VERSION" in
         3) tpm2_createpolicy -Q -g "$hash" -P -L "$pcr_bank":"$pcr_ids" \
                              -F "$TMP"/pcr.digest -f "$TMP"/pcr.policy || fail=$?;;
-        4) tpm2_createpolicy -Q -g "$hash" --policy-pcr -l "$pcr_bank":"$pcr_ids" \
-                             -f "$TMP"/pcr.digest -L "$TMP"/pcr.policy || fail=$?;;
+        4|5) tpm2_createpolicy -Q -g "$hash" --policy-pcr -l "$pcr_bank":"$pcr_ids" \
+                               -f "$TMP"/pcr.digest -L "$TMP"/pcr.policy || fail=$?;;
         *) fail=1;;
     esac
     if [ -n "$fail" ]; then
@@ -200,8 +200,8 @@ fi
 case "$TPM2TOOLS_VERSION" in
     3) tpm2_create -Q -g "$hash" -G "$alg_create_key" -c "$TMP"/primary.context -u "$TMP"/jwk.pub \
                    -r "$TMP"/jwk.priv -A "$obj_attr" "${policy_options[@]}" -I- <<< "$jwk" || fail=$?;;
-    4) tpm2_create -Q -g "$hash" -C "$TMP"/primary.context -u "$TMP"/jwk.pub \
-                   -r "$TMP"/jwk.priv -a "$obj_attr" "${policy_options[@]}" -i- <<< "$jwk" || fail=$?;;
+    4|5) tpm2_create -Q -g "$hash" -C "$TMP"/primary.context -u "$TMP"/jwk.pub \
+                     -r "$TMP"/jwk.priv -a "$obj_attr" "${policy_options[@]}" -i- <<< "$jwk" || fail=$?;;
     *) fail=1;;
 esac
 if [ -n "$fail" ]; then

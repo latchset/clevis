@@ -49,8 +49,8 @@ TPM2TOOLS_INFO="$(tpm2_createprimary -v)"
 
 match='version="(.)\.'
 [[ $TPM2TOOLS_INFO =~ $match ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
-if [[ $TPM2TOOLS_VERSION != 3 ]] && [[ $TPM2TOOLS_VERSION != 4 ]]; then
-    echo "The tpm2 pin requires tpm2-tools version 3 or 4" >&2
+if [[ $TPM2TOOLS_VERSION -lt 3 ]] || [[ $TPM2TOOLS_VERSION -gt 5 ]]; then
+    echo "The tpm2 pin requires a tpm2-tools version between 3 and 5" >&2
     exit 1
 fi
 
@@ -135,7 +135,7 @@ fi
 
 case "$TPM2TOOLS_VERSION" in
     3) tpm2_createprimary -Q -H "$auth" -g "$hash" -G "$key" -C "$TMP"/primary.context || fail=$?;;
-    4) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
+    4|5) tpm2_createprimary -Q -C "$auth" -g "$hash" -G "$key" -c "$TMP"/primary.context || fail=$?;;
     *) fail=1;;
 esac
 if [ -n "$fail" ]; then
@@ -146,8 +146,8 @@ fi
 case "$TPM2TOOLS_VERSION" in
     3) tpm2_load -Q -c "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
                  -C "$TMP"/load.context || fail=$?;;
-    4) tpm2_load -Q -C "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
-                 -c "$TMP"/load.context || fail=$?;;
+    4|5) tpm2_load -Q -C "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
+                   -c "$TMP"/load.context || fail=$?;;
     *) fail=1;;
 esac
 if [ -n "$fail" ]; then
@@ -157,7 +157,7 @@ fi
 
 case "$TPM2TOOLS_VERSION" in
     3) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-L $pcr_spec})" || fail=$?;;
-    4) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-p pcr:$pcr_spec})" || fail=$?;;
+    4|5) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-p pcr:$pcr_spec})" || fail=$?;;
     *) fail=1;;
 esac
 if [ -n "$fail" ]; then

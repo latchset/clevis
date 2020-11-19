@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash -xe
 # vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
 # Copyright (c) 2016 Red Hat, Inc.
@@ -18,34 +18,26 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-function on_exit() {
-    if [ "$PID" ]; then kill $PID; wait $PID || true; fi
+. tang-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
     [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
 }
 
 trap 'on_exit' EXIT
-trap 'exit' ERR
 
 TMP="$(mktemp -d)"
-mkdir -p "$TMP"/db
-mkdir -p "$TMP"/cache
 
-# Generate the server keys
-"${TANGD_KEYGEN}" "$TMP"/db sig exc
-"${TANGD_UPDATE}" "$TMP"/db "$TMP"/cache
+port=$(tang_new_random_port)
 
-# Start the server
-port="$(shuf -i 1024-65536 -n 1)"
-
-inetd='--inetd'
-[ "${SD_ACTIVATE##*/}" = "systemd-activate" ] && inetd=
-
-"$SD_ACTIVATE" $inetd -l 127.0.0.1:"$port" -a "$TANGD" "$TMP"/cache &
-PID=$!
-sleep 0.25
+tang_run "${TMP}" "${port}" sig exc
 
 thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
-adv="$TMP/cache/default.jws"
+adv="${TMP}/adv.jws"
+tang_get_adv "${port}" "${adv}"
 url="http://localhost:${port}"
 
 cfg="$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")"
@@ -58,8 +50,6 @@ enc="$(echo -n "hi" | clevis encrypt tang "$cfg")"
 dec="$(echo -n "$enc" | clevis decrypt)"
 test "$dec" == "hi"
 
-kill -9 $PID
-! wait $PID
-unset PID
+tang_stop "${TMP}"
 
 ! echo "$enc" | clevis decrypt

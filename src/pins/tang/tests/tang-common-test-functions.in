@@ -1,0 +1,188 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SOCAT="@SOCAT@"
+TANGD_KEYGEN="@TANGD_KEYGEN@"
+TANGD_UPDATE="@TANGD_UPDATE@"
+TANGD="@TANGD@"
+
+tang_error() {
+    echo "${1}" >&2
+    exit 1
+}
+
+tang_skip() {
+    echo "${1}" >&2
+    exit 77
+}
+
+tang_sanity_check() {
+    [ -n "${SOCAT}" ] && [ -n "${TANGD_KEYGEN}" ] && \
+        [ -n "${TANGD}" ] && return 0
+    tang_skip "tang is not enabled/supported. Check if you have met all the requirements"
+}
+
+# Creates a tang adv to be used in the tests.
+tang_create_adv() {
+    local basedir="${1}"
+    local adv="${2:-/dev/stdout}"
+
+    local SIG="${basedir}/sig.jwk"
+    jose jwk gen --input='{"alg":"ES512"}' --output="${SIG}"
+
+    local EXC="${basedir}/exc.jwk"
+    jose jwk gen --input='{"alg":"ECMR"}' --output="${EXC}"
+
+    local TEMPLATE='{"protected":{"cty":"jwk-set+json"}}'
+    jose jwk pub --set --input="${SIG}" --input="${EXC}" \
+        | jose jws sig --detached=- --signature="${TEMPLATE}" \
+                       --key="${SIG}" --output="${adv}"
+}
+
+# Get a random port to be used with a test tang server.
+tang_new_random_port() {
+    tang_sanity_check
+    shuf -i 1024-65535 -n 1
+}
+
+# Removes tang rotated keys from the test server.
+tang_remove_rotated_keys() {
+    tang_sanity_check
+    local basedir="${1}"
+
+    [ -z "${basedir}" ] && \
+        tang_error "tang_remove_rotated_keys: please specify 'basedir'"
+
+    local db="${basedir}/db"
+
+    mkdir -p "${db}"
+    pushd "${db}"
+        find . -name ".*.jwk" -exec rm -f {} \;
+    popd
+
+    [ -n "${TANGD_UPDATE}" ] && "${TANGD_UPDATE}" "${db}" "${basedir}/cache"
+    return 0
+}
+
+# Creates new keys for the test tang server.
+tang_new_keys() {
+    tang_sanity_check
+    local basedir="${1}"
+    local rotate="${2:-}"
+    local sig_name="${3:-}"
+    local exc_name="${4:-}"
+
+    [ -z "${basedir}" ] && tang_error "tang_new_keys: please specify 'basedir'"
+
+    local db="${basedir}/db"
+    mkdir -p "${db}"
+
+    if [ -n "${rotate}" ]; then
+        pushd "${db}"
+            local k
+            k=$(find . -name "*.jwk" | wc -l)
+            if [ "${k}" -gt 0 ]; then
+                for k in *.jwk; do
+                    mv -f -- "${k}" ".${k}"
+                done
+            fi
+        popd
+    fi
+
+    "${TANGD_KEYGEN}" "${db}" ${sig_name} ${exc_name}
+    [ -n "${TANGD_UPDATE}" ] && "${TANGD_UPDATE}" "${db}" "${basedir}/cache"
+
+    return 0
+}
+
+# Wait for the tang server to be operational.
+tang_wait_until_ready() {
+    tang_sanity_check
+    local port="${1}"
+
+    [ -z "${port}" ] && \
+        tang_error "tang_wait_until_ready: please specify 'port'"
+
+    local max_timeout_in_s=5
+    local start elapsed
+    start="${SECONDS}"
+    while ! curl --output /dev/null --silent --fail \
+                "http://localhost:${port}/adv"; do
+        elapsed=$((SECONDS - start))
+        if [ "${elapsed}" -gt "${max_timeout_in_s}" ]; then
+            tang_error "Timeout (${max_timeout_in_s}s) waiting for tang server"
+        fi
+        sleep 0.1
+        echo -n . >&2
+    done
+}
+
+# Start a test tang server.
+tang_run() {
+    tang_sanity_check
+    local basedir="${1}"
+    local port="${2}"
+    local sig_name="${3:-}"
+    local exc_name="${4:-}"
+
+    [ -z "${basedir}" ] && tang_error "tang_run: please specify 'basedir'"
+    [ -z "${port}" ] && tang_error "tang_run: please specify 'port'"
+
+    if ! tang_new_keys "${basedir}" "" "${sig_name}" "${exc_name}"; then
+        tang_error "Error creating new keys for tang server"
+    fi
+
+    local KEYS="${basedir}/cache"
+    [ -z "${TANGD_UPDATE}" ] && KEYS="${basedir}/db"
+
+    local pid pidfile
+    pidfile="${basedir}/tang.pid"
+
+    "${SOCAT}" -v -v TCP-LISTEN:${port},reuseaddr,fork \
+               exec:"${TANGD} ${KEYS}" &
+
+    pid=$!
+    echo "${pid}" > "${pidfile}"
+    tang_wait_until_ready "${port}"
+}
+
+# Stop tang server.
+tang_stop() {
+    tang_sanity_check
+    local basedir="${1}"
+    [ -z "${basedir}" ] && tang_error "tang_stop: please specify 'basedir'"
+
+    local pidfile="${basedir}/tang.pid"
+    [ -f "${pidfile}" ] || return 0
+
+    local pid
+    pid=$(<"${pidfile}")
+    kill -9 "${pid}" 2>/dev/null || :
+}
+
+# Get tang advertisement.
+tang_get_adv() {
+    tang_sanity_check
+    local port="${1}"
+    local adv="${2:-/dev/stdout}"
+
+    [ -z "${port}" ] && tang_error "tang_get_adv: please specify 'port'"
+    curl -L -o "${adv}" "http://localhost:${port}/adv"
+}

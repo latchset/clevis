@@ -1,39 +1,6 @@
 # We use jq for comparing the pin config in the clevis luks list tests.
 jq = find_program('jq', required: false)
 
-# We use systemd-socket-activate for running test tang servers.
-actv = find_program(
-  'systemd-socket-activate',
-  'systemd-activate',
-  join_paths('/', 'usr', 'lib', 'systemd', 'systemd-activate'),
-  required: false
-)
-
-kgen = find_program(
-  join_paths(libexecdir, 'tangd-keygen'),
-  join_paths(get_option('prefix'), get_option('libdir'), 'tangd-keygen'),
-  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-keygen'),
-  join_paths('/', 'usr', get_option('libdir'), 'tangd-keygen'),
-  join_paths('/', 'usr', get_option('libexecdir'), 'tangd-keygen'),
-  required: false
-)
-updt = find_program(
-  join_paths(libexecdir, 'tangd-update'),
-  join_paths(get_option('prefix'), get_option('libdir'), 'tangd-update'),
-  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-update'),
-  join_paths('/', 'usr', get_option('libdir'), 'tangd-update'),
-  join_paths('/', 'usr', get_option('libexecdir'), 'tangd-update'),
-  required: false
-)
-tang = find_program(
-  join_paths(libexecdir, 'tangd'),
-  join_paths(get_option('prefix'), get_option('libdir'), 'tangd'),
-  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd'),
-  join_paths('/', 'usr', get_option('libdir'), 'tangd'),
-  join_paths('/', 'usr', get_option('libexecdir'), 'tangd'),
-  required: false
-)
-
 common_functions = configure_file(input: 'tests-common-functions.in',
   output: 'tests-common-functions',
   configuration: luksmeta_data,
@@ -53,18 +20,10 @@ env.prepend('PATH',
   join_paths(meson.build_root(), 'src', 'luks'),
   join_paths(meson.build_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
   join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
   separator: ':'
 )
-
-has_tang = false
-if actv.found() and kgen.found() and updt.found() and tang.found()
-  has_tang = true
-  env.set('SD_ACTIVATE', actv.path())
-  env.set('TANGD_KEYGEN', kgen.path())
-  env.set('TANGD_UPDATE', updt.path())
-  env.set('TANGD', tang.path())
-endif
 
 test('bind-wrong-pass-luks1', find_program('bind-wrong-pass-luks1'), env: env)
 test('bind-luks1', find_program('bind-luks1'), env: env)
@@ -85,15 +44,13 @@ else
   warning('Will not run "clevis luks list" tests due to missing jq dependency')
 endif
 
-if has_tang
-  test('unlock-tang-luks1', find_program('unlock-tang-luks1'), env: env, timeout: 90)
-  test('assume-yes', find_program('assume-yes'), env: env, timeout: 60)
-  test('regen-inplace-luks1', find_program('regen-inplace-luks1'), env: env, timeout: 90)
-  test('regen-not-inplace-luks1', find_program('regen-not-inplace-luks1'), env: env, timeout: 90)
-  test('report-tang-luks1', find_program('report-tang-luks1'), env: env, timeout: 90)
-  test('report-sss-luks1', find_program('report-sss-luks1'), env: env, timeout: 90)
-  test('edit-tang-luks1', find_program('edit-tang-luks1'), env: env, timeout: 150)
-endif
+test('unlock-tang-luks1', find_program('unlock-tang-luks1'), env: env, timeout: 90)
+test('assume-yes', find_program('assume-yes'), env: env, timeout: 60)
+test('regen-inplace-luks1', find_program('regen-inplace-luks1'), env: env, timeout: 90)
+test('regen-not-inplace-luks1', find_program('regen-not-inplace-luks1'), env: env, timeout: 90)
+test('report-tang-luks1', find_program('report-tang-luks1'), env: env, timeout: 90)
+test('report-sss-luks1', find_program('report-sss-luks1'), env: env, timeout: 90)
+test('edit-tang-luks1', find_program('edit-tang-luks1'), env: env, timeout: 150)
 
 test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env, timeout: 60)
 
@@ -112,15 +69,13 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('list-sss-tang-luks2', find_program('list-sss-tang-luks2'), env: env, timeout: 60)
   endif
 
-  if has_tang
-    test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)
-    test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 90)
-    test('regen-inplace-luks2', find_program('regen-inplace-luks2'), env: env, timeout: 120)
-    test('regen-not-inplace-luks2', find_program('regen-not-inplace-luks2'), env: env, timeout: 120)
-    test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)
-    test('report-sss-luks2', find_program('report-sss-luks2'), env: env, timeout: 120)
-    test('edit-tang-luks2', find_program('edit-tang-luks2'), env: env, timeout: 210)
-  endif
+  test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)
+  test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 90)
+  test('regen-inplace-luks2', find_program('regen-inplace-luks2'), env: env, timeout: 120)
+  test('regen-not-inplace-luks2', find_program('regen-not-inplace-luks2'), env: env, timeout: 120)
+  test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)
+  test('report-sss-luks2', find_program('report-sss-luks2'), env: env, timeout: 120)
+  test('edit-tang-luks2', find_program('edit-tang-luks2'), env: env, timeout: 210)
 
-test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
+  test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
 endif

@@ -30,7 +30,7 @@ trap 'exit' ERR
 
 TMP="$(mktemp -d)"
 ADV="${TMP}/adv.jws"
-create_tang_adv "${ADV}"
+tang_create_adv "${TMP}" "${ADV}"
 CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
 
 # LUKS1.

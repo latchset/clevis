@@ -36,11 +36,10 @@ trap 'on_exit' ERR
 
 TMP="$(mktemp -d)"
 
-port=$(get_random_port)
-tang_run "${TMP}" "${port}" &
-tang_wait_until_ready "${port}"
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
 
-url="http://${TANG_HOST}:${port}"
+url="http://localhost:${port}"
 
 cfg=$(printf '{"url":"%s"}' "${url}")
 
@@ -65,11 +64,10 @@ fi
 
 # Now let's have another tang instance running and change the config to use
 # the new one.
-port2=$(get_random_port)
+port2=$(tang_new_random_port)
 TMP2="$(mktemp -d)"
-tang_run "${TMP2}" "${port2}" &
-tang_wait_until_ready "${port2}"
-new_url="http://${TANG_HOST}:${port2}"
+tang_run "${TMP2}" "${port2}"
+new_url="http://localhost:${port2}"
 new_cfg=$(printf '{"url":"%s"}' "${new_url}")
 
 if ! clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then

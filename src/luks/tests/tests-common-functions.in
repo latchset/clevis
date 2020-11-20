@@ -18,6 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+. tang-common-test-functions
+
 error() {
     echo "${1}" >&2
     exit 1
@@ -32,20 +34,6 @@ skip_test() {
 # Support is determined at build time.
 luks2_supported() {
     return @OLD_CRYPTSETUP@
-}
-
-# Creates a tang adv to be used in the test.
-create_tang_adv() {
-    local adv="${1}"
-    local SIG="${TMP}/sig.jwk"
-    jose jwk gen -i '{"alg":"ES512"}' > "${SIG}"
-
-    local EXC="${TMP}/exc.jwk"
-    jose jwk gen -i '{"alg":"ECMR"}' > "${EXC}"
-
-    local TEMPLATE='{"protected":{"cty":"jwk-set+json"}}'
-    jose jwk pub -s -i "${SIG}" -i "${EXC}" \
-        | jose jws sig -I- -s "${TEMPLATE}" -k "${SIG}" -o "${adv}"
 }
 
 # Creates a new LUKS1 or LUKS2 device to be used.
@@ -236,132 +224,4 @@ compare_luks2_metadata() {
     return 0
 }
 
-
-# Get a random port to be used with a test tang server.
-get_random_port() {
-    shuf -i 1024-65535 -n 1
-}
-
-# Removes tang rotated keys from the test server.
-tang_remove_rotated_keys() {
-    local basedir="${1}"
-
-    if [ -z "${basedir}" ]; then
-        echo "Please pass a valid base directory for tang"
-        return 1
-    fi
-
-    [ -z "${TANGD_UPDATE}" ] && skip_test "WARNING: TANGD_UPDATE is not defined."
-
-    local db="${basedir}/db"
-    local cache="${basedir}/cache"
-    mkdir -p "${db}"
-    mkdir -p "${cache}"
-
-    pushd "${db}"
-        find . -name ".*.jwk" -exec rm -f {} \;
-    popd
-
-    "${TANGD_UPDATE}" "${db}" "${cache}"
-    return 0
-}
-
-# Creates new keys for the test tang server.
-tang_new_keys() {
-    local basedir="${1}"
-    local rotate="${2}"
-
-    if [ -z "${basedir}" ]; then
-        echo "Please pass a valid base directory for tang"
-        return 1
-    fi
-
-    [ -z "${TANGD_KEYGEN}" ] && skip_test "WARNING: TANGD_KEYGEN is not defined."
-    [ -z "${TANGD_UPDATE}" ] && skip_test "WARNING: TANGD_UPDATE is not defined."
-
-    local db="${basedir}/db"
-    local cache="${basedir}/cache"
-    mkdir -p "${db}"
-
-    if [ -n "${rotate}" ]; then
-        pushd "${db}"
-            local k
-            k=$(find . -name "*.jwk" | wc -l)
-            if [ "${k}" -gt 0 ]; then
-                for k in *.jwk; do
-                    mv -f -- "${k}" ".${k}"
-                done
-            fi
-        popd
-    fi
-
-    "${TANGD_KEYGEN}" "${db}"
-    "${TANGD_UPDATE}" "${db}" "${cache}"
-
-    return 0
-}
-
-# Start a test tang server.
-tang_run() {
-    local basedir="${1}"
-    local port="${2}"
-
-    if [ -z "${basedir}" ]; then
-        echo "Please pass a valid base directory for tang" >&2
-        return 1
-    fi
-
-    if [ -z "${port}" ]; then
-        echo "Please pass a valid port for tang" >&2
-        return 1
-    fi
-
-    if ! tang_new_keys "${basedir}"; then
-        echo "Error creating new keys for tang server" >&2
-        return 1
-    fi
-
-    local KEYS="${basedir}/cache"
-    local inetd='--inetd'
-    [ "${SD_ACTIVATE##*/}" = "systemd-activate" ] && inetd=
-
-    local pid pidfile
-    pidfile="${basedir}/tang.pid"
-
-    "${SD_ACTIVATE}" ${inetd} -l "${TANG_HOST}":"${port}" \
-            -a "${TANGD}" "${KEYS}" &
-    pid=$!
-    echo "${pid}" > "${pidfile}"
-}
-
-# Stop tang server.
-tang_stop() {
-    local basedir="${1}"
-    local pidfile="${basedir}/tang.pid"
-    [ -f "${pidfile}" ] || return 0
-
-    local pid
-    pid=$(<"${pidfile}")
-    kill "${pid}"
-}
-
-# Wait for the tang server to be operational.
-tang_wait_until_ready() {
-   local port="${1}"
-   while ! curl --output /dev/null --silent --fail \
-                http://"${TANG_HOST}":"${port}"/adv; do
-       sleep 0.1
-       echo -n . >&2
-   done
-}
-
-# Get tang advertisement.
-tang_get_adv() {
-    local port="${1}"
-    local adv="${2}"
-
-    curl -o "${adv}" http://"${TANG_HOST}":"${port}"/adv
-}
-
-export TANG_HOST=127.0.0.1
 export DEFAULT_PASS='just-some-test-password-here'

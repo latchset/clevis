@@ -33,11 +33,10 @@ trap 'on_exit' ERR
 
 TMP="$(mktemp -d)"
 
-port=$(get_random_port)
-tang_run "${TMP}" "${port}" &
-tang_wait_until_ready "${port}"
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
 
-url="http://${TANG_HOST}:${port}"
+url="http://localhost:${port}"
 cfg=$(printf '{"url":"%s"}' "$url")
 
 test_tang() {

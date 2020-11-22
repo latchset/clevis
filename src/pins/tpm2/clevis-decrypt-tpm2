@@ -165,8 +165,5 @@ if [ -n "$fail" ]; then
     exit 1
 fi
 
-# The on_exit() trap will not be fired after exec, so let's clean up the temp
-# directory at this point.
-[ -d "${TMP}" ] && rm -rf "${TMP}"
-
-exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)
+(echo -n "$jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
+exit $?

@@ -46,7 +46,8 @@ if ! [ -t 0 ]; then
         exit 1
     fi
 
-    exec "$cmd" < <(echo -n "$hdr."; /bin/cat)
+    (echo -n "$hdr."; /bin/cat) | "$cmd"
+    exit $?
 fi
 
 exec >&2

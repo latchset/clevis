@@ -36,6 +36,7 @@ install() {
 
     inst_multiple \
         /etc/services \
+        @SYSTEMD_REPLY_PASS@ \
         @libexecdir@/clevis-luks-askpass \
         clevis-luks-common-functions \
         grep sed cut \
@@ -45,8 +46,7 @@ install() {
         luksmeta \
         clevis \
         mktemp \
-        jose \
-        ncat
+        jose
 
     dracut_need_initqueue
 }

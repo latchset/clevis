@@ -32,6 +32,7 @@ test('unbind-luks1', find_program('unbind-luks1'), env: env)
 test('bind-key-file-non-interactive', find_program('bind-key-file-non-interactive-luks1'), env: env)
 test('bind-pass-with-newline', find_program('bind-pass-with-newline-luks1'), env: env)
 test('bind-pass-with-newline-keyfile', find_program('bind-pass-with-newline-keyfile-luks1'), env: env)
+test('bind-binary-keyfile', find_program('bind-binary-keyfile-luks1'), env: env)
 # Bug #70.
 test('bind-already-used-luksmeta-slot', find_program('bind-already-used-luksmeta-slot'), env: env, timeout: 60)
 test('bad-sss', find_program('bad-sss'), env: env)

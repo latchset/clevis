@@ -1,0 +1,58 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST="${0}"
+. tests-common-functions
+. clevis-luks-common-functions
+
+on_exit() {
+    local exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
+
+url="http://localhost:${port}"
+ADV="${TMP}/adv.jws"
+tang_get_adv "${port}" "${ADV}"
+CFG="$(printf '{"url":"%s","adv":"%s"}' "${url}" "$ADV")"
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+KEYFILE="${TMP}/key"
+
+# Using a binary key file.
+dd if=/dev/urandom bs=4096 count=1 2>/dev/null > "${KEYFILE}"
+
+new_device_keyfile "luks1" "${DEV}" "${KEYFILE}"
+if ! clevis luks bind -f -k "${KEYFILE}" -d "${DEV}" tang "${CFG}"; then
+    error "${TEST}: Binding is expected to succeed when given a correct (${KEYFILE}) keyfile."
+fi
+
+if ! clevis_luks_unlock_device "${DEV}" >/dev/null; then
+    error "${TEST}: Unlock of ${DEV} is expected to work."
+fi

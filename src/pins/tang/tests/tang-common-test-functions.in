@@ -186,3 +186,14 @@ tang_get_adv() {
     [ -z "${port}" ] && tang_error "tang_get_adv: please specify 'port'"
     curl -L -o "${adv}" "http://localhost:${port}/adv"
 }
+
+run_test_server() {
+    local port="${1}"
+    local response="${2}"
+
+    [ -z "${SOCAT}" ] && tang_skip "run_test_server: socat is not available"
+    [ -z "${port}" ] && tang_error "run_test_server: please specify 'port'"
+    [ -z "${response}" ] && tang_error "run_test_server: please specify 'response'"
+
+    "${SOCAT}" -v -v TCP-LISTEN:${port},reuseaddr SYSTEM:"cat ${response}" &
+}

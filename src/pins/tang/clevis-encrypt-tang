@@ -83,7 +83,7 @@ elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
         exit 1
     fi
 
-    if ! jws="$(jose fmt -j "$jws" -Oo-)"; then
+    if ! jws="$(jose fmt --json="${jws}" -Oo- 2>/dev/null)"; then
         echo "Advertisement file '$jws' is malformed!" >&2
         exit 1
     fi
@@ -94,7 +94,8 @@ elif ! jws="$(curl -sfg "$url/adv/$thp")"; then
     exit 1
 fi
 
-if ! jwks="$(jose fmt -j- -Og payload -SyOg keys -AUo- <<< "$jws")"; then
+if ! jwks="$(jose fmt --json="${jws}" -Og payload -SyOg keys \
+             -AUo- 2>/dev/null)"; then
     echo "Advertisement is malformed!" >&2
     exit 1
 fi

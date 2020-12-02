@@ -929,7 +929,7 @@ clevis_luks_do_bind() {
                                                 "${KEYFILE}" \
                     && ! KEY="$(clevis_luks_get_existing_key "${DEV}" \
                                 "Enter existing LUKS password: " \
-                                "recover")" || [ -z "${KEY}" ]; then
+                                "recover")"; then
         return 1
     fi
 
@@ -989,4 +989,27 @@ clevis_luks_do_bind() {
     clevis_luks_cleanup
     trap - EXIT
     return 0
+}
+
+# clevis_luks_luks2_supported() indicates whether we support LUKS2 devices.
+# Suppor is determined at build time.
+function clevis_luks_luks2_supported() {
+    # We require cryptsetup >= 2.0.4 to fully support LUKSv2.
+    return @OLD_CRYPTSETUP@
+}
+
+# clevis_luks_type() returns the LUKS type of a device, e.g. "luks1".
+clevis_luks_type() {
+    local DEV="${1}"
+    [ -z "${DEV}" ] && return 1
+    local luks_type
+    if cryptsetup isLuks --type luks1 "${DEV}"; then
+        luks_type="luks1"
+    elif cryptsetup isLuks --type luks2 "${DEV}"; then
+        clevis_luks_luks2_supported "${DEV}" || return 1
+        luks_type="luks2"
+    else
+        return 1
+    fi
+    echo "${luks_type}"
 }

@@ -1,0 +1,144 @@
+#!/bin/bash -xe
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-common-test-functions
+
+on_exit() {
+    local exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+    exit "${exit_status}"
+}
+
+do_test() {
+    local port="${1}"
+    local response="${2}"
+    local stderr="${3:-/dev/stderr}"
+
+    run_test_server "${port}" "${response}"
+    cfg="$(printf '{"url":"localhost:%d"}' "${port}")"
+    echo foo | clevis encrypt tang "${cfg}" -y 2>"${stderr}"
+}
+
+do_test_with_adv() {
+    local port="${1}"
+    local adv="${2}"
+    local stderr="${3:-/dev/stderr}"
+
+    cfg="$(printf '{"url":"localhost:%d","adv":"%s"}' "${port}" "${adv}")"
+    echo foo | clevis encrypt tang "${cfg}" 2>"${stderr}"
+}
+
+validate_output() {
+    local output="${1}"
+    if grep -Fq jose "${output}"; then
+        tang_error "'jose' is not expected to appear in the error output"
+    fi
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+CASES="${TMP}/cases"
+mkdir -p "${CASES}"
+
+port=$(tang_new_random_port)
+
+# Let's test server responses.
+# Case 1 - regular advertisement - PASS.
+RESP="${CASES}"/good-01
+cat << EOF > "${RESP}"
+HTTP/1.0 200 OK
+
+$(tang_create_adv "${TMP}" /dev/stdout)
+EOF
+
+# Case 2 - bad advertisement.
+RESP="${CASES}"/bad-01
+adv='{'
+cat << EOF > "${RESP}"
+HTTP/1.0 200 OK
+
+${adv}
+EOF
+
+# Case 3 - returning 404.
+RESP="${CASES}"/bad-02
+cat << EOF > "${RESP}"
+HTTP/1.0 404 Not Found
+
+EOF
+
+# case 4 - returning 301.
+RESP="${CASES}"/bad-03
+cat << EOF > "${RESP}"
+HTTP/1.0 301 Moved Permanently
+
+EOF
+
+# case 5 - returning 500.
+RESP="${CASES}"/bad-04
+cat << EOF > "${RESP}"
+HTTP/1.0 500 Internal Server Error
+
+EOF
+
+# Tests where bind is expected to pass.
+for c in "${CASES}"/good-*; do
+    STDERR="${c}".stderr
+    do_test "${port}" "${c}" "${STDERR}"
+    validate_output "${STDERR}"
+done
+
+# Tests where bind is expected to fail (validate is still expected to succeed).
+for c in "${CASES}"/bad-*; do
+    STDERR="${c}".stderr
+    ! do_test "${port}" "${c}" "${STDERR}"
+    validate_output "${STDERR}"
+done
+
+# Now let's do some tests passing "adv" in the configuration.
+STDERR="${CASES}"/stderr
+for adv in "[]" "]" "" "{}"; do
+    ! do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    validate_output "${STDERR}"
+done
+
+# Now let's use existing files as well.
+tang_run "${TMP}" "${port}"
+
+touch "${CASES}"/adv-bad-01
+echo '{' > "${CASES}"/adv-bad-02
+echo "foobar" > "${CASES}"/adv-bad-03
+tang_get_adv "${port}" "${CASES}"/adv-good-01
+
+# Tests where bind is expected to pass.
+for adv in "${CASES}"/adv-good-*; do
+    STDERR="${adv}".stderr
+    do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    validate_output "${STDERR}"
+done
+
+# Tests where bind is expected to fail. validate still should pass.
+for adv in "${CASES}"/adv-bad-*; do
+    STDERR="${adv}".stderr
+    ! do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    validate_output "${STDERR}"
+done

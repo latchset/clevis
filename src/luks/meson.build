@@ -14,9 +14,11 @@ else
     endif
 endif
 
-clevis_luks_bind = configure_file(input: 'clevis-luks-bind.in',
-               output: 'clevis-luks-bind',
-               configuration: luksmeta_data)
+clevis_luks_common_functions = configure_file(
+  input: 'clevis-luks-common-functions.in',
+  output: 'clevis-luks-common-functions',
+  configuration: luksmeta_data
+)
 
 clevis_luks_unbind = configure_file(input: 'clevis-luks-unbind.in',
                output: 'clevis-luks-unbind',
@@ -29,12 +31,12 @@ if libcryptsetup.found() and luksmeta.found() and pwmake.found()
   bins += clevis_luks_unbind
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-unbind.1')
 
-  bins += clevis_luks_bind
+  bins += join_paths(meson.current_source_dir(), 'clevis-luks-bind')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-bind.1')
 
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-unlockers.7')
 
-  bins += join_paths(meson.current_source_dir(), 'clevis-luks-common-functions')
+  bins += clevis_luks_common_functions
 
   bins += join_paths(meson.current_source_dir(), 'clevis-luks-list')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-list.1')

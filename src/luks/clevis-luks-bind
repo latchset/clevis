@@ -1,0 +1,128 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2016 Red Hat, Inc.
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+. clevis-luks-common-functions
+
+SUMMARY="Binds a LUKS device using the specified policy"
+
+usage() {
+    exec >&2
+    echo
+    echo "Usage: clevis luks bind [-y] [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] -d DEV PIN CFG"
+    echo
+    echo "$SUMMARY":
+    echo
+    echo "  -f           Do not prompt for LUKSMeta initialization"
+    echo
+    echo "  -d DEV       The LUKS device on which to perform binding"
+    echo
+    echo "  -y           Automatically answer yes for all questions"
+    echo
+    echo "  -s SLT       The LUKS slot to use"
+    echo
+    echo "  -t TKN_ID    The LUKS token ID to use; only available for LUKS2"
+    echo
+    echo "  -k KEY       Non-interactively read LUKS password from KEY file"
+    echo "  -k -         Non-interactively read LUKS password from standard input"
+    echo
+    exit 2
+}
+
+if [ $# -eq 1 ] && [ "$1" = "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+FRC=
+YES=
+while getopts ":hfyd:s:k:t:" o; do
+    case "$o" in
+    f) FRC='-f';;
+    d) DEV="$OPTARG";;
+    s) SLT="$OPTARG";;
+    k) KEY="$OPTARG";;
+    t) TOKEN_ID="$OPTARG";;
+    y) FRC='-f'
+       YES='-y';;
+    *) usage;;
+    esac
+done
+
+if [ -z "$DEV" ]; then
+    echo "Did not specify a device!" >&2
+    usage
+fi
+
+if ! luks_type="$(clevis_luks_type "${DEV}")"; then
+    echo "${DEV} is not a supported LUKS device" >&2
+    exit 1
+fi
+
+if ! PIN="${@:$((OPTIND++)):1}" || [ -z "$PIN" ]; then
+    echo "Did not specify a pin!" >&2
+    usage
+elif ! EXE=$(command -v clevis-encrypt-"${PIN}") || [ -z "${EXE}" ]; then
+    echo "'${PIN}' is not a valid pin!" >&2
+    usage
+fi
+
+if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
+    echo "Did not specify a pin config!" >&2
+    usage
+fi
+
+
+if [ "${luks_type}" = "luks1" ] && [ -n "${TOKEN_ID}" ]; then
+    echo "${DEV} is a LUKS1 device; -t is only supported in LUKS2" >&2
+    exit 1
+fi
+
+# Get the existing passphrase/keyfile.
+existing_key=
+keyfile=
+case "${KEY}" in
+"") read -r -s -p "Enter existing LUKS password: " existing_key; echo >&2;;
+ -) read -r -s -p "" existing_key
+    if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}" \
+                                    && [ -z "${FRC}" ]; then
+        echo "Cannot use '-k-' without '-f' or '-y' unless already initialized!" >&2
+        usage
+    fi
+    ;;
+ *) keyfile="${KEY}"
+    if [ ! -r "${keyfile}" ]; then
+        echo "Cannot read key file '${keyfile}'" >&2
+        exit 1
+    fi
+    ;;
+esac
+
+# If necessary, initialize the LUKS volume.
+if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}"; then
+    luksmeta init -d "${DEV}" ${FRC}
+fi
+
+if ! clevis_luks_do_bind "${DEV}" "${SLT}" "" \
+                         "${PIN}" "${CFG}" \
+                         "${YES}" "" \
+                         "${existing_key}" "${keyfile}"; then
+    echo "Error adding new binding to ${DEV}" >&2
+    exit 1
+fi

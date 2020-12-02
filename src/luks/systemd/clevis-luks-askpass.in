@@ -58,7 +58,7 @@ while true; do
         fi
 
         uuid="$(cryptsetup luksUUID "${d}")"
-        if ! printf '+%s' "${pt}" | ncat -U -u --send-only "${s}"; then
+        if ! printf '%s' "${pt}" | @SYSTEMD_REPLY_PASS@ 1 "${s}"; then
             echo "Unable to unlock ${d} (UUID=${uuid}) with recovered passphrase" >&2
             continue
         fi

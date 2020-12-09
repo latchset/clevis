@@ -41,7 +41,8 @@ centos:*)
     yum -y clean all
     yum -y --setopt=deltarpm=0 update
     yum install -y yum-utils
-    yum config-manager -y --set-enabled PowerTools || true
+    yum config-manager -y --set-enabled PowerTools || yum config-manager \
+        -y --set-enabled powertools || :
     yum -y install epel-release
     yum -y install ${COMMON} pkgconfig openssl-devel openssl zlib-devel \
         jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \

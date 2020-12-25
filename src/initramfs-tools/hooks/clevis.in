@@ -74,6 +74,8 @@ if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
             copy_exec "${_LIBRARY}" || die 2 "Unable to copy ${_LIBRARY}"
         fi
     done
+    manual_add_modules tpm_crb
+    manual_add_modules tpm_tis
 fi
 
 

@@ -49,7 +49,7 @@ test_tang() {
                    | clevis decrypt)"; then
             error "${TEST}: tang - encrypt should succeed."
         fi
-        if ["${pt}" != "${data}" ]; then
+        if [ "${pt}" != "${data}" ]; then
             error "${TEST}: tang - pt(${pt}) != data("${data}")."
         fi
     done
@@ -67,7 +67,7 @@ test_sss() {
                    | clevis decrypt)"; then
             error "${TEST}: sss1 - encrypt should succeed."
         fi
-        if ["${pt}" != "${data}" ]; then
+        if [ "${pt}" != "${data}" ]; then
             error "${TEST}: sss1 - pt(${pt}) != data("${data}")."
         fi
 
@@ -75,7 +75,7 @@ test_sss() {
                    | clevis decrypt)"; then
             error "${TEST}: sss2 - encrypt should succeed."
         fi
-        if ["${pt}" != "${data}" ]; then
+        if [ "${pt}" != "${data}" ]; then
             error "${TEST}: sss2 - pt(${pt}) != data("${data}")."
         fi
     done

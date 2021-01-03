@@ -65,4 +65,4 @@ if ! pt=$(clevis_luks_unlock_device "${DEV}"); then
     exit 1
 fi
 
-cryptsetup open -d- "${DEV}" "${NAME}" < <(echo -n "${pt}")
+echo -n "${pt}" | cryptsetup open -d- "${DEV}" "${NAME}"

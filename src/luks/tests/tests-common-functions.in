@@ -224,4 +224,4 @@ compare_luks2_metadata() {
     return 0
 }
 
-export DEFAULT_PASS='just-some-test-password-here'
+export DEFAULT_PASS='   just-some-   test-password-here 1.+?~!@#$%^&*();:'"'"'"[]{}_=/`\   '

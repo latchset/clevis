@@ -39,7 +39,10 @@ jobs:
       - name: Run tests
         run: |
           cd build
-          meson test || cat meson-logs/testlog.txt >&2
+          if ! meson test ; then
+              cat meson-logs/testlog.txt >&2
+              exit -1
+          fi
 
       - name: Show full test logs
         run: cat build/meson-logs/testlog.txt >&2

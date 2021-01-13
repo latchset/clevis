@@ -683,7 +683,7 @@ clevis_luks_get_existing_key() {
     fi
 
     # Let's prompt the user for the password.
-    read -r -s -p "${PROMPT}" pt; echo >&2
+    IFS= read -r -s -p "${PROMPT}" pt; echo >&2
 
     # Check if key is valid.
     clevis_luks_check_valid_key_or_keyfile "${DEV}" "${pt}" || return 1

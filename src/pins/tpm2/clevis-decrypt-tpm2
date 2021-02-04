@@ -142,6 +142,7 @@ if [ -n "$fail" ]; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
+tpm2_flushcontext -t
 
 case "$TPM2TOOLS_VERSION" in
     3) tpm2_load -Q -c "$TMP"/primary.context -u "$TMP"/jwk.pub -r "$TMP"/jwk.priv \
@@ -154,6 +155,7 @@ if [ -n "$fail" ]; then
     echo "Loading jwk to TPM2 failed!" >&2
     exit 1
 fi
+tpm2_flushcontext -t
 
 case "$TPM2TOOLS_VERSION" in
     3) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-L $pcr_spec})" || fail=$?;;
@@ -164,6 +166,7 @@ if [ -n "$fail" ]; then
     echo "Unsealing jwk from TPM failed!" >&2
     exit 1
 fi
+tpm2_flushcontext -t
 
 (echo -n "$jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
 exit $?

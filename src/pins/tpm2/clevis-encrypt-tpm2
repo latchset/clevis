@@ -160,6 +160,7 @@ if [ -n "$fail" ]; then
     echo "Creating TPM2 primary key failed!" >&2
     exit 1
 fi
+tpm2_flushcontext -t
 
 policy_options=()
 if [ -n "$pcr_ids" ]; then
@@ -173,6 +174,7 @@ if [ -n "$pcr_ids" ]; then
             echo "Creating PCR hashes file failed!" >&2
             exit 1
         fi
+        tpm2_flushcontext -t
     else
         if ! jose b64 dec -i- -O "$TMP"/pcr.digest <<< "$pcr_digest"; then
             echo "Error decoding PCR digest!" >&2
@@ -191,6 +193,7 @@ if [ -n "$pcr_ids" ]; then
         echo "create policy fail, please check the environment or parameters!"
         exit 1
     fi
+    tpm2_flushcontext -t
 
     policy_options+=(-L "$TMP/pcr.policy")
 else
@@ -208,6 +211,7 @@ if [ -n "$fail" ]; then
     echo "Creating TPM2 object for jwk failed!" >&2
     exit 1
 fi
+tpm2_flushcontext -t
 
 if ! jwk_pub="$(jose b64 enc -I "$TMP"/jwk.pub)"; then
     echo "Encoding jwk.pub in Base64 failed!" >&2

@@ -1,0 +1,42 @@
+CLEVIS-LUKS-PASS(1)
+===================
+:doctype: manpage
+
+
+== NAME
+
+clevis-luks-pass - Extracts the passphrase used for binding a particular slot in a LUKS device
+
+== SYNOPSIS
+
+*clevis luks pass* -d DEV -s SLT
+
+== OVERVIEW
+
+The *clevis luks pass* command extracts the passphrase used for binding a particular slot in a LUKS device.
+For example:
+
+    clevis luks pass -d /dev/sda1 -s 1
+
+== OPTIONS
+
+* *-d* _DEV_ :
+  The LUKS device on which to extract a passphrase from
+
+* *-s* _SLT_ :
+  The slot to use for extracting the passphrase
+
+== EXAMPLE
+
+    clevis luks pass -d /dev/sda1 -s 1
+    <passphrase here>
+
+Note that the output of *clevis luks pass* might be non-printable, in which case it would be better to redirect its output to a file and use it as a key file together with cryptsetup. For instance:
+
+    clevis luks pass -d /dev/sda1 -s 1 > slot1-passphrase
+
+And the file slot1-passphrase will contain the passphrase associated with slot #1 in /dev/sda1.
+
+== SEE ALSO
+
+link:clevis-luks-unlock.1.adoc[*clevis-luks-unlock*(1)],

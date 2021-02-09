@@ -1,0 +1,58 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST="${0}"
+. tests-common-functions
+. clevis-luks-common-functions
+
+on_exit() {
+    [ ! -d "${TMP}" ] && return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
+
+url="http://localhost:${port}"
+adv="${TMP}/adv"
+tang_get_adv "${port}" "${adv}"
+
+cfg=$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")
+
+# LUKS2.
+DEV="${TMP}/luks2-device"
+new_device "luks2" "${DEV}"
+
+if ! clevis luks bind -f -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+
+# Now let's test the passphrase.
+SLT=1
+PASS=$(clevis luks pass -d "${DEV}" -s "${SLT}")
+echo $PASS >&2
+if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" "${PASS}" "" "${SLT}"; then
+    error "Passphrase obtained from clevis luks pass failed."
+fi

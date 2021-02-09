@@ -196,4 +196,5 @@ run_test_server() {
     [ -z "${response}" ] && tang_error "run_test_server: please specify 'response'"
 
     "${SOCAT}" -v -v TCP-LISTEN:${port},reuseaddr SYSTEM:"cat ${response}" &
+    sleep 1
 }

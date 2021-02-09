@@ -224,4 +224,9 @@ compare_luks2_metadata() {
     return 0
 }
 
+new_passphrase() {
+    jose jwk gen --input='{"kty":"oct","bytes":8}' --output=- \
+        | jose fmt --json=- --object --get k --unquote=-
+}
+
 export DEFAULT_PASS='   just-some-   test-password-here 1.+?~!@#$%^&*();:'"'"'"[]{}_=/`\   '

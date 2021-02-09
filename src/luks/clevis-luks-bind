@@ -99,7 +99,7 @@ existing_key=
 keyfile=
 case "${KEY}" in
 "") IFS= read -r -s -p "Enter existing LUKS password: " existing_key; echo >&2;;
- -) IFS= read -r -s -p "" existing_key
+ -) IFS= read -r -s -p "" existing_key ||:
     if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}" \
                                     && [ -z "${FRC}" ]; then
         echo "Cannot use '-k-' without '-f' or '-y' unless already initialized!" >&2

@@ -35,25 +35,38 @@ tang_create_adv "${TMP}" "${ADV}"
 CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
 UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
 KEYFILE="${TMP}/key"
-PASS=$(openssl rand -hex 8)
+PASS=$(new_passphrase)
 echo -n "${PASS}" > "${KEYFILE}"
 
 # LUKS1.
 DEV="${TMP}/luks1-device"
 new_device_keyfile "luks1" "${DEV}" "${KEYFILE}"
+
+verify_bind() {
+    local TDEV=${1}
+    local TSLT=${2}
+    local state uuid
+
+    if ! read -r _ state uuid < <(luksmeta show -d "${TDEV}" | grep "^${TSLT} *"); then
+        error "${TEST}: Error reading LUKSmeta info for slot ${TSLT} of ${TDEV}." >&2
+    fi
+
+    if [ "${state}" != "active" ]; then
+        error "${TEST}: state (${state}) is expected to be 'active'." >&2
+    fi
+
+    if [ "${uuid}" != "${UUID}" ]; then
+        error "${TEST}: UUID ($uuid) is expected to be '${UUID}'." >&2
+    fi
+}
+
 if ! clevis luks bind -f -k "${KEYFILE}" -d "${DEV}" tang "${CFG}"; then
-    error "${TEST}: Binding is expected to succeed when given a correct (${KEYFILE})." >&2
+    error "${TEST}: Binding is expected to succeed when given a correct keyfile (${KEYFILE})." >&2
 fi
+verify_bind "${DEV}" "1"
 
-SLT=1
-if ! read -r _ state uuid < <(luksmeta show -d "${DEV}" | grep "^${SLT} *"); then
-    error "${TEST}: Error reading LUKSmeta info for slot ${SLT} of ${DEV}." >&2
+# Now let's pass the keyfile via stdin, non-interactively.
+if ! echo -n "${PASS}" | clevis luks bind -f -k- -d "${DEV}" tang "${CFG}"; then
+    error "${TEST}: Binding is expected to succeed when given a correct passphrase (${PASS})." >&2
 fi
-
-if [ "${state}" != "active" ]; then
-    error "${TEST}: state (${state}) is expected to be 'active'." >&2
-fi
-
-if [ "${uuid}" != "${UUID}" ]; then
-    error "${TEST}: UUID ($uuid) is expected to be '${UUID}'." >&2
-fi
+verify_bind "${DEV}" "2"

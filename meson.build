@@ -1,5 +1,7 @@
-project('clevis', 'c', license: 'GPL3+', version: '15',
-        default_options: 'c_std=c99')
+project('clevis', 'c', license: 'GPL3+',
+  version: '16',
+  default_options: 'c_std=c99'
+)
 
 libexecdir = join_paths(get_option('prefix'), get_option('libexecdir'))
 sysconfdir = join_paths(get_option('prefix'), get_option('sysconfdir'))

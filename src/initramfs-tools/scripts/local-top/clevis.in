@@ -130,6 +130,8 @@ clevisloop() {
 
     while true; do
 
+        # Re-get the askpass PID in case there are multiple encrypted devices
+        pid=""
         until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
             sleep .1
             pid_fifo=$(get_askpass_pid)

@@ -894,7 +894,7 @@ clevis_luks_first_free_slot() {
     elif cryptsetup isLuks --type luks2 "${DEV}"; then
         local used_slots slt
         used_slots="$(clevis_luks_used_slots "${DEV}")"
-        for slt in $(seq 0 31); do
+        for slt in {0..31}; do
             if ! echo "${used_slots}" | grep -q "^${slt}$"; then
                 first_free_slot="${slt}"
                 break

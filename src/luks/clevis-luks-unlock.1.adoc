@@ -26,7 +26,7 @@ provisioned Clevis policy. For example:
 * *-n* _NAME_ :
   The name to give the unlocked device node
 
-* *-t* _SLT_:
+* *-t* _SLT_ :
   Test the passphrase for the given slot without unlocking the device
 
 == SEE ALSO

@@ -24,13 +24,16 @@ SUMMARY="Unlocks a LUKS volume"
 function usage() {
     exec >&2
     echo
-    echo "Usage: clevis luks unlock -d DEV [-n NAME]"
+    echo "Usage: clevis luks unlock -d DEV [-n NAME] [-t SLT]"
     echo
     echo "$SUMMARY":
     echo
     echo "  -d DEV  The LUKS device on which to perform unlocking"
     echo
     echo "  -n NAME The name of the unlocked device node"
+    echo
+    echo "  -t SLT Test the passphrase for the given slot without unlocking"
+    echo "         the device"
     echo
     exit 2
 }
@@ -40,10 +43,11 @@ if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
     exit 0
 fi
 
-while getopts ":d:n:" o; do
+while getopts ":d:n:t:" o; do
     case "$o" in
     d) DEV="$OPTARG";;
     n) NAME="$OPTARG";;
+    t) SLT="$OPTARG";;
     *) usage;;
     esac
 done
@@ -60,9 +64,26 @@ fi
 
 NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 
-if ! pt=$(clevis_luks_unlock_device "${DEV}"); then
-    echo "${DEV} could not be opened." >&2
-    exit 1
-fi
+if [ -n "$SLT" ]; then
+    if ! jwe="$(clevis_luks_read_slot "${DEV}" "${SLT}" 2>/dev/null)" \
+                || [ -z "${jwe}" ]; then
+        echo "No Clevis information found in slot $SLT"
+        exit 1
+    fi
+    if ! passphrase="$(printf '%s' "${jwe}" | clevis decrypt 2>/dev/null)" \
+                       || [ -z "${passphrase}" ]; then
+        echo "Could not decrypt the passphrase associated with slot $SLT"
+        exit 1
+    fi
+    if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" "${passphrase}"; then
+        echo "Decrypted passphrase does not appear to unlock device $DEV"
+        exit 1
+    fi
+else
+    if ! pt=$(clevis_luks_unlock_device "${DEV}"); then
+        echo "${DEV} could not be opened." >&2
+        exit 1
+    fi
 
-echo -n "${pt}" | cryptsetup open -d- "${DEV}" "${NAME}"
+    echo -n "${pt}" | cryptsetup open -d- "${DEV}" "${NAME}"
+fi

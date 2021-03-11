@@ -9,7 +9,7 @@ clevis-luks-unlock - Unlocks a LUKS device bound with a Clevis policy
 
 == SYNOPSIS
 
-*clevis luks unlock* -d DEV [-n NAME]
+*clevis luks unlock* -d DEV [-n NAME] [-t SLT]
 
 == OVERVIEW
 
@@ -25,6 +25,9 @@ provisioned Clevis policy. For example:
 
 * *-n* _NAME_ :
   The name to give the unlocked device node
+
+* *-t* _SLT_:
+  Test the passphrase for the given slot without unlocking the device
 
 == SEE ALSO
 

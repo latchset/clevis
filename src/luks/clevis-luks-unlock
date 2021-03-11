@@ -67,16 +67,16 @@ NAME="${NAME:-luks-"$(cryptsetup luksUUID "$DEV")"}"
 if [ -n "$SLT" ]; then
     if ! jwe="$(clevis_luks_read_slot "${DEV}" "${SLT}" 2>/dev/null)" \
                 || [ -z "${jwe}" ]; then
-        echo "No Clevis information found in slot $SLT"
+        echo "No Clevis information found in slot ${SLT}" >&2
         exit 1
     fi
     if ! passphrase="$(printf '%s' "${jwe}" | clevis decrypt 2>/dev/null)" \
                        || [ -z "${passphrase}" ]; then
-        echo "Could not decrypt the passphrase associated with slot $SLT"
+        echo "Could not decrypt the passphrase associated with slot ${SLT}" >&2
         exit 1
     fi
     if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" "${passphrase}"; then
-        echo "Decrypted passphrase does not appear to unlock device $DEV"
+        echo "Decrypted passphrase does not appear to unlock device ${DEV}" >&2
         exit 1
     fi
 else

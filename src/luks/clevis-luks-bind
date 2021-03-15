@@ -119,7 +119,7 @@ if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}"; then
     luksmeta init -d "${DEV}" ${FRC}
 fi
 
-if ! clevis_luks_do_bind "${DEV}" "${SLT}" "" \
+if ! clevis_luks_do_bind "${DEV}" "${SLT}" "${TOKEN_ID}" \
                          "${PIN}" "${CFG}" \
                          "${YES}" "" \
                          "${existing_key}" "${keyfile}"; then

@@ -1,5 +1,7 @@
 # We use jq for comparing the pin config in the clevis luks list tests.
 jq = find_program('jq', required: false)
+# We use cryptsetup for testing LUKS2 binding and saving the token in a given token slot.
+cryptsetup = find_program('cryptsetup', required: true)
 
 # We use cryptsetup for testing LUKS2 binding and saving the token in a
 # given token slot.

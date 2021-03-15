@@ -49,5 +49,5 @@ if ! clevis luks bind -d "${DEV}" -t "$TOKEN_ID" tang "${CFG}" <<< "${DEFAULT_PA
 fi
 
 if ! cryptsetup token export --token-id=5; then
-    error "${TEST}: Clevis did not add the LUKS2 token to the correct slot"
+    error "${TEST}: Clevis did not add the LUKS2 token to the correct slot." >&2
 fi

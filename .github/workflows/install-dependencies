@@ -33,7 +33,7 @@ fedora:*)
     printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
-    dnf -y install dnf-utils jq socat
+    dnf -y install dnf-utils jq socat cryptsetup
     dnf -y builddep clevis
     ;;
 

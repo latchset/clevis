@@ -978,7 +978,7 @@ clevis_luks_do_bind() {
         return 1
     fi
 
-    if ! clevis_luks_save_slot "${DEV}" "${SLT}" "${tkn_id}" \
+    if ! clevis_luks_save_slot "${DEV}" "${SLT}" "${TKN_ID}" \
                                "${jwe}" "${OVERWRITE}"; then
         echo "Unable to update metadata; operation cancelled" >&2
         clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :

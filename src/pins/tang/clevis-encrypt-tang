@@ -64,6 +64,9 @@ if ! cfg="$(jose fmt -j- -Oo- <<< "$1" 2>/dev/null)"; then
     exit 1
 fi
 
+CLEVIS_DEFAULT_THP_ALG=S256       # SHA-256.
+CLEVIS_ALTERNATIVE_THP_ALGS=S1    # SHA-1.
+
 trust=
 [ -n "${2}" ] && [ "${2}" == "-y" ] && trust=yes
 
@@ -112,15 +115,25 @@ if [ -z "${trust}" ]; then
     if [ -z "$thp" ]; then
         echo "The advertisement contains the following signing keys:" >&2
         echo >&2
-        jose jwk thp -i- <<< "$ver" >&2
+        jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}" <<< "$ver" >&2
         echo >&2
         read -r -p "Do you wish to trust these keys? [ynYN] " ans < /dev/tty
         [[ "$ans" =~ ^[yY]$ ]] || exit 1
 
     elif [ "$thp" != "any" ] && \
-        ! jose jwk thp -i- -f "$thp" -o /dev/null <<< "$ver"; then
-        echo "Trusted JWK '$thp' did not sign the advertisement!" >&2
-        exit 1
+        ! jose jwk thp -i- -f "${thp}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
+          <<< "$ver"; then
+        # Thumbprint of trusted JWK did not match the signature. Let's check
+        # alternative thumbprints generated with clevis supported hash
+        # algorithms to be sure.
+        for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
+            srv="$(jose jwk thp -i- -f "${thp}" -a "${alg}" <<< "${ver}")" \
+                   && break
+        done
+        if [ -z "${srv}" ]; then
+            echo "Trusted JWK '$thp' did not sign the advertisement!" >&2
+            exit 1
+        fi
     fi
 fi
 
@@ -139,7 +152,7 @@ fi
 
 jwk="$(jose fmt -j- -Od key_ops -o- <<< "$jwk")"
 jwk="$(jose fmt -j- -Od alg -o- <<< "$jwk")"
-kid="$(jose jwk thp -i- <<< "$jwk")"
+kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}"  <<< "$jwk")"
 jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
 jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"

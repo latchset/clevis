@@ -323,7 +323,7 @@ clevis_luks_unlock_device_by_slot() {
         return 1
     fi
 
-    if ! passphrase="$(printf '%s' "${jwe}" | clevis decrypt 2>/dev/null)" \
+    if ! passphrase="$(printf '%s' "${jwe}" | clevis decrypt)" \
                        || [ -z "${passphrase}" ]; then
         return 1
     fi

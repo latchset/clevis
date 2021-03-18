@@ -50,10 +50,36 @@ if ! kid="$(jose fmt -j- -Og kid -Su- <<< "$jhd")"; then
     exit 1
 fi
 
-if ! srv="$(jose fmt -j- -Og clevis -g tang -g adv -Oo- <<< "$jhd" \
-        | jose jwk thp -i- -f "$kid")"; then
+# Tang advertisement validation.
+if ! keys="$(jose fmt -j- -Og clevis -g tang -g adv -Oo- <<< "${jhd}")"; then
     echo "JWE missing required 'clevis.tang.adv' header parameter!" >&2
     exit 1
+fi
+
+# Check if the thumbprint we have in `kid' is in the advertised keys.
+CLEVIS_DEFAULT_THP_ALG=S256       # SHA-256.
+CLEVIS_DEFAULT_THP_LEN=43         # Length of SHA-256 thumbprint.
+CLEVIS_ALTERNATIVE_THP_ALGS=S1    # SHA-1.
+
+# Issue a warning if we are using a hash that has a shorter length than the
+# default one.
+if [ "${#kid}" -lt "${CLEVIS_DEFAULT_THP_LEN}" ]; then
+    echo "WARNING: tang using a deprecated hash for the JWK thumbprints" >&2
+fi
+
+if ! srv="$(jose jwk thp -i- -f "${kid}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
+            <<< "${keys}")"; then
+    # `kid' thumprint not in the advertised keys, but it's possible it was
+    # generated using a different algorithm than the default one.
+    # Let us try the alternative supported algorithms to make sure `kid'
+    # really is not part of the advertised keys.
+    for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
+        srv="$(jose jwk thp -i- -f "$kid" -a "${alg}" <<< "${keys}")" && break
+    done
+    if [ -z "${srv}" ]; then
+        echo "JWE header validation of 'clevis.tang.adv' failed: key thumbprint does not match" >&2
+        exit 1
+    fi
 fi
 
 if ! url="$(jose fmt -j- -Og clevis -g tang -g url -Su- <<< "$jhd")"; then

@@ -63,3 +63,4 @@ env.prepend('PATH',
 
 test('pin-tang', find_program('pin-tang'), env: env)
 test('tang-validate-adv', find_program('tang-validate-adv'), env: env)
+test('default-thp-alg', find_program('default-thp-alg'), env: env)

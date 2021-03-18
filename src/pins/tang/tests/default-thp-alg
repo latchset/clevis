@@ -1,0 +1,110 @@
+#!/bin/bash
+set -exo pipefail
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2020 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+. tang-common-test-functions
+
+TEST=$(basename "${0}")
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
+
+url="http://localhost:${port}"
+data="just a sample text"
+
+# Get the advertisement and extract the keys.
+adv="$(tang_get_adv "${port}")"
+
+jwks="$(jose fmt --json="${adv}" --get payload --b64load --output=-)"
+enc="$(printf '%s' "${jwks}" | jose jwk use --input=- --required \
+       --use deriveKey --output=-)"
+
+jose fmt --json="${enc}" --get keys --array \
+      || enc="$(printf '{"keys": [%s]}' "${enc}")"
+
+jwk="$(jose fmt --json="${enc}" --get keys --array --foreach=- \
+       | jose fmt --json=- --delete key_ops --delete alg --output=-)"
+
+jwe_t='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
+jwe_t="$(jose fmt --json="${jwe_t}" --get protected --get clevis --get tang --quote "${url}" --set url -UUUUo-)"
+jwe_t="$(printf '%s' "${jwks}" | jose fmt --json="${jwe_t}" --get protected --get clevis --get tang --json=- --set adv -UUUUo-)"
+
+# We currently support SHA-1 (legacy) and SHA-256.
+CLEVIS_SUPPORTED_THP_ALGS="S1 S256"
+# Now we will use every hash algorithm supported by jose to create a thumbprint
+# for `kid', then we do the encoding and verify clevis decrypt can decode it
+# correctly.
+for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
+    kid="$(printf '%s' "${jwk}" | jose jwk thp -a "${alg}" --input=-)"
+    jwe="$(jose fmt --json="${jwe_t}" --get protected --quote "${kid}" -s kid -UUo-)"
+
+    encoded=$(printf '%s%s' "${jwk}" "${data}" \
+              | jose jwe enc --input="${jwe}" --key=- --detached=- --compact)
+
+    if ! decoded="$(printf '%s' "${encoded}" | clevis decrypt)"; then
+        tang_error "${TEST}: decoding is expected to work (alg = ${alg})"
+    fi
+
+    if  [ "${decoded}" != "${data}" ]; then
+        tang_error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
+    fi
+done
+
+# Now let's test encryption providing the thp in the configuration.
+for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
+    thp="$(jose fmt --json="${adv}" -g payload -y -o- \
+           | jose jwk use -i- -r -u verify -o- \
+           | jose jwk thp -i- -a "${alg}")"
+    cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
+    if ! echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
+        tang_error "${TEST}: tang encryption should have succeeded when providing the thp (${thp}) with any supported algorithm (${alg})"
+    fi
+done
+
+# Let's also try some unsupported thp hash algorithms.
+UNSUPPORTED="S224 S384 S512" # SHA-224, SHA-384, SHA-512.
+for alg in ${UNSUPPORTED}; do
+    thp="$(jose fmt --json="${adv}" -g payload -y -o- \
+           | jose jwk use -i- -r -u verify -o- \
+           | jose jwk thp -i- -a "${alg}")"
+    cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
+    if echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
+        tang_error "${TEST}: tang encryption should have failed when providing the thp (${thp}) with an unsupported algorithm (${alg})"
+    fi
+done
+
+# Now let's try some bad values for thp.
+for thp in "" "foo" "invalid"; do
+    cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
+    if echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
+        tang_error "${TEST}: tang encryption expected to fail when providing a bad thp"
+    fi
+done

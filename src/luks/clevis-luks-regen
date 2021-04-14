@@ -67,7 +67,7 @@ fi
 # Get pin and configuration.
 if ! pin_cfg="$(clevis luks list -d "${DEV}" -s "${SLT}")" \
                 || [ -z "${pin_cfg}" ]; then
-    return 1
+    exit 1
 fi
 
 pin="$(echo "${pin_cfg}" | cut -d' ' -f2)"

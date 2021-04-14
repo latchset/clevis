@@ -88,6 +88,11 @@ if ! CFG="${@:$((OPTIND++)):1}" || [ -z "$CFG" ]; then
     usage
 fi
 
+# Check whether the config is valid JSON.
+if ! jose fmt --json="${CFG}" --object 2>/dev/null; then
+    echo "Configuration is malformed; it should be valid JSON" >&2
+    exit 1
+fi
 
 if [ "${luks_type}" = "luks1" ] && [ -n "${TOKEN_ID}" ]; then
     echo "${DEV} is a LUKS1 device; -t is only supported in LUKS2" >&2

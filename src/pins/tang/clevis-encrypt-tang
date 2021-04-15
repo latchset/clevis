@@ -122,7 +122,7 @@ if [ -z "${trust}" ]; then
 
     elif [ "$thp" != "any" ] && \
         ! jose jwk thp -i- -f "${thp}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
-          <<< "$ver"; then
+          -o /dev/null <<< "$ver"; then
         # Thumbprint of trusted JWK did not match the signature. Let's check
         # alternative thumbprints generated with clevis supported hash
         # algorithms to be sure.

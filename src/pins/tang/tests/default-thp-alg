@@ -79,14 +79,24 @@ for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
 done
 
 # Now let's test encryption providing the thp in the configuration.
+data="just another test"
 for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
     thp="$(jose fmt --json="${adv}" -g payload -y -o- \
            | jose jwk use -i- -r -u verify -o- \
            | jose jwk thp -i- -a "${alg}")"
     cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
-    if ! echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
+    if ! encoded=$(printf '%s' "${data}" | clevis encrypt tang "${cfg}"); then
         tang_error "${TEST}: tang encryption should have succeeded when providing the thp (${thp}) with any supported algorithm (${alg})"
     fi
+
+    if ! decoded="$(printf '%s' "${encoded}" | clevis decrypt)"; then
+        tang_error "${TEST}: decoding is expected to work (thp alg = ${alg})"
+    fi
+
+    if  [ "${decoded}" != "${data}" ]; then
+        tang_error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
+    fi
+
 done
 
 # Let's also try some unsupported thp hash algorithms.

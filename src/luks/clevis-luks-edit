@@ -119,6 +119,7 @@ if ! pretty_cfg="$(printf '%s' "${cfg}" | jq --monochrome-output .)" \
     exit 1
 fi
 
+mkdir -p "${TMPDIR:-/tmp}"
 if ! CLEVIS_EDIT_TMP="$(mktemp -d)" || [ -z "${CLEVIS_EDIT_TMP}" ]; then
     echo "Creating a temporary dir for editing binding failed" >&2
     exit 1

@@ -46,6 +46,7 @@ install() {
         luksmeta \
         clevis \
         mktemp \
+        mkdir \
         jose
 
     dracut_need_initqueue

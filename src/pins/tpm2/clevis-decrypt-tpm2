@@ -108,6 +108,7 @@ if ! jwk_priv="$(jose fmt -j- -Og clevis -g tpm2 -g jwk_priv -Su- <<< "$jhd")"; 
     exit 1
 fi
 
+mkdir -p "${TMPDIR:-/tmp}"
 if ! TMP="$(mktemp -d)"; then
     echo "Creating a temporary dir for TPM files failed!" >&2
     exit 1

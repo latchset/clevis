@@ -144,6 +144,7 @@ if ! jwk="$(jose jwk gen -i '{"alg":"A256GCM"}')"; then
     exit 1
 fi
 
+mkdir -p "${TMPDIR:-/tmp}"
 if ! TMP="$(mktemp -d)"; then
     echo "Creating a temporary dir for TPM files failed!" >&2
     exit 1

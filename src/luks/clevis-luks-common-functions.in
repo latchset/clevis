@@ -946,7 +946,7 @@ clevis_luks_do_bind() {
     # We can proceed to binding, after backing up the LUKS header and
     # metadata.
     local CLEVIS_TMP_DIR
-
+    mkdir -p "${TMPDIR:-/tmp}"
     if ! CLEVIS_TMP_DIR="$(mktemp -d)" || [ -z "${CLEVIS_TMP_DIR}" ]; then
         echo "Unable to create a a temporary dir for device backup/restore" >&2
         return 1

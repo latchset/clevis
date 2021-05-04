@@ -214,7 +214,7 @@ sss_point(const json_t *sss, size_t *len)
     if (BN_rand_range(xx, pp) <= 0)
         return NULL;
 
-    if (BN_zero(yy) <= 0)
+    if (BN_set_word(yy, 0) <= 0)
         return NULL;
 
     for (size_t i = 0; i < json_array_size(e); i++) {
@@ -272,7 +272,7 @@ sss_recover(const json_t *p, size_t npnts, const uint8_t *pnts[])
     if (!ctx || !pp || !acc || !tmp || !k)
         return NULL;
 
-    if (BN_zero(k) <= 0)
+    if (BN_set_word(k, 0) <= 0)
         return NULL;
 
     len = jose_b64_dec(p, NULL, 0);
@@ -303,7 +303,7 @@ sss_recover(const json_t *p, size_t npnts, const uint8_t *pnts[])
 
             /* acc *= (0 - xi) / (xo - xi) */
 
-            if (BN_zero(tmp) <= 0)
+            if (BN_set_word(tmp, 0) <= 0)
                 return NULL;
 
             if (BN_mod_sub(tmp, tmp, xi, pp, ctx) <= 0)

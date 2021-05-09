@@ -136,6 +136,9 @@ Enter existing LUKS password:
 Upon successful completion of this binding process, the disk can be unlocked
 using one of the provided unlockers.
 
+#### Network based unlocking
+If you want to use network based unlocking you will need to specify `rd.neednet=1` as kernel argument or use `--hostonly-cmdline` when creating dracut.
+
 #### Unlocker: Dracut
 
 The Dracut unlocker attempts to automatically unlock volumes during early

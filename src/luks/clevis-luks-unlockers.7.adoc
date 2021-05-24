@@ -37,9 +37,16 @@ Once Clevis is integrated into your initramfs, a simple reboot should unlock
 your root volume. Note, however, that early boot integration only works for the
 root volume. Non-root volumes should use the late boot unlocker.
 
-Dracut will bring up your network using DHCP by default. If you need to specify
-additional network parameters, such as static IP configuration, please consult
-the dracut documentation.
+Dracut will not bring up your network by default. You can either have it come
+up via dhcp by using rd.neednet=1 in kernel cmdline or you can specify custom
+network parameters, such as static IP configuration, please consult the dracut
+documentation.
+
+dhcp can be easily added to early boot by setting it in a configuration file
+and rebuilding initramfs afterwards
+
+    $ echo 'kernel_cmdline="rd.neednet=1"' | sudo tee /etc/dracut.conf.d/clevis.conf
+    $ sudo dracut -f
 
 == LATE BOOT UNLOCKING
 

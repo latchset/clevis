@@ -1,3 +1,4 @@
+#!/bin/bash
 # bash completion support for clevis.
 
 _clevis()
@@ -41,7 +42,7 @@ _clevis()
         fi
     fi
 
-    COMPREPLY=($(compgen -W "${suggestions}" -- "${cur}"))
+    COMPREPLY=("$(compgen -W "${suggestions}" -- "${cur}")")
 }
 
 complete -F _clevis clevis

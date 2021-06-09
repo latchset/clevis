@@ -42,23 +42,23 @@ DEV="${TMP}/luks2-device"
 new_device "luks2" "${DEV}"
 # Binding.
 if ! clevis luks bind -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
-    error "${TEST}: Binding is expected to succeed." >&2
+    error "${TEST}: Binding is expected to succeed."
 fi
 
 SLT=1
 if ! clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
-    error "${TEST}: Unbind is expected to succeed for device ${DEV} and slot ${SLT}" >&2
+    error "${TEST}: Unbind is expected to succeed for device ${DEV} and slot ${SLT}"
 fi
 
 SLT=0
 if ! echo "${DEFAULT_PASS}" | cryptsetup open --test-passphrase "${DEV}" --key-slot "${SLT}"; then
-   error "${TEST}: new_device luks2 not able to be decrypted" >&2
+   error "${TEST}: Unable to open device ${DEV}:${SLT}"
 fi
 
 if clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
-   error "${TEST}: Unbind is expected to fail for device not bound with clevis" >&2
+   error "${TEST}: Unbind is expected to fail for device ${DEV}:${SLT} that is not bound with clevis"
 fi
 
 if ! echo "${DEFAULT_PASS}" | cryptsetup open --test-passphrase "${DEV}" --key-slot "${SLT}"; then
-  error "${TEST}: Unbind is expected not to remove non clevis slots" >&2
+  error "${TEST}: Unbind is expected not to remove non clevis slots"
 fi

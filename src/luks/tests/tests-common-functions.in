@@ -230,4 +230,3 @@ new_passphrase() {
 }
 
 export DEFAULT_PASS='   just-some-   test-password-here 1.+?~!@#$%^&*();:'"'"'"[]{}_=/`\   '
-export DEFAULT_SIZE='64M'

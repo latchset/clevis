@@ -107,7 +107,7 @@ elif [ "$luks_type" == "luks2" ]; then
     TOK="$(grep -E -B1 "^\s+Keyslot:\s+$SLT$" <<< "$dump" \
         | sed -rn 's|^\s+([0-9]+): clevis|\1|p')"
     if [ -z "${TOK}" ]; then
-        echo "No clevis slot detected on device $DEV!" >&2
+        echo "No clevis slot detected on device ${DEV}:${SLT}!" >&2
         exit 1
     fi
 fi

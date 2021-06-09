@@ -49,3 +49,16 @@ SLT=1
 if ! clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
     error "${TEST}: Unbind is expected to succeed for device ${DEV} and slot ${SLT}" >&2
 fi
+
+DEV_NO_CLEVIS="${TMP}/luks-device-no-clevis"
+new_uncached_sized_device "luks2" "${DEV_NO_CLEVIS}" "${DEFAULT_PASS}" "10m"
+
+SLT=0
+if ! echo "${DEFAULT_PASS}" | cryptsetup open --test-passphrase "${DEV_NO_CLEVIS}" --key-slot "${SLT}"; then
+   error "${TEST}: new_device luks2 not able to be decrypted" >&2
+fi
+
+clevis luks unbind -f -d "${DEV_NO_CLEVIS}" -s "${SLT}" >&2
+if ! echo "${DEFAULT_PASS}" | cryptsetup open --test-passphrase "${DEV_NO_CLEVIS}" --key-slot "${SLT}"; then
+  error "${TEST}: Unbind is expected not to remove non clevis slots" >&2
+fi

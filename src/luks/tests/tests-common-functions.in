@@ -70,6 +70,32 @@ new_device() {
     cp -f "${DEV}" "${DEV_CACHED}"
 }
 
+# Creates a new LUKS1 or LUKS2 device to be used.
+new_uncached_sized_device() {
+    local LUKS="${1}"
+    local DEV="${2}"
+    local PASS="${3}"
+    local SIZE="${4}"
+
+    # Some builders fail if the cryptsetup steps are not ran as root, so let's
+    # skip the test now if not running as root.
+    if [ "$(id -u)" != 0 ]; then
+        skip_test "WARNING: You must be root to run this test; test skipped."
+    fi
+
+    # Using a default password, if none has been provided.
+    if [ -z "${PASS}" ]; then
+        PASS="${DEFAULT_PASS}"
+    fi
+
+    # If no size, assign a default size
+    if [ -z "${SIZE}" ]; then
+        SIZE="${DEFAULT_SIZE}"
+    fi
+    fallocate -l"${SIZE}" "${DEV}"
+    cryptsetup luksFormat --type "${LUKS}" --batch-mode --force-password "${DEV}" <<<"${PASS}"
+}
+
 # Creates a new LUKS1 or LUKS2 device to be used, using a keyfile.
 new_device_keyfile() {
     local LUKS="${1}"
@@ -230,3 +256,4 @@ new_passphrase() {
 }
 
 export DEFAULT_PASS='   just-some-   test-password-here 1.+?~!@#$%^&*();:'"'"'"[]{}_=/`\   '
+export DEFAULT_SIZE='64M'

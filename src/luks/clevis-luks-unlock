@@ -35,6 +35,10 @@ function usage() {
     echo "  -t SLT Test the passphrase for the given slot without unlocking"
     echo "         the device"
     echo
+    echo "  -o OPTS Pass options to underlying 'cryptsetup open'; be sure"
+    echo "          to quote the OPTS you pass, if they contain a space,"
+    echo "          etc."
+    echo
     exit 2
 }
 
@@ -43,11 +47,12 @@ if [ $# -eq 1 ] && [ "$1" == "--summary" ]; then
     exit 0
 fi
 
-while getopts ":d:n:t:" o; do
+while getopts ":d:n:t:o:" o; do
     case "$o" in
     d) DEV="$OPTARG";;
     n) NAME="$OPTARG";;
     t) SLT="$OPTARG";;
+    o) OPENARGS="$OPTARG";;
     *) usage;;
     esac
 done
@@ -75,5 +80,5 @@ else
         exit 1
     fi
 
-    echo -n "${pt}" | cryptsetup open -d- "${DEV}" "${NAME}"
+    echo -n "${pt}" | cryptsetup ${OPENARGS} open -d- "${DEV}" "${NAME}"
 fi

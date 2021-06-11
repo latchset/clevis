@@ -19,31 +19,34 @@
 
 TEST=$(basename "${0}")
 . tests-common-functions
+. clevis-luks-common-functions
 
 on_exit() {
-    [ -d "${TMP}" ] && rm -rf "${TMP}"
+    [ ! -d "${TMP}" ] && return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
 }
-
 trap 'on_exit' EXIT
-trap 'exit' ERR
 
 TMP="$(mktemp -d)"
 
-ADV_AMOUNT=40
+ADV_AMOUNT=50
 
-# LUKS1.
+# Create LUKS1 device
 DEV="${TMP}/luks1-device"
 new_device "luks1" "${DEV}"
 
+# TANG server specifics
+port=$(tang_new_random_port)
+tang_run "${TMP}" "${port}"
+url="http://localhost:${port}"
+
 # Initial binding to ensure luksmeta gets corrupted
 for ADV_NU in $(seq 0 ${ADV_AMOUNT}); do
-  ADV="${TMP}/adv${ADV_NU}.jws"
-  tang_create_adv "${TMP}" "${ADV}"
-  CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
-  if ! clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
-    break
-  fi
+    "${TANGD_KEYGEN}" "${TMP}/db"
 done
+
+CFG=$(printf '{"url":"%s"}' "${url}")
 
 # At this point, luks bind must return an error. If not, test fails
 if clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then

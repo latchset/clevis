@@ -1,0 +1,50 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2021 Red Hat, Inc.
+# Author: Sergio Arroutbi Braojos <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+# Maximum adv required store in luksmeta
+ADV_AMOUNT=5
+
+# LUKS1.
+DEV="${TMP}/luks1-device"
+new_device "luks1" "${DEV}"
+
+# Initial binding to ensure luksmeta gets corrupted
+for ADV_NU in $(seq 0 ${ADV_AMOUNT}); do
+  ADV="${TMP}/adv${ADV_NU}.jws"
+  tang_create_adv "${TMP}" "${ADV}"
+  CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
+  clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}" >&2
+done
+
+# At this point, luks bind must return an error. If not, test fails
+if clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is expected to fail when given a too long adv"
+fi

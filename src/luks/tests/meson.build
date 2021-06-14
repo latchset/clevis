@@ -59,7 +59,7 @@ test('edit-tang-luks1', find_program('edit-tang-luks1'), env: env, timeout: 150)
 
 test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env, timeout: 60)
 test('pass-tang-luks1', find_program('pass-tang-luks1'), env: env, timeout: 60)
-test('bind-luks1-avoid-luksmeta-corruption', find_program('bind-luks1-avoid-luksmeta-corruption'), env: env, timeout: 90)
+test('bind-luks1-avoid-luksmeta-corruption', find_program('bind-luks1-avoid-luksmeta-corruption'), env: env)
 
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.

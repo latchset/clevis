@@ -64,7 +64,7 @@ new_device() {
 
     fallocate -l64M "${DEV}"
     cryptsetup luksFormat --type "${LUKS}" --pbkdf pbkdf2 \
-        --pbkdf-force-iterations 1000 --batch-mode \
+        --pbkdf-force-iterations 1000 --key-size 512 --batch-mode \
         --force-password "${DEV}" <<< "${PASS}"
     # Caching the just-formatted device for possible reuse.
     cp -f "${DEV}" "${DEV_CACHED}"
@@ -88,7 +88,7 @@ new_device_keyfile() {
 
     fallocate -l64M "${DEV}"
     cryptsetup luksFormat --type "${LUKS}" --pbkdf pbkdf2 \
-        --pbkdf-force-iterations 1000 --batch-mode \
+        --pbkdf-force-iterations 1000 --key-size 512 --batch-mode \
         "${DEV}" "${KEYFILE}"
 }
 

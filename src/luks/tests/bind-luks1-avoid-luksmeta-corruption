@@ -20,6 +20,7 @@
 TEST=$(basename "${0}")
 . tests-common-functions
 . clevis-luks-common-functions
+. tang-common-test-functions
 
 on_exit() {
     [ ! -d "${TMP}" ] && return 0
@@ -47,11 +48,11 @@ url="http://localhost:${port}"
 for ADV_NU in $(seq 0 ${ADV_AMOUNT}); do
     "${TANGD_KEYGEN}" "${TMP}/db"
 done
-tang_new_keys "${TMP}/db"
+tang_new_keys "${TMP}"
 
 CFG=$(printf '{"url":"%s"}' "${url}")
 
 # At this point, luks bind must return an error. If not, test fails
-if clevis luks bind -f -y -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+if clevis luks bind -y -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
     error "${TEST}: Binding is expected to fail when given a too long adv"
 fi

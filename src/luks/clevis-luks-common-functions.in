@@ -448,6 +448,12 @@ clevis_luks1_save_slot() {
         echo "Error saving metadata to LUKSMeta slot ${SLOT} from ${DEV}" >&2
         return 1
     fi
+
+    if ! luksmeta test -d "${DEV}" 2>/dev/null >/dev/null ; then
+        echo "Error detected after saving metadata to LUKSMeta slot ${SLOT}, device ${DEV}" >&2
+        return 1
+    fi
+
     return 0
 }
 

@@ -86,3 +86,6 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
   test('pass-tang-luks2', find_program('pass-tang-luks2'), env: env, timeout: 60)
 endif
+
+test('unlock-arbitrary-parameter', find_program('unlock-arbitrary-parameter'), env: env)
+

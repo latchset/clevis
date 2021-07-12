@@ -69,8 +69,11 @@ luks1_decrypt() {
         [ "$decrypted" != "" ] || continue
 
         echo -n "${decrypted}" >"$PASSFIFO"
-        return 0
+        return 10
     done
+
+    # return true if while read sub-shell signaled success 
+    [ $? -eq 10 ] && return 0;
 
     return 1
 }
@@ -99,8 +102,11 @@ luks2_decrypt() {
         [ "$decrypted" != "" ] || continue
 
         echo -n "${decrypted}" >"$PASSFIFO"
-        return 0
+        return 10
     done
+    
+    # return true if while read sub-shell signaled success 
+    [ $? -eq 10 ] && return 0;    
 
     return 1
 }

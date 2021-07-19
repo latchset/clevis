@@ -46,6 +46,35 @@ tpm2_available() {
         echo "The ${TPM2TOOLS_DEVICE_FILE} device must be readable and writable!" >&2
         return 1
     fi
+
+    local _tpm2tools_info="$(tpm2_createprimary -v)"
+    local _match='version="(.)\.'
+    [[ ${_tpm2tools_info} =~ ${_match} ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
+    if [[ $TPM2TOOLS_VERSION -lt 3 ]] || [[ $TPM2TOOLS_VERSION -gt 5 ]]; then
+        echo "The tpm2 pin requires a tpm2-tools version between 3 and 5" >&2
+        return 1
+    fi
+    export TPM2TOOLS_VERSION
+}
+
+validate_pcrs() {
+    local _pcr_bank="${1}"
+    local _pcrs="${2}"
+    [ -z "${_pcr_bank}" ] && return 1
+    [ -z "${_pcrs}" ] && return 0
+
+    local _fail=
+    local _pcrs_r=
+    case "${TPM2TOOLS_VERSION}" in
+    3) _pcrs_r="$(tpm2_pcrlist -L "${_pcr_bank}":"${_pcrs}" | grep -v "^${_pcr_bank}")" || _fail=$?;;
+    4|5) _pcrs_r=$(tpm2_pcrread "${_pcr_bank}":"${_pcrs}" | grep -v "  ${_pcr_bank}")  || _fail=$?;;
+    *) _fail=1
+    esac
+
+    if [ -n "${_fail}" ] || [ -z "${_pcrs_r}" ]; then
+        return 1
+    fi
+    return 0
 }
 
 # Checking if we can run this test.
@@ -111,15 +140,22 @@ test_pcr_ids "${orig}" '{"key": "ecc"}' "" || exit 1
 
 # Issue #103: now let's try a few different configs with both strings and
 # arrays and check if we get the expected pcr_ids.
-test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": "4,  16"}' "4,16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": "4,16"}' "4,16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": ["4,16"]}' "4,16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": [4,  16]}' "4,16" || exit 1
-test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
-! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1
+
+# Let's first make sure this would be a valid configuration.
+_default_pcr_bank="sha1"
+if validate_pcrs "${_default_pcr_bank}" "4,16"; then
+    test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": "4,  16"}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": "4,16"}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["4,16"]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": [4,  16]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
+    ! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1
+else
+    echo "Skipping tests related to issue#103 because the combination of pcr_bank and PCRs is invalid" >&2
+fi
 
 # Test with policies if we have the PIN rewrite available
 if ! $(which clevis-pin-tpm2 >/dev/null 2>&1);

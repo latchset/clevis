@@ -67,6 +67,27 @@ if [ -t 0 ]; then
     exit 2
 fi
 
+validate_pcrs() {
+    local _tpm2_tools_v="${1}"
+    local _pcr_bank="${2}"
+    local _pcrs="${3}"
+    [ -z "${_pcr_bank}" ] && return 1
+    [ -z "${_pcrs}" ] && return 0
+
+    local _fail=
+    local _pcrs_r=
+    case "${_tpm2_tools_v}" in
+    3) _pcrs_r="$(tpm2_pcrlist -L "${_pcr_bank}":"${_pcrs}" | grep -v "^${_pcr_bank}")" || _fail=$?;;
+    4|5) _pcrs_r=$(tpm2_pcrread "${_pcr_bank}":"${_pcrs}" | grep -v "  ${_pcr_bank}")  || _fail=$?;;
+    *) _fail=1
+    esac
+
+    if [ -n "${_fail}" ] || [ -z "${_pcrs_r}" ]; then
+        return 1
+    fi
+    return 0
+}
+
 TPM2TOOLS_INFO="$(tpm2_createprimary -v)"
 
 match='version="(.)\.'
@@ -135,6 +156,11 @@ if jose fmt -j- -Og pcr_ids 2>/dev/null <<< "${pcr_cfg}" \
         echo "Parsing the requested policy failed!" >&2
         exit 1
     fi
+fi
+
+if ! validate_pcrs "${TPM2TOOLS_VERSION}" "${pcr_bank}" "${pcr_ids}"; then
+    echo "Unable to validate combination of PCR bank '${pcr_bank}' and PCR IDs '${pcr_ids}'." >&2
+    exit 1
 fi
 
 pcr_digest="$(jose fmt -j- -Og pcr_digest -u- <<< "$cfg")" || true

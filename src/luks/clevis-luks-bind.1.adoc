@@ -20,7 +20,7 @@ policy. This is accomplished with a simple command:
 
 This command performs four steps:
 
-1. Creates a new key with the same entropy as the LUKS master key.
+1. Creates a new key with the same entropy as the LUKS master key -- maximum entropy bits is 256.
 2. Encrypts the new key with Clevis.
 3. Stores the Clevis JWE in the LUKS header.
 4. Enables the new key for use with LUKS.

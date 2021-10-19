@@ -947,7 +947,11 @@ clevis_luks_do_bind() {
     fi
 
     # Encrypt the new key.
-    jwe="$(printf '%s' "${newkey}" | clevis encrypt "${PIN}" "${CFG}" ${YES})"
+    if ! jwe="$(printf '%s' "${newkey}" | clevis encrypt "${PIN}" "${CFG}" \
+                ${YES})" || [ -z "${jwe}" ]; then
+        echo "Unable to perform encryption with PIN '${PIN}' and config '${CFG}'" >&2
+        return 1
+    fi
 
     # We can proceed to binding, after backing up the LUKS header and
     # metadata.

@@ -841,6 +841,7 @@ clevis_luks_generate_key() {
     [ -z "${DEV}" ] && return 1
 
     local dump filter bits
+    local MAX_ENTROPY_BITS=256  # Maximum allowed by pwmake.
     dump=$(cryptsetup luksDump "${DEV}")
     if cryptsetup isLuks --type luks1 "${DEV}"; then
         filter="$(echo "${dump}" | sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p')"
@@ -852,6 +853,9 @@ clevis_luks_generate_key() {
     fi
 
     bits="$(echo -n "${filter}" | sort -n | tail -n 1)"
+    if [ "${bits}" -gt "${MAX_ENTROPY_BITS}" ]; then
+        bits="${MAX_ENTROPY_BITS}"
+    fi
     pwmake "${bits}"
 }
 

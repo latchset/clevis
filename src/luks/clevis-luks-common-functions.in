@@ -751,10 +751,12 @@ clevis_luks_add_key() {
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
+    local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
 
     printf '%s' "${input}" | cryptsetup luksAddKey --batch-mode \
                                          --key-slot "${SLT}" \
                                          "${DEV}" \
+                                         ${pbkdf_args} \
                                          ${extra_args}
 }
 
@@ -783,11 +785,14 @@ clevis_luks_update_key() {
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
+    local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
 
     if [ -n "${in_place}" ]; then
         printf '%s' "${input}" | cryptsetup luksChangeKey "${DEV}" \
                                             --key-slot "${SLT}" \
-                                            --batch-mode ${extra_args}
+                                            --batch-mode \
+                                            ${pbkdf_args} \
+                                            ${extra_args}
         return
     fi
 

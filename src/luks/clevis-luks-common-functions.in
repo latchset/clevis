@@ -20,6 +20,21 @@
 
 CLEVIS_UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
 
+enable_debugging() {
+    # Automatically enable debugging if in initramfs phase and rd.debug
+    if [ -e /usr/lib/dracut-lib.sh ]; then
+        local bashopts=$-
+        # Because dracut is loosely written, disable hardening options temporarily
+        [[ $bashopts != *u* ]] || set +u
+        [[ $bashopts != *e* ]] || set +e
+        . /usr/lib/dracut-lib.sh
+        [[ $bashopts != *u* ]] || set -u
+        [[ $bashopts != *e* ]] || set -e
+    fi
+}
+
+enable_debugging
+
 # valid_slot() will check whether a given slot is possibly valid, i.e., if it
 # is a numeric value within the specified range.
 valid_slot() {

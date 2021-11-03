@@ -408,7 +408,12 @@ clevis_devices_to_unlock() {
     clevis_devices=
 
     # Build list of devices to unlock.
-    while read -r _ crypt_device _; do
+    while read -r _volname_ crypt_device _; do
+        # skip empty lines and lines which begin with the '#' char, per
+        # crypttab(5)
+        case $_volname_ in
+            ''|\#*) continue ;;
+        esac
         if ! dev=$(clevis_map_device "${crypt_device}") \
                    || [ -z "${dev}" ]; then
             # Unable to get the device - maybe it's not available, e.g. a

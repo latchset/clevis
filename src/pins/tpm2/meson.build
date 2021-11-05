@@ -1,5 +1,6 @@
 cmds = ['tpm2_createprimary', ['tpm2_pcrread', 'tpm2_pcrlist'],
-        'tpm2_createpolicy', 'tpm2_create', 'tpm2_load', 'tpm2_unseal']
+        'tpm2_createpolicy', 'tpm2_create', 'tpm2_flushcontext', 'tpm2_load',
+        'tpm2_unseal']
 
 all = true
 foreach cmd : cmds

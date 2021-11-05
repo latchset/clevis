@@ -16,6 +16,7 @@ if dracut.found()
     install_dir: dracutdir,
     configuration: data,
   )
+  install_data('clevis-luks-generic-unlocker', install_dir: libexecdir)
 else
   warning('Will not install dracut module due to missing dependencies!')
 endif

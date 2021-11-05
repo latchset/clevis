@@ -1,6 +1,7 @@
 subdir('bash')
 subdir('luks')
 subdir('pins')
+subdir('dracut')
 subdir('initramfs-tools')
 
 bins += join_paths(meson.current_source_dir(), 'clevis-decrypt')

@@ -19,7 +19,11 @@
 #
 
 depends() {
-    echo crypt systemd
+    local __depends=crypt
+    if dracut_module_included "systemd"; then
+        __depends=$(printf '%s systemd' "${_depends}")
+    fi
+    echo "${__depends}"
     return 255
 }
 
@@ -27,17 +31,24 @@ install() {
     if dracut_module_included "systemd"; then
         inst_multiple \
             $systemdsystemunitdir/clevis-luks-askpass.service \
-            $systemdsystemunitdir/clevis-luks-askpass.path
+            $systemdsystemunitdir/clevis-luks-askpass.path \
+            @SYSTEMD_REPLY_PASS@ \
+            @libexecdir@/clevis-luks-askpass
         systemctl -q --root "$initdir" add-wants cryptsetup.target clevis-luks-askpass.path
     else
         inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
         inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
+
+	inst_multiple \
+            @libexecdir@/clevis-luks-generic-unlocker \
+            clevis-luks-unlock \
+            lsblk \
+            sort \
+            awk
     fi
 
     inst_multiple \
         /etc/services \
-        @SYSTEMD_REPLY_PASS@ \
-        @libexecdir@/clevis-luks-askpass \
         clevis-luks-common-functions \
         grep sed cut \
         clevis-decrypt \

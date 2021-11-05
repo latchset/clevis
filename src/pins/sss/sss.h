@@ -20,6 +20,7 @@
 #pragma once
 #include <jansson.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 json_t *
 sss_generate(size_t key_bytes, size_t threshold);

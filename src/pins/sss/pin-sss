@@ -1,24 +1,24 @@
 #!/bin/bash -ex
 
-e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"test":[{},{}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"null":[{},{}]}}')"
 d="$(echo "$e" | clevis decrypt)"
 test "$d" == "hi"
 
-e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"test":[{},{"fail":true}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"null":[{},{"fail":true}]}}')"
 d="$(echo "$e" | clevis decrypt)"
 test "$d" == "hi"
 
-e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"test":[{"fail":true},{"fail":true}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"null":[{"fail":true},{"fail":true}]}}')"
 ! echo "$e" | clevis decrypt
 
-e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"test":[{},{}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"null":[{},{}]}}')"
 d="$(echo "$e" | clevis decrypt)"
 test "$d" == "hi"
 
-e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"test":[{},{"fail":true}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"null":[{},{"fail":true}]}}')"
 ! echo "$e" | clevis decrypt
 
-e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"test":[{"fail":true},{"fail":true}]}}')"
+e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"null":[{"fail":true},{"fail":true}]}}')"
 ! echo "$e" | clevis decrypt
 
 ! e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"tang":[{"url":"foo bar"}]}}')"

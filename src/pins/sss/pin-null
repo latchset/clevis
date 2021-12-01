@@ -2,9 +2,9 @@
 
 trap 'exit' ERR
 
-e="$(echo -n hi | clevis encrypt test '{}')"
+e="$(echo -n hi | clevis encrypt null '{}')"
 d="$(echo -n "$e" | clevis decrypt)"
 test "$d" == "hi"
 
-e="$(echo -n hi | clevis encrypt test '{"fail":true}')"
+e="$(echo -n hi | clevis encrypt null '{"fail":true}')"
 ! echo "$e" | clevis decrypt

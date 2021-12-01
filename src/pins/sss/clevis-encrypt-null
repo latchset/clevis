@@ -1,0 +1,35 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+[ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
+
+if ! cfg="$(jose fmt -j "$1" -Oo- 2>/dev/null)"; then
+    echo "Configuration is malformed!" >&2
+    exit 1
+fi
+
+jwk="$(jose jwk gen -i '{"alg":"A256GCM"}')"
+jwe='{"protected":{"clevis":{"pin":"null","null":{}}}}'
+
+if ! jose fmt -j "$cfg" -g fail -T; then
+    jwe="$(jose fmt -j "$jwe" -Og protected -g clevis -g null -j "$jwk" -Os jwk -UUUUo-)"
+fi
+
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

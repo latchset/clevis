@@ -42,7 +42,7 @@ die() {
 
 find_binary() {
     bin_name="$1"
-    resolved=$(which ${bin_name})
+    resolved=$(command -v ${bin_name})
     [ -z "$resolved" ] && die 1 "Unable to find ${bin_name}"
     echo "$resolved"
 }

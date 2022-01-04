@@ -419,7 +419,7 @@ clevis_devices_to_unlock() {
             # Unable to get the device - maybe it's not available, e.g. a
             # device on a volume group that has not been activated yet.
             # Add it to the list anyway, since it's a pending device.
-            clevis_devices="${clevis_devices} ${dev}"
+            clevis_devices="${clevis_devices} ${crypt_device}"
             continue
         fi
 

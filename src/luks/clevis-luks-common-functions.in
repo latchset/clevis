@@ -20,6 +20,21 @@
 
 CLEVIS_UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
 
+enable_debugging() {
+    # Automatically enable debugging if in initramfs phase and rd.debug
+    if [ -e /usr/lib/dracut-lib.sh ]; then
+        local bashopts=$-
+        # Because dracut is loosely written, disable hardening options temporarily
+        [[ $bashopts != *u* ]] || set +u
+        [[ $bashopts != *e* ]] || set +e
+        . /usr/lib/dracut-lib.sh
+        [[ $bashopts != *u* ]] || set -u
+        [[ $bashopts != *e* ]] || set -e
+    fi
+}
+
+enable_debugging
+
 # valid_slot() will check whether a given slot is possibly valid, i.e., if it
 # is a numeric value within the specified range.
 valid_slot() {
@@ -393,13 +408,18 @@ clevis_devices_to_unlock() {
     clevis_devices=
 
     # Build list of devices to unlock.
-    while read -r _ crypt_device _; do
+    while read -r _volname_ crypt_device _; do
+        # skip empty lines and lines which begin with the '#' char, per
+        # crypttab(5)
+        case $_volname_ in
+            ''|\#*) continue ;;
+        esac
         if ! dev=$(clevis_map_device "${crypt_device}") \
                    || [ -z "${dev}" ]; then
             # Unable to get the device - maybe it's not available, e.g. a
             # device on a volume group that has not been activated yet.
             # Add it to the list anyway, since it's a pending device.
-            clevis_devices="${clevis_devices} ${dev}"
+            clevis_devices="${clevis_devices} ${crypt_device}"
             continue
         fi
 
@@ -751,10 +771,12 @@ clevis_luks_add_key() {
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
+    local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
 
     printf '%s' "${input}" | cryptsetup luksAddKey --batch-mode \
                                          --key-slot "${SLT}" \
                                          "${DEV}" \
+                                         ${pbkdf_args} \
                                          ${extra_args}
 }
 
@@ -783,11 +805,14 @@ clevis_luks_update_key() {
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
+    local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
 
     if [ -n "${in_place}" ]; then
         printf '%s' "${input}" | cryptsetup luksChangeKey "${DEV}" \
                                             --key-slot "${SLT}" \
-                                            --batch-mode ${extra_args}
+                                            --batch-mode \
+                                            ${pbkdf_args} \
+                                            ${extra_args}
         return
     fi
 
@@ -841,6 +866,7 @@ clevis_luks_generate_key() {
     [ -z "${DEV}" ] && return 1
 
     local dump filter bits
+    local MAX_ENTROPY_BITS=256  # Maximum allowed by pwmake.
     dump=$(cryptsetup luksDump "${DEV}")
     if cryptsetup isLuks --type luks1 "${DEV}"; then
         filter="$(echo "${dump}" | sed -rn 's|MK bits:[ \t]*([0-9]+)|\1|p')"
@@ -852,6 +878,9 @@ clevis_luks_generate_key() {
     fi
 
     bits="$(echo -n "${filter}" | sort -n | tail -n 1)"
+    if [ "${bits}" -gt "${MAX_ENTROPY_BITS}" ]; then
+        bits="${MAX_ENTROPY_BITS}"
+    fi
     pwmake "${bits}"
 }
 
@@ -947,7 +976,11 @@ clevis_luks_do_bind() {
     fi
 
     # Encrypt the new key.
-    jwe="$(printf '%s' "${newkey}" | clevis encrypt "${PIN}" "${CFG}" ${YES})"
+    if ! jwe="$(printf '%s' "${newkey}" | clevis encrypt "${PIN}" "${CFG}" \
+                ${YES})" || [ -z "${jwe}" ]; then
+        echo "Unable to perform encryption with PIN '${PIN}' and config '${CFG}'" >&2
+        return 1
+    fi
 
     # We can proceed to binding, after backing up the LUKS header and
     # metadata.

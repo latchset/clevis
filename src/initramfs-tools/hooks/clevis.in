@@ -42,7 +42,7 @@ die() {
 
 find_binary() {
     bin_name="$1"
-    resolved=$(which ${bin_name})
+    resolved=$(command -v ${bin_name})
     [ -z "$resolved" ] && die 1 "Unable to find ${bin_name}"
     echo "$resolved"
 }
@@ -58,6 +58,7 @@ fi
 
 copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
 copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
+copy_exec @bindir@/clevis-decrypt-null || die 1 "@bindir@/clevis-decrypt-null not found"
 copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"
 copy_exec @bindir@/clevis-luks-common-functions || die 1 "@bindir@/clevis-luks-common-functions not found"
 copy_exec @bindir@/clevis-luks-list || die 1 "@bindir@/clevis-luks-list not found"

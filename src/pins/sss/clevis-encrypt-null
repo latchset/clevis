@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/bash -e
 # vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2016 Red Hat, Inc.
+# Copyright (c) 2017 Red Hat, Inc.
 # Author: Nathaniel McCallum <npmccallum@redhat.com>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,23 +18,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-check() {
-    require_binaries clevis-decrypt-tpm2 tpm2_createprimary tpm2_flushcontext tpm2_load tpm2_unseal || return 1
-    require_any_binary tpm2_pcrread tpm2_pcrlist || return 1
-    return 0
-}
+[ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
 
-depends() {
-    echo clevis
-    return 0
-}
+if ! cfg="$(jose fmt -j "$1" -Oo- 2>/dev/null)"; then
+    echo "Configuration is malformed!" >&2
+    exit 1
+fi
 
-install() {
-    inst_multiple clevis-decrypt-tpm2 tpm2_createprimary tpm2_flushcontext tpm2_load tpm2_unseal
-    inst_multiple -o tpm2_pcrread tpm2_pcrlist
-    inst_libdir_file "libtss2-tcti-device.so*"
-}
+jwk="$(jose jwk gen -i '{"alg":"A256GCM"}')"
+jwe='{"protected":{"clevis":{"pin":"null","null":{}}}}'
 
-installkernel() {
-    hostonly='' instmods =drivers/char/tpm
-}
+if ! jose fmt -j "$cfg" -g fail -T; then
+    jwe="$(jose fmt -j "$jwe" -Og protected -g clevis -g null -j "$jwk" -Os jwk -UUUUo-)"
+fi
+
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

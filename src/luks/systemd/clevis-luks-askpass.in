@@ -67,8 +67,11 @@ while true; do
     done
 
     [ "${loop}" != true ] && break
+
     # Checking for pending devices to be unlocked.
-    if remaining=$(clevis_devices_to_unlock) && [ -z "${remaining}" ]; then
+    remaining_crypttab=$(clevis_devices_to_unlock) ||:
+    remaining_askfiles=$(ls "${path}"/ask.* 2>/dev/null) ||:
+    if [ -z "${remaining_crypttab}" ] && [ -z "${remaining_askfiles}" ]; then
         break;
     fi
 

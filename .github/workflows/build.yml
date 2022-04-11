@@ -6,18 +6,23 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-18.04
+    continue-on-error: ${{ ! matrix.stable }}
     strategy:
       matrix:
         os:
-          - fedora:rawhide
           - fedora:latest
           - centos:7
           - centos:8
           - debian:testing
           - debian:latest
-          - ubuntu:devel
           - ubuntu:rolling
           - ubuntu:bionic
+        stable: [true]
+        include:
+          - os: fedora:rawhide
+            stable: false
+          - os: ubuntu:devel
+            stable: false
     steps:
       - uses: actions/checkout@v2
 

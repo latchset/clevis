@@ -28,8 +28,11 @@ if jansson.found() and libcrypto.found()
     separator: ':'
   )
 
+  bins += join_paths(meson.current_source_dir(), 'clevis-encrypt-null')
+  bins += join_paths(meson.current_source_dir(), 'clevis-decrypt-null')
+
   test('pin-sss', find_program(join_paths(src, 'pin-sss')), env: env)
-  test('pin-test', find_program(join_paths(src, 'pin-test')), env: env)
+  test('pin-null', find_program(join_paths(src, 'pin-null')), env: env)
 else
   warning('Will not install sss pin due to missing dependencies!')
 endif

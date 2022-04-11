@@ -267,13 +267,18 @@ do_configure_networking() {
         # Add DNS servers from configure_networking to /etc/resolv.conf
         if [ ! -e /etc/resolv.conf ]; then
             touch /etc/resolv.conf
-            if [ ! -z "${IPV4DNS0}" ]; then
-                echo nameserver "${IPV4DNS0}" >> /etc/resolv.conf
-                echo nameserver "${IPV4DNS1}" >> /etc/resolv.conf
-            fi
-            if [ ! -z "${IPV6DNS0}" ]; then
-                echo nameserver "${IPV6DNS0}" >> /etc/resolv.conf
-            fi
+            for intf in /run/net-*.conf; do
+                . "${intf}"
+                if [ ! -z "${IPV4DNS0}" ] && [ "${IPV4DNS0}" != "0.0.0.0" ]; then
+                    echo nameserver "${IPV4DNS0}" >> /etc/resolv.conf
+                fi
+                if [ ! -z "${IPV4DNS1}" ] && [ "${IPV4DNS1}" != "0.0.0.0" ]; then
+                    echo nameserver "${IPV4DNS1}" >> /etc/resolv.conf
+                fi
+                if [ ! -z "${IPV6DNS0}" ]; then
+                    echo nameserver "${IPV6DNS0}" >> /etc/resolv.conf
+                fi
+            done
         fi
     fi
 }

@@ -23,6 +23,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+readonly DECRYPT_OK=10
+
 case $1 in
 prereqs) exit 0 ;;
 esac
@@ -69,11 +71,11 @@ luks1_decrypt() {
         [ "$decrypted" != "" ] || continue
 
         echo -n "${decrypted}" >"$PASSFIFO"
-        return 10
+        return ${DECRYPT_OK}
     done
 
     # return true if while read sub-shell signaled success 
-    [ $? -eq 10 ] && return 0;
+    [ $? -eq ${DECRYPT_OK} ] && return 0;
 
     return 1
 }
@@ -102,11 +104,11 @@ luks2_decrypt() {
         [ "$decrypted" != "" ] || continue
 
         echo -n "${decrypted}" >"$PASSFIFO"
-        return 10
+        return ${DECRYPT_OK}
     done
     
     # return true if while read sub-shell signaled success 
-    [ $? -eq 10 ] && return 0;    
+    [ $? -eq ${DECRYPT_OK} ] && return 0;    
 
     return 1
 }

@@ -67,9 +67,11 @@ if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
     tpm2_creatprimary_bin=$(find_binary "tpm2_createprimary")
     tpm2_unseal_bin=$(find_binary "tpm2_unseal")
     tpm2_load_bin=$(find_binary "tpm2_load")
+    tpm2_flushcontext=$(find_binary "tpm2_flushcontext")
     copy_exec "${tpm2_creatprimary_bin}" || die 1 "Unable to copy ${tpm2_creatprimary_bin}" 
     copy_exec "${tpm2_unseal_bin}" || die 1 "Unable to copy ${tpm2_unseal_bin}"
     copy_exec "${tpm2_load_bin}" || die 1 "Unable to copy ${tpm2_load_bin}"
+    copy_exec "${tpm2_flushcontext}" || die 1 "Unable to copy ${tpm2_flushcontext}"
     for _LIBRARY in @libdir@/libtss2-tcti-device.so*; do
         if [ -e "${_LIBRARY}" ]; then
             copy_exec "${_LIBRARY}" || die 2 "Unable to copy ${_LIBRARY}"

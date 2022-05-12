@@ -11,8 +11,8 @@ jobs:
       matrix:
         os:
           - fedora:latest
-          - centos:7
-          - centos:8
+          - quay.io/centos/centos:stream8
+          - quay.io/centos/centos:stream9
           - debian:testing
           - debian:latest
           - ubuntu:rolling

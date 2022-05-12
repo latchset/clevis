@@ -328,6 +328,7 @@ clevis_luks_check_valid_key_or_keyfile() {
 clevis_luks_unlock_device_by_slot() {
     local DEV="${1}"
     local SLT="${2}"
+    local SKIP_CHECK="${3}"
 
     [ -z "${DEV}" ] && return 1
     [ -z "${SLT}" ] && return 1
@@ -342,8 +343,9 @@ clevis_luks_unlock_device_by_slot() {
                        || [ -z "${passphrase}" ]; then
         return 1
     fi
-
-    clevis_luks_check_valid_key_or_keyfile "${DEV}" "${passphrase}" || return 1
+    if [ -z "${SKIP_CHECK}" ]; then
+        clevis_luks_check_valid_key_or_keyfile "${DEV}" "${passphrase}" || return 1
+    fi
     printf '%s' "${passphrase}"
 }
 
@@ -351,6 +353,8 @@ clevis_luks_unlock_device_by_slot() {
 # parameter and returns the decoded passphrase.
 clevis_luks_unlock_device() {
     local DEV="${1}"
+    local SKIP_CHECK="YES"
+
     [ -z "${DEV}" ] && return 1
 
     local used_slots
@@ -361,7 +365,7 @@ clevis_luks_unlock_device() {
 
     local slt pt
     for slt in ${used_slots}; do
-        if ! pt=$(clevis_luks_unlock_device_by_slot "${DEV}" "${slt}") \
+        if ! pt=$(clevis_luks_unlock_device_by_slot "${DEV}" "${slt}" "${SKIP_CHECK}") \
                   || [ -z "${pt}" ]; then
              continue
         fi

@@ -91,17 +91,18 @@ main() {
 
 	check_valid_dataset "${dataset}"
 
-	if ! pin=${@:$((OPTIND++)):1} || [ -z "$PIN" ]; then
+	if ! pin=${@:$((OPTIND++)):1} || [ -z "$pin" ]; then
 		error "Did not specify a pin!"
-	elif ! findexe clevis-encrypt-"${PIN}" &>/dev/null; then
-		error "'$PIN' is not a valid pin!"
+	elif ! findexe clevis-encrypt-"${pin}" &>/dev/null; then
+		error "'$pin' is not a valid pin!"
 	fi
 
-	if ! cfg=${@:$((OPTIND++)):1} || [ -z "$CFG" ]; then
+	if ! cfg=${@:$((OPTIND++)):1} || [ -z "$cfg" ]; then
 		error "Did not specify a pin config!"
 	fi
 
 	bind_zfs_dataset "${dataset}" "${pin}" "${cfg}" "${key}" "${overwrite}"
+	echo >&2 "dataset ${dataset} is succesfully bound"
 }
 
 main "${@}"

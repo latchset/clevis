@@ -56,7 +56,7 @@ function main() {
 		fi
 	else
 		echo >&2 -n "unlocking ${dataset}... "
-		if ! zfs_load_key "${dataset}" <<<"${clevis_data}"; then
+		if ! zfs_load_key "${dataset}" <<<"${password}"; then
 			error "could not load key for ${dataset}"
 		fi
 	fi

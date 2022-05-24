@@ -1,0 +1,66 @@
+#!/bin/bash
+set -euo pipefail
+
+. clevis-zfs-common
+
+SUMMARY="Unlock a ZFS dataset using the saved clevis data"
+
+function usage() {
+	cat >&2 <<-USAGE_END
+		Usage: clevis zfs unlock [-n] [-k KEY] -d DATASET PIN CFG
+
+		$SUMMARY:
+
+		  -t          Test the clevis configuration without unlocking
+
+		  -d DATASET  The zfs dataset to unlock
+
+	USAGE_END
+}
+
+function main() {
+	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
+		echo "$SUMMARY"
+		exit 0
+	fi
+
+	local dataset
+	local test_only='false'
+	while getopts ":d:t" o; do
+		case "$o" in
+		d) dataset="$OPTARG" ;;
+		t) test_only='true' ;;
+		*) error "unrecognized argument: -${OPTARG}" ;;
+		esac
+	done
+
+	if [ -z "${dataset:-""}" ]; then
+		error "did not specify a device!"
+	fi
+
+	if ! zfs_is_bound "${dataset}"; then
+		error "dataset is not bound with clevis: ${dataset}"
+	fi
+
+	local clevis_data password
+
+	echo >&2 -n "loading clevis data from ${dataset}... "
+	clevis_data="$(zfs_get_clevis_data "${dataset}")"
+	password="$(clevis decrypt <<<"${clevis_data}")"
+	echo >&2 'ok'
+
+	if [[ "${test_only}" == 'true' ]]; then
+		echo >&2 -n "testing key for ${dataset}... "
+		if ! zfs_test_key "${dataset}" <<<"${password}"; then
+			error "testing key for ${dataset} failed"
+		fi
+	else
+		echo >&2 -n "unlocking ${dataset}... "
+		if ! zfs_load_key "${dataset}" <<<"${clevis_data}"; then
+			error "could not load key for ${dataset}"
+		fi
+	fi
+	echo >&2 'ok'
+}
+
+main "${@}"

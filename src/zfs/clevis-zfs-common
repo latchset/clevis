@@ -1,0 +1,140 @@
+#!/bin/bash
+
+# zfs user properties are limited to 8192 bytes
+zfs_userprop_max_size=8000
+zfs_userprop_max_size=800 # set smaller to test splitting/combining chunks
+
+zfs_userprop_prefix='latchset.clevis'
+zfs_data_prop="${zfs_userprop_prefix}:data"
+zfs_status_prop="${zfs_userprop_prefix}:status"
+
+function load_key() {
+	local dataset="${1}"
+	local key="${2?need keyinput argument}"
+
+	# Get the existing passphrase/keyfile.
+	local existing_key
+	local keyfile
+
+	case "${key}" in
+	"") IFS= read -r -s -p "Enter existing ZFS password for ${dataset}: " existing_key;
+		echo >&2
+		;;
+	 -) IFS= read -r -s -p "" existing_key ;;
+	 *) keyfile="${key}"
+		if [ -r "${keyfile}" ]; then
+			existing_key="$(< "${keyfile}")"
+		else
+			error "cannot read key file '${keyfile}'"
+		fi
+		;;
+	esac
+	echo "${existing_key}"
+}
+
+function error() {
+	usage
+	echo >&2 -e "ERROR: ${*}"
+    exit 1
+}
+
+findexe() {
+    while read -r -d: path; do
+        [ -f "${path}/${1}" ] && [ -x "${path}/${1}" ] && \
+          echo "${path}/${1}" && return 0
+    done <<< "${PATH}:"
+    return 1
+}
+
+zfs_get_prop() {
+	local dataset="${1}"
+	local prop="${2}"
+	shift 2
+	zfs get -H -o value -slocal "${prop}" "${dataset}" "${@}"
+}
+
+function cut_into_chunks() {
+	fold -w "${zfs_userprop_max_size}"
+}
+
+function zfs_is_bound() {
+	local dataset="${1}"
+	[[ "$(zfs_get_prop "${dataset}" "${zfs_status_prop}" )" == 'bound' ]]
+}
+
+function zfs_is_encryptionroot() {
+	local dataset="${1}"
+	zfs_get_prop "${dataset}" 'encryptionroot'
+	[[ "$(zfs_get_prop "${dataset}" 'encryptionroot' -snone )" == "${dataset}" ]]
+}
+
+function zfs_test_key() {
+	local dataset="${1}"
+	zfs load-key -n -L prompt "${dataset}" &>/dev/null
+}
+
+function zfs_load_key() {
+	local dataset="${1}"
+	zfs load-key -L prompt "${dataset}" &>/dev/null
+}
+
+function zero_pad() {
+	local num="${1}"
+	local width="${2}"
+	printf "%0${width}d" "${num}"
+}
+
+
+function zfs_bind_clevis_data() {
+	local dataset="${1}"
+	local clevis_data="${2}"
+
+	echo >&2 -n 'binding new clevis data... '
+	clevis_chunks=( $(cut_into_chunks <<<"${clevis_data}") )
+	last_index="$(( "${#clevis_chunks[@]}" - 1 ))"
+	width="${#last_index}"
+
+	local chunk chunk_num
+	for i in $(seq 0 "${last_index}" ); do
+		chunk="${clevis_chunks[${i}]}"
+		# we add zero-padding so the props sort nicely when we want to combine
+		# them when we unlock
+		chunk_num="$(zero_pad "${i}" "${width}" )"
+
+		# e.g. latchset.clevis:pin-01=chunk_data
+		zfs set "${zfs_data_prop}-${chunk_num}=${chunk}" "${dataset}"
+	done
+	echo >&2 'ok'
+
+	# check if unlocking works
+	echo >&2 -n 'testing new clevis data... '
+	if ! (zfs_get_clevis_data "${dataset}" | clevis decrypt | zfs_test_key "${dataset}"); then
+		zfs_wipe_clevis_data "${dataset}"
+		error "could not unlock dataset with clevis configuration: ${dataset}"
+	fi
+	echo >&2 'ok'
+
+	zfs set "${zfs_status_prop}=bound" "${dataset}"
+}
+
+function zfs_get_data_props() {
+	local dataset="${1}"
+
+	#property HAS to be set, otherwise the grep doesn't work
+	local outputs="${2:-property}"
+
+	zfs_get_prop "${dataset}" 'all' -o "${outputs}" | grep -F "${zfs_data_prop}" | sort
+}
+
+function zfs_wipe_clevis_data() {
+	local dataset="${1}"
+
+	for prop in $(zfs_get_prop "${dataset}" 'all' -o property | grep -F "${zfs_userprop_prefix}" ); do
+		zfs inherit "${prop}" "${dataset}"
+	done
+}
+
+function zfs_get_clevis_data() {
+	local dataset="${1:?}"
+	zfs_get_data_props "${dataset}" 'property,value' | sort | awk '{print $2}' | tr -d '\n'
+}

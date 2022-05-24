@@ -1,0 +1,107 @@
+#!/bin/bash
+set -euo pipefail
+
+. clevis-zfs-common
+
+SUMMARY="Binds a ZFS dataset using the specified policy"
+
+
+
+function usage() {
+	cat >&2 <<-USAGE_END
+		Usage: clevis zfs bind [-f] [-k KEY] -d DATASET PIN CFG
+
+		$SUMMARY:
+
+		  -f          Do not prompt when overwriting configuration
+
+		  -d DATASET  The zfs dataset on which to perform binding
+
+		  -k KEY      Non-interactively read zfs password from KEY file
+		  -k -        Non-interactively read zfs password from standard input
+
+	USAGE_END
+}
+
+
+function bind_zfs_dataset() {
+    local dataset="${1}"
+    local pin="${2}"
+    local cfg="${3}"
+    local key="${4}"
+    local overwrite="${5:-}"
+
+	local existing_key clevis_data
+
+	if [[ -z "${overwrite}" ]] && zfs_is_bound "${dataset}"; then
+		error "given dataset already has a clevis binding, not overwriting: ${dataset}."
+	fi
+
+	existing_key="$(load_key "${dataset}" "${key}")"
+
+	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
+		error "given key does not unlock ${dataset}"
+	fi
+
+	echo >&2 -n 'creating new clevis data... '
+	clevis_data="$(clevis encrypt "${pin}" "${cfg}" <<<"${existing_key}" )"
+	echo >&2 'ok'
+
+	[[ -n "${overwrite}" ]] && zfs_wipe_clevis_data "${dataset}" && echo >&2 'wiped old clevis data'
+
+	zfs_bind_clevis_data "${dataset}" "${clevis_data}"
+}
+
+function check_valid_dataset() {
+	local dataset="${1}"
+
+	if ! zfs_get_prop "${dataset}" 'name' -snone &>/dev/null; then
+		error "${dataset} is not a zfs dataset!"
+	fi
+
+	if ! zfs_is_encryptionroot "${dataset}"; then
+		error "given dataset is not an encryptionroot: ${dataset}"
+	fi
+}
+
+main() {
+
+	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
+		echo "$SUMMARY"
+		exit 0
+	fi
+
+	local dataset=
+	local pin=
+	local cfg=
+	local key=
+	local overwrite=
+	while getopts ":hfd:k:" o; do
+		case "$o" in
+		f) overwrite='yes' ;;
+		d) dataset="$OPTARG";;
+		k) key="$OPTARG";;
+		*) error "unrecognized argument: -${OPTARG}";;
+		esac
+	done
+
+	if [ -z "${dataset:-""}" ]; then
+		error "did not specify a device!"
+	fi
+
+	check_valid_dataset "${dataset}"
+
+	if ! pin=${@:$((OPTIND++)):1} || [ -z "$PIN" ]; then
+		error "Did not specify a pin!"
+	elif ! findexe clevis-encrypt-"${PIN}" &>/dev/null; then
+		error "'$PIN' is not a valid pin!"
+	fi
+
+	if ! cfg=${@:$((OPTIND++)):1} || [ -z "$CFG" ]; then
+		error "Did not specify a pin config!"
+	fi
+
+	bind_zfs_dataset "${dataset}" "${pin}" "${cfg}" "${key}" "${overwrite}"
+}
+
+main "${@}"

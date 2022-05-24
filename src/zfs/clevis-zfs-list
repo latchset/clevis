@@ -1,0 +1,33 @@
+#!/bin/bash
+set -euo pipefail
+
+. clevis-zfs-common
+
+SUMMARY="List zfs datasets that are bound with clevis"
+
+
+
+function usage() {
+	cat >&2 <<-USAGE_END
+		Usage: clevis zfs list [pool]
+
+		$SUMMARY:
+
+		  -f      Do not prompt when overwriting configuration
+
+		  -d DEV  The zfs dataset on which to perform binding
+
+		  -k KEY  Non-interactively read zfs password from KEY file
+		  -k -    Non-interactively read zfs password from standard input
+
+	USAGE_END
+}
+
+
+main() {
+	local poolname="${1:-}"
+	echo "The following ZFS datasets have been bound with clevis:"
+	zfs list -o "name,${zfs_status_prop}" -r ${poolname} | awk '{ if ($2=="bound") {print $1}}' | sort | sed 's/^/  /'
+}
+
+main "${@}"

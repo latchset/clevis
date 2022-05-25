@@ -31,7 +31,6 @@ function zfs_get_labels() {
 function zfs_set_labels() {
 	local dataset="${1}";
 	local new_labels="${2}"
-	echo >&2 "setting new labels: ${new_labels}"
 	zfs set "${zfs_labels_prop}=${new_labels}" "${dataset}"
 }
 
@@ -135,7 +134,7 @@ function zfs_is_bound() {
 		[[ " ${labels} " == *" ${label} "* ]] && return 0
 	else
 		# we don't check for a specific label, just that at least one label is set
-		[[ "${#current_labels[@]}" -gt 0 ]] && return 0
+		[[ "${#labels}" -gt 0 ]] && return 0
 	fi
 	return 1
 }
@@ -146,13 +145,13 @@ function zfs_is_encryptionroot() {
 }
 
 function zfs_test_key() {
-	local dataset="${1}"
-	zfs load-key -n -L prompt "${dataset}" &>/dev/null
+	zfs_load_key "${1}" 'dry_run'
 }
 
 function zfs_load_key() {
 	local dataset="${1}"
-	zfs load-key -L prompt "${dataset}" &>/dev/null
+	local dry_run="${2:+-n}"
+	zfs load-key ${dry_run} -L prompt "${dataset}" >/dev/null
 }
 
 function zero_pad() {
@@ -203,24 +202,21 @@ function zfs_bind_clevis_data() {
 	zfs_add_label "${dataset}" "${label}"
 }
 
-function zfs_get_data_props() {
-	local dataset="${1}"
-
-	#property HAS to be set, otherwise the grep doesn't work
-	local outputs="${2:-property}"
-
-	zfs_get_prop "${dataset}" 'all' -o "${outputs}" | grep -F "${zfs_label_prefix}" | sort
-}
-
 function zfs_wipe_clevis_label() {
 	local dataset="${1}"
-	local label="${2}"
+	local label="${2%:*}"
+	local last_index="${2#*:}"
 
 	local zfs_label_prop="${zfs_label_prefix}:${label}"
 
-	for prop in $(zfs_get_prop "${dataset}" 'all' -o property | grep -F "${zfs_label_prop}" ); do
-		zfs inherit "${prop}" "${dataset}"
-	done
+	if [[ "${label}" == "${last_index}" ]]; then
+		zfs inherit "${zfs_label_prop}" "${dataset}"
+	else
+		for num in $(seq -w 0 "${last_index}"); do
+			zfs inherit "${zfs_label_prop}-${num}" "${dataset}"
+		done
+	fi
+	zfs_remove_label "${dataset}" "${label}"
 }
 
 function zfs_get_clevis_label() {
@@ -228,8 +224,8 @@ function zfs_get_clevis_label() {
 	local label="${2%:*}"
 	local last_index="${2#*:}"
 
-	if [[ -z "${last_index}" ]]; then
-		zfs_label_prop="${zfs_label_prefix}:${label}"
+	local zfs_label_prop="${zfs_label_prefix}:${label}"
+	if [[ "${label}" == "${last_index}" ]]; then
 		zfs_get_prop "${dataset}" "${zfs_label_prop}"
 	else
 		for num in $(seq -w 0 "${last_index}"); do

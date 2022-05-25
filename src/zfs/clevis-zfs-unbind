@@ -1,10 +1,9 @@
 #!/bin/bash
-set -eu
+set -euo pipefail
 
 . clevis-zfs-common
 
 SUMMARY="Unbinds a label from a ZFS dataset"
-
 
 
 function usage() {
@@ -58,7 +57,8 @@ function main() {
 	fi
 
 	echo >&2 -n 'wiping clevis data... '
-	zfs_wipe_clevis_data "${dataset}" "${label}"
+	zfs_wipe_clevis_label "${dataset}" "${label}"
 	echo >&2 'ok'
 }
+
 main "${@}"

@@ -1,19 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-SUMMARY="Unbinds a ZFS dataset (remove clevis)"
+SUMMARY="Unbinds a label from a ZFS dataset"
 
 usage() {
 	cat >&2 <<-USAGE_END
-		Usage: clevis zfs unbind [-f] [-k KEY] -d DATASET [-a]
+		Usage: clevis zfs unbind [-f] [-k KEY] -d DATASET [-a | -l LABEL]
 
 		$SUMMARY:
 
 		  -f          Force unbinding dataset
 		  -d DATASET  The ZFS dataset on which to perform unbinding
+		  -a          Unbind all labels
+		  -l LABEL    The label to unbind
 
 		  -k KEY      Non-interactively read ZFS password from KEY file
 		  -k -        Non-interactively read ZFS password from standard input
+
+		Without -a and -l, the "default" label is unbound.
 
 	USAGE_END
 }
@@ -24,13 +28,20 @@ main() {
 		exit 0
 	fi
 
-	local dataset
-	local key
-	while getopts ":hfd:k:" o; do
+	local dataset=
+	local key=
+	local label=
+	local force_unbind='false'
+	local unbind_all='false'
+	while getopts "hafd:k:l:" o; do
 		case "$o" in
+		h) usage; exit 0;;
+		a) unbind_all='true';;
 		d) dataset="$OPTARG";;
+		f) force_unbind='true';;
 		k) key="$OPTARG";;
-		*) error "unrecognized argument: -${OPTARG}";;
+		l) label="$OPTARG";;
+		*) error "unrecognized argument: -${o}";;
 		esac
 	done
 
@@ -38,19 +49,39 @@ main() {
 		error "did not specify a dataset!"
 	fi
 
-	if ! zfs_is_bound "${dataset}"; then
-		error "dataset is not bound with Clevis: ${dataset}"
+	if [[ "${unbind_all}" == 'true' ]] && [ -n "${label}" ]; then
+		error "cannot use -a together with -l!"
+	fi
+	label="${label:-default}"
+
+	if [[ "${unbind_all}" == 'false' ]] && ! zfs_is_bound "${dataset}" "${label}"; then
+		error "label ${label} is not bound in dataset ${dataset}"
 	fi
 
-	echo >&2 "Loading existing key... "
-	local existing_key="$(load_key "${dataset}" "${key}")"
+	if [[ "${force_unbind}" != 'true' ]]; then
+		if ! zfs_is_bound "${dataset}"; then
+			error "dataset is not bound with Clevis: ${dataset}"
+		fi
 
-	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
-		error "given key does not unlock ${dataset}"
+		local existing_key
+		echo >&2 "Loading existing key... "
+		existing_key="$(read_passphrase "${dataset}" "${key}")"
+
+		if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
+			error "given key does not unlock ${dataset}"
+		fi
 	fi
 
 	echo >&2 -n 'Wiping Clevis data... '
-	zfs_wipe_clevis_data "${dataset}"
+	if [[ "${unbind_all}" == 'true' ]]; then
+		local labels=()
+		read -ra labels <<< "$(zfs_get_labels "${dataset}")"
+		for label in "${labels[@]}"; do
+			zfs_unbind_clevis_label "${dataset}" "${label}"
+		done
+	else
+		zfs_unbind_clevis_label "${dataset}" "${label}"
+	fi
 	echo >&2 'ok'
 }
 

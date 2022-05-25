@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-. clevis-zfs-common
-
 SUMMARY="Unlock a ZFS dataset using the saved clevis data"
 
 function usage() {
@@ -63,4 +61,7 @@ function main() {
 	echo >&2 'ok'
 }
 
-main "${@}"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	. clevis-zfs-common
+	main "${@}"
+fi

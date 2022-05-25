@@ -1,39 +1,42 @@
 #!/bin/bash
-set -euo pipefail
+set -eu
 
 . clevis-zfs-common
 
-SUMMARY="Unbinds a ZFS dataset (remove clevis)"
+SUMMARY="Unbinds a label from a ZFS dataset"
 
 
 
 function usage() {
 	cat >&2 <<-USAGE_END
-		Usage: clevis zfs unbind [-k KEY] -d DEV
+		Usage: clevis zfs unbind [-k KEY] -d DATASET -l LABEL
 
 		$SUMMARY:
 
-		  -d DEV  The zfs dataset on which to perform binding
+		  -d DATASET  The zfs dataset on which to perform unbinding
+		  -l LABEL    The label to unbind
 
-		  -k KEY  Non-interactively read zfs password from KEY file
-		  -k -    Non-interactively read zfs password from standard input
+		  -k KEY      Non-interactively read zfs password from KEY file
+		  -k -        Non-interactively read zfs password from standard input
 
 	USAGE_END
 }
 
 
 function main() {
-	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
+	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
 		echo "$SUMMARY"
 		exit 0
 	fi
 
-	local dataset=
-	local key=
-	while getopts ":hfd:k:" o; do
+	local dataset
+	local key
+	local label
+	while getopts ":hfd:k:l:" o; do
 		case "$o" in
 		d) dataset="$OPTARG";;
 		k) key="$OPTARG";;
+		l) label="$OPTARG";;
 		*) error "unrecognized argument: -${OPTARG}";;
 		esac
 	done
@@ -46,15 +49,16 @@ function main() {
 		error "dataset is not bound with clevis: ${dataset}"
 	fi
 
+	local existing_key
 	echo >&2 "Loading existing key... "
-	local existing_key="$(load_key "${dataset}" "${key}")"
+	existing_key="$(read_key "${dataset}" "${key}")"
 
 	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
 		error "given key does not unlock ${dataset}"
 	fi
 
 	echo >&2 -n 'wiping clevis data... '
-	zfs_wipe_clevis_data "${dataset}"
+	zfs_wipe_clevis_data "${dataset}" "${label}"
 	echo >&2 'ok'
 }
 main "${@}"

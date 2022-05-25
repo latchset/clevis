@@ -10,8 +10,8 @@ function usage() {
 		$SUMMARY:
 
 		  -t          Test the clevis configuration without unlocking
-
 		  -d DATASET  The zfs dataset to unlock
+		  -l LABEL    Use only this label to unlock (defaults to trying all labels): TODO
 
 	USAGE_END
 }
@@ -23,11 +23,13 @@ function main() {
 	fi
 
 	local dataset
-	local test_only='false'
-	while getopts ":d:t" o; do
+	local test_only=''
+	local label=''
+	while getopts ":d:l:t" o; do
 		case "$o" in
 		d) dataset="$OPTARG" ;;
-		t) test_only='true' ;;
+		t) test_only=' (test)' ;;
+		l) label="$OPTARG" ;;
 		*) error "unrecognized argument: -${OPTARG}" ;;
 		esac
 	done
@@ -42,23 +44,22 @@ function main() {
 
 	local clevis_data password
 
-	echo >&2 -n "loading clevis data from ${dataset}... "
-	clevis_data="$(zfs_get_clevis_data "${dataset}")"
-	password="$(clevis decrypt <<<"${clevis_data}")"
-	echo >&2 'ok'
+	for label in $(zfs_get_labels "${dataset}" | tr ' ' '\n' | grep "^${label}(:|$)"); do
+		echo >&2 -n "loading clevis data from label ${label}... "
+		clevis_data="$(zfs_get_clevis_label "${dataset}" "${label}")"
+		password="$(clevis decrypt <<<"${clevis_data}" || echo '' )"
+		echo >&2 'ok'
 
-	if [[ "${test_only}" == 'true' ]]; then
-		echo >&2 -n "testing key for ${dataset}... "
-		if ! zfs_test_key "${dataset}" <<<"${password}"; then
-			error "testing key for ${dataset} failed"
+		echo >&2 -n "unlocking ${dataset}${test_only}... "
+		if echo "${password}" | zfs_load_key "${dataset}" "${test_only}"; then
+			echo >&2 'ok'
+			[[ -z "${test_only}" ]] && exit 0
+		else
+			echo >&2 "failed"
+			continue
 		fi
-	else
-		echo >&2 -n "unlocking ${dataset}... "
-		if ! zfs_load_key "${dataset}" <<<"${password}"; then
-			error "could not load key for ${dataset}"
-		fi
-	fi
-	echo >&2 'ok'
+	done
+	exit 1
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

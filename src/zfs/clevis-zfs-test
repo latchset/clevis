@@ -1,0 +1,192 @@
+#!/bin/bash
+set -euo pipefail
+
+zpool='clevis-zfs-pool'
+root_dataset="${zpool}/clevis"
+test_dataset="${root_dataset}/test"
+tang_host='TANG_HOST'
+tang_thp='TANG_THP'
+
+tang_host='192.168.178.26:8565'
+tang_thp='NHt3FdBvUX0AiHZycp2emEzfYIc'
+
+function zfs_usage() {
+	local permissions='create,destroy,mount,load-key,change-key,userprop,encryption,keyformat,keylocation'
+	cat >&2 <<-EOF
+
+		To test the zfs functions you will need to do the following as root:
+
+		1) make sure the zfs kernel module is loaded:
+		    modprobe zfs
+
+		2) create a new backing file:
+		    dd if=/dev/zero bs=10M count=20 conv=fdatasync of=/tmp/clevis-zfs-pool
+
+		3) create an unencrypted zfs pool using the backing file:
+		    zpool create ${zpool} /tmp/clevis-zfs-pool
+
+		4) create an unencrypted child dataset so we can grant access to a non-root user:
+			zpool create ${root_dataset}
+
+		4) give the user running the test script permissions to make changes to this pool:
+		    zfs allow ${USER} ${permissions} ${root_dataset}
+	EOF
+}
+
+exit_code=0
+testing_password="paaaassssswoooooorrrrddd"
+
+function testing() {
+	echo >&2 -en "${FUNCNAME[1]}: ${*}... "
+}
+function success() {
+	echo >&2 'ok'
+}
+function failed() {
+	echo >&2 "failed!"
+	echo >&2 "${BASH_SOURCE[0]}:${BASH_LINENO[0]}  EXPECTED: '${expected}'  GOT: '${result}' ${*}"
+	declare -g exit_code=1
+}
+
+function _test() {
+	_test_is_valid_label
+	_test_read_key
+	_test_zero_pad
+	_test_zfs_functions
+	[[ "${exit_code}" -gt 0 ]] && echo >&2 "SOME TESTS HAVE FAILED"
+	exit "${exit_code}"
+}
+
+
+
+function _test_is_valid_label() {
+	local expected
+	local result
+	valid_labels=(
+		2  # single digit
+		0  # single 0
+		a  # single letter
+		3a # double
+		a4 # double
+		1024 # all digits
+		abcd # all letters
+		0a0ab # alphanum
+		a_bc # with underscore
+	)
+
+	invalid_labels=(
+		a-bc  # with dash
+		a.bc # with dot
+		a:bc # with colon
+		a.1_c-2:e # with all
+		'' # empty string
+		'.' # just a dot
+		'-' # just a dash
+		AteA_ # capitals
+		aa@a  # @-symbol
+		aa/a  # /-symbol
+		aa/a  # /-symbol
+		aa?a  # ?-symbol
+		aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # 101-chars long
+	)
+
+	testing 'testing valid labels'
+	expected=0
+	result=1
+	for l in "${valid_labels[@]}"; do
+		if ! is_valid_label "${l}" &>/dev/null; then
+			failed "for is_valid_label '${l}'"
+		fi
+	done
+	success
+
+	testing 'testing invalid labels'
+	expected=1
+	result=0
+	for l in "${invalid_labels[@]}"; do
+		if is_valid_label "${l}" &>/dev/null; then
+			failed "for \`is_valid_label '${l}'\`"
+		fi
+	done
+	success
+}
+
+
+function _test_read_key() {
+	# test with reading from stdin
+	local expected
+	local result
+
+	testing 'key test: no key argument (stdin)'
+	expected='no-argument-password'
+	result="$(read_key "mydataset" '' <<<"${expected}" 2>/dev/null)"
+	[[ "${expected}" == "${result}" ]] && success || failed
+
+	testing 'key test: dash argument (stdin)'
+	expected='dash-argument-password'
+	result="$(read_key "mydataset" '-' <<<"${expected}" 2>/dev/null)"
+	[[ "${expected}" == "${result}" ]] && success || failed
+
+
+	testing 'key arg: filename'
+	expected='filename-argument-password'
+	result="$(read_key "mydataset" <(echo "${expected}") 2>/dev/null)"
+	[[ "${expected}" == "${result}" ]] && success || failed
+}
+
+
+function _test_zero_pad() {
+	testing 'pad with 4 zeroes'
+	local expected='000051'
+	local result="$(zero_pad 51 6)"
+	[[ "${expected}" == "${result}" ]] && success || failed
+}
+
+
+function _zfs_test_teardown() {
+	testing "removing zfs testing dataset: ${test_dataset}"
+	! zfs list "${test_dataset}" &>/dev/null && success && return 0
+	zfs destroy -f -r "${test_dataset}"
+	success
+}
+
+function _zfs_create_encrypted_dataset() {
+	local dataset="${1}"
+	testing "creating encrypted test dataset: ${1}"
+	# zfs create will work with the permissions as described, but will exit
+	# with an error code because mounting failed
+	zfs create "${1}" -o encryption=on -o keyformat=passphrase <<<"${testing_password}" &>/dev/null || true
+	# we need to make sure the dataset is created because of the error-code shenanigans
+	zfs list "${1}" &>/dev/null && success || return 1
+}
+
+function _test_zfs_functions() {
+	testing "checking if zfs testing dataset exists: ${root_dataset}"
+	zfs list "${root_dataset}" &>/dev/null && success || (zfs_usage; return 1)
+	trap _zfs_test_teardown EXIT
+	_zfs_create_encrypted_dataset "${test_dataset}"
+
+	testing 'binding zfs dataset twice'
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'testlabel' tang '{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}' &>/dev/null
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'another_testlabel' tang '{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}' &>/dev/null
+	success
+
+	testing 'listing labels'
+	expected="${test_dataset}"$'\ttestlabel:1 another_testlabel:1'
+	result="$(./clevis-zfs-list -d "${test_dataset}" 2>/dev/null)"
+	[[ "${expected}" == "${result}" ]] && success || failed
+
+	testing 'testing unlocking with bindings'
+	./clevis-zfs-unlock -t -d "${test_dataset}" && success
+
+	testing 'unlocking with binding'
+	zfs unload-key "${test_dataset}"
+	[[ "$(zfs_get_prop "${test_dataset}" 'keystatus' -snone)" == 'unavailable' ]] || return 1
+	./clevis-zfs-unlock -d "${test_dataset}"
+	success
+
+	testing 'unbinding dataset twice'
+	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'another_testlabel' -k -
+	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'testlabel' -k -
+	success
+}

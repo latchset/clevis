@@ -16,7 +16,7 @@ function usage() {
 
 
 main() {
-	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
+	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
 		echo "$SUMMARY"
 		exit 0
 	fi
@@ -30,7 +30,9 @@ main() {
 	done
 
 	echo >&2 "The following ZFS datasets have been bound with clevis:"
-	zfs get -r -H -o name,value -slocal "${zfs_labels_prop}" ${dataset}
+	# we should not quote this in case it is empty
+	# shellcheck disable=SC2086
+	zfs get -r -H -o name,value -slocal "${zfs_labels_prop}" ${dataset:-}
 }
 
 main "${@}"

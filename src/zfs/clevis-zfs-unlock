@@ -19,7 +19,7 @@ function usage() {
 
 
 function main() {
-	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
+	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
 		echo "$SUMMARY"
 		exit 0
 	fi
@@ -44,8 +44,6 @@ function main() {
 		error "dataset is not bound with clevis: ${dataset}"
 	fi
 
-	local clevis_data password labels
-
 	if [[ -n "${label}" ]]; then
 		label="$(zfs_get_label "${dataset}" "${label}" )"
 		testing -n "unlocking ${dataset} with ${label} ${test_only}... "
@@ -57,6 +55,7 @@ function main() {
 			exit 1
 		fi
 	else
+		local labels
 		labels="$(zfs_get_labels "${dataset}")"
 		for label in ${labels}; do
 			testing -n "unlocking ${dataset} with ${label} ${test_only}... "
@@ -79,7 +78,7 @@ function main() {
 
 
 function testing() {
-	[[ -n "${test_only}" ]] && echo >&2 "${@}"
+	[[ -n "${test_only}" ]] && echo >&2 "${@}" || true
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

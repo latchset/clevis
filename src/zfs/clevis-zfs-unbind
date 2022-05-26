@@ -50,7 +50,7 @@ function main() {
 
 	local existing_key
 	echo >&2 "Loading existing key... "
-	existing_key="$(read_key "${dataset}" "${key}")"
+	existing_key="$(read_passphrase "${dataset}" "${key}")"
 
 	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
 		error "given key does not unlock ${dataset}"

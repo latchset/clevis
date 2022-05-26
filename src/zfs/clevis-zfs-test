@@ -15,7 +15,7 @@ shutup='/dev/null'
 
 # simple tang config
 tang_config='{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}'
-# config that will go over the 8k limit
+# config that will go over the 8k limit twice (i.e. >16k)
 sss_config='{
 	"t": 4,
 	"pins": {
@@ -186,12 +186,12 @@ function _zfs_test_teardown() {
 
 function _zfs_create_encrypted_dataset() {
 	local dataset="${1}"
-	testing "creating encrypted test dataset: ${1}"
+	testing "creating encrypted test dataset: ${dataset}"
 	# zfs create will work with the permissions as described, but will exit
 	# with an error code because mounting failed
-	zfs create "${1}" -o encryption=on -o keyformat=passphrase <<<"${testing_password}" &>${shutup} || true
+	zfs create "${dataset}" -o encryption=on -o keyformat=passphrase <<<"${testing_password}" &>${shutup} || true
 	# we need to make sure the dataset is created because of the error-code shenanigans
-	zfs list "${1}" &>${shutup} && success || return 1
+	zfs list "${dataset}" &>${shutup} && success || return 1
 }
 
 function _test_zfs_functions() {
@@ -200,10 +200,10 @@ function _test_zfs_functions() {
 	trap _zfs_test_teardown EXIT
 	_zfs_create_encrypted_dataset "${test_dataset}"
 
-	testing 'binding zfs dataset twice'
-	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'tang_testlabel' tang "${tang_config}" &>/dev/null
-	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'sss_testlabel'  sss  "${sss_config}" &>/dev/null
-	success
+	testing 'binding zfs dataset tang'
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'tang_testlabel' tang "${tang_config}" &>${shutup} && success || failed
+	testing 'binding zfs dataset sss'
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'sss_testlabel'  sss  "${sss_config}"  &>${shutup} && success || failed
 
 	testing 'listing labels'
 	# the tang_testlabel should be way under the 8k limit
@@ -214,23 +214,25 @@ function _test_zfs_functions() {
 
 	expected='unlock test success'
 	result='unlock test failure'
-	#shutup='/dev/stderr'
 	testing 'testing unlocking with bindings tang'
 	./clevis-zfs-unlock -t -d "${test_dataset}" -l 'tang_testlabel' &>${shutup} && success || failed
-	return
+
 	testing 'testing unlocking with bindings sss'
 	./clevis-zfs-unlock -t -d "${test_dataset}" -l 'sss_testlabel' &>${shutup} && success || failed
 	testing 'testing unlocking with bindings either'
 	./clevis-zfs-unlock -t -d "${test_dataset}" &>${shutup} && success || failed
 
 	testing 'unlocking with binding'
-	zfs unload-key "${test_dataset}"
-	[[ "$(zfs_get_property "${test_dataset}" 'keystatus' -snone)" == 'unavailable' ]] || return 1
-	./clevis-zfs-unlock -d "${test_dataset}" &>${shutup}
+	expected='unlock success'
+	zfs unload-key "${test_dataset}" || result='unload key failed' failed
+	[[ "$(zfs_get_property "${test_dataset}" 'keystatus' -snone)" == 'unavailable' ]] || result='unload key failed' failed
+	./clevis-zfs-unlock -d "${test_dataset}" &>${shutup} || result='unlocking failed' failed
 	success
 
-	testing 'unbinding dataset twice'
-	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'another_testlabel' -k -
-	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'testlabel' -k -
-	success
+	expected='unbinding success'
+	result='unbinding failed'
+	testing 'unbinding dataset tang'
+	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'tang_testlabel' -k - &>${shutup} && success || failed
+	testing 'unbinding dataset sss'
+	echo "${testing_password}" | ./clevis-zfs-unbind -d "${test_dataset}" -l 'sss_testlabel' -k - &>${shutup} && success || failed
 }

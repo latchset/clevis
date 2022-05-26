@@ -11,10 +11,12 @@ function usage() {
 
 		  -t          Test the clevis configuration without unlocking
 		  -d DATASET  The zfs dataset to unlock
-		  -l LABEL    Use only this label to unlock (defaults to trying all labels): TODO
+		  -l LABEL    Use only this label to unlock (defaults to trying all labels)
 
 	USAGE_END
 }
+
+
 
 function main() {
 	if [ $# -eq 1 -a "${1:-}" == "--summary" ]; then
@@ -42,24 +44,42 @@ function main() {
 		error "dataset is not bound with clevis: ${dataset}"
 	fi
 
-	local clevis_data password
+	local clevis_data password labels
 
-	for label in $(zfs_get_labels "${dataset}" | tr ' ' '\n' | grep "^${label}(:|$)"); do
-		echo >&2 -n "loading clevis data from label ${label}... "
-		clevis_data="$(zfs_get_clevis_label "${dataset}" "${label}")"
-		password="$(clevis decrypt <<<"${clevis_data}" || echo '' )"
-		echo >&2 'ok'
-
-		echo >&2 -n "unlocking ${dataset}${test_only}... "
-		if echo "${password}" | zfs_load_key "${dataset}" "${test_only}"; then
-			echo >&2 'ok'
-			[[ -z "${test_only}" ]] && exit 0
+	if [[ -n "${label}" ]]; then
+		label="$(zfs_get_label "${dataset}" "${label}" )"
+		testing -n "unlocking ${dataset} with ${label} ${test_only}... "
+		if unlock_with_label "${dataset}" "${label}" "${test_only}"; then
+			testing 'ok'
+			exit 0
 		else
-			echo >&2 "failed"
-			continue
+			testing 'failed'
+			exit 1
 		fi
-	done
-	exit 1
+	else
+		labels="$(zfs_get_labels "${dataset}")"
+		for label in ${labels}; do
+			testing -n "unlocking ${dataset} with ${label} ${test_only}... "
+			if unlock_with_label "${dataset}" "${label}" "${test_only}"; then
+				testing 'ok'
+				[[ -z "${test_only}" ]] && exit 0 || true
+			else
+				testing "failed"
+				continue
+			fi
+		done
+	fi
+
+	if [[ -n "${test_only}" ]]; then
+		exit 0
+	else
+		exit 1
+	fi
+}
+
+
+function testing() {
+	[[ -n "${test_only}" ]] && echo >&2 "${@}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

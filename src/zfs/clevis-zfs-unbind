@@ -57,7 +57,7 @@ function main() {
 	fi
 
 	echo >&2 -n 'wiping clevis data... '
-	zfs_wipe_clevis_label "${dataset}" "${label}"
+	zfs_unbind_clevis_label "${dataset}" "${label}"
 	echo >&2 'ok'
 }
 

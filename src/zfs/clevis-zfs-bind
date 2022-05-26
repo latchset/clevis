@@ -21,6 +21,14 @@ function usage() {
 	USAGE_END
 }
 
+findexe() {
+    while read -r -d: path; do
+        [ -f "${path}/${1}" ] && [ -x "${path}/${1}" ] && \
+          echo "${path}/${1}" && return 0
+    done <<< "${PATH}:"
+    return 1
+}
+
 
 function bind_zfs_dataset() {
     local dataset="${1}"
@@ -33,10 +41,10 @@ function bind_zfs_dataset() {
 	local existing_key clevis_data
 
 	if [[ -z "${overwrite}" ]] && zfs_is_bound "${dataset}" "${label}"; then
-		error "given label ${label} in dataset ${dataset} already has a clevis binding, not overwritin."
+		error "given label ${label} in dataset ${dataset} already has a clevis binding, not overwriting."
 	fi
 
-	existing_key="$(read_key "${dataset}" "${key}")"
+	existing_key="$(read_passphrase "${dataset}" "${key}")"
 
 	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
 		error "given key does not unlock ${dataset}"
@@ -46,21 +54,9 @@ function bind_zfs_dataset() {
 	clevis_data="$(clevis encrypt "${pin}" "${cfg}" <<<"${existing_key}" )"
 	echo >&2 'ok'
 
-	[[ -n "${overwrite}" ]] && zfs_wipe_clevis_label "${dataset}" "${label}" && echo >&2 'wiped old clevis data'
+	[[ -n "${overwrite}" ]] && zfs_unbind_clevis_label "${dataset}" "${label}" && echo >&2 'unbound old clevis data'
 
-	zfs_bind_clevis_data "${dataset}" "${label}" "${clevis_data}"
-}
-
-function check_valid_dataset() {
-	local dataset="${1}"
-
-	if ! zfs_get_prop "${dataset}" 'name' -snone &>/dev/null; then
-		error "${dataset} is not a zfs dataset!"
-	fi
-
-	if ! zfs_is_encryptionroot "${dataset}"; then
-		error "given dataset is not an encryptionroot: ${dataset}"
-	fi
+	zfs_bind_clevis_label "${dataset}" "${label}" "${clevis_data}"
 }
 
 function main() {

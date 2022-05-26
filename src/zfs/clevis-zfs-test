@@ -4,11 +4,10 @@ set -euo pipefail
 zpool='clevis-zfs-pool'
 root_dataset="${zpool}/clevis"
 test_dataset="${root_dataset}/test"
-tang_host='TANG_HOST'
-tang_thp='TANG_THP'
 
-tang_host='192.168.178.26:8565'
-tang_thp='NHt3FdBvUX0AiHZycp2emEzfYIc'
+tang_host='127.0.0.1'
+tang_thp='TANG_THP'
+tang_config='{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}'
 
 function zfs_usage() {
 	local permissions='create,destroy,mount,load-key,change-key,userprop,encryption,keyformat,keylocation'
@@ -30,6 +29,8 @@ function zfs_usage() {
 
 		4) give the user running the test script permissions to make changes to this pool:
 		    zfs allow ${USER} ${permissions} ${root_dataset}
+
+		5) set tang_host and tang_thp to an existing tang server in ${BASH_SOURCE[0]}
 	EOF
 }
 
@@ -167,8 +168,8 @@ function _test_zfs_functions() {
 	_zfs_create_encrypted_dataset "${test_dataset}"
 
 	testing 'binding zfs dataset twice'
-	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'testlabel' tang '{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}' &>/dev/null
-	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'another_testlabel' tang '{"url": "http://'${tang_host}'", "thp": "'${tang_thp}'"}' &>/dev/null
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'testlabel' tang "${tang_config}" &>/dev/null
+	echo "${testing_password}" | ./clevis-zfs-bind -d "${test_dataset}" -k - -l 'another_testlabel' tang "${tang_config}" &>/dev/null
 	success
 
 	testing 'listing labels'

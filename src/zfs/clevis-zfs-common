@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # zfs user properties are limited to 8192 bytes
-zfs_userprop_max_size=8000
-zfs_userprop_max_size=800 # set smaller to test splitting/combining chunks
+zfs_userprop_value_limit=8000
+zfs_userprop_name_limit=256
 
 # all clevis userprops will be prefixed with "latchset.clevis:" as suggested by
 # the User Properties section in zfsprops(8)
@@ -23,17 +23,97 @@ zfs_labels_prop="${zfs_userprop_prefix}:labels"
 zfs_label_prefix="${zfs_userprop_prefix}.label"
 
 
-function zfs_get_labels() {
+# Interfacing functions with ZFS
+################################
+function zfs_remove_property() {
 	local dataset="${1}"
-	zfs_get_prop "${dataset}" "${zfs_labels_prop}"
+	local property="${2}"
+	zfs inherit "${property}" "${dataset}"
 }
 
+# valid characters of zfs user property names are: [0-9a-z:._-] (see zfsprops(7) )
+function zfs_set_property() {
+	local dataset="${1}"
+	local property="${2}"
+	local value="${3}"
+	[[ "${#property}" -le "${zfs_userprop_name_limit}"  ]] || error "property name longer than ${zfs_userprop_name_limit} characters '${property}'"
+	[[ "${#value}"    -le "${zfs_userprop_value_limit}" ]] || error "property value longer than ${zfs_userprop_value_limit} characters '${value}'"
+	zfs set "${property}=${value}" "${dataset}"
+}
+
+# defaults to getting just the value of the given property and only when it is set directly on the dataset ("local")
+zfs_get_property() {
+	local dataset="${1}"
+	local property="${2}"
+	shift 2
+	zfs get "${property}" "${dataset}" -H -o value -slocal "${@}"
+}
+
+function zfs_load_key() {
+	local dataset="${1}"
+	local dry_run="${2:+-n}"
+	zfs load-key ${dry_run} -L prompt "${dataset}" >/dev/null
+}
+
+function zfs_test_key() {
+	zfs_load_key "${1}" 'dry_run'
+}
+
+function zfs_unload_key() {
+	local dataset="${1}"
+	zfs unload-key "${dataset}" >/dev/null
+}
+
+# ZFS properties functions to deal with clevis labels
+##############################################
+
+# valid characters of clevis-zfs labels are: [0-9a-z_]
+function is_valid_label() {
+	local label="${1}"
+	# This length limit is quite arbitrary; (as is the removal of [:.-] )
+	# but we have to draw the line somewhere and zfs-user-property names
+	# can be at most 256 characters long.  We can't use all 256 characters
+	# because we need some space in the property name for the
+	# zfs_label_prefix and the chunk_counter suffix.
+	local limit=100
+	local regex='^[0-9a-z_]+$'
+
+	if [[ "${#label}" -gt "${limit}" ]]; then
+		echo >&2 "label is longer than ${limit} characters: ${label}"
+		return 1
+	fi
+
+	if [[ "${label}" =~ ${regex} ]]; then
+		return 0
+	else
+		echo >&2 "label is invalid: '${label}'. Valid characters: a-z, 0-9, _ (underscore)"
+		return 1
+	fi
+}
+
+# get a list of all labels, including possible number suffixes
+function zfs_get_labels() {
+	local dataset="${1}"
+	zfs_get_property "${dataset}" "${zfs_labels_prop}"
+}
+
+# get a single label from the list of all labels,
+# including possible number suffix
+function zfs_get_label() {
+	local dataset="${1}"
+	local label="${2%%:*}"
+	zfs_get_labels "${dataset}" >&2
+	zfs_get_labels "${dataset}" | tr ' ' '\n' | grep -E "^${label}(:|$)"
+}
+
+# set the list of labels to the given value
 function zfs_set_labels() {
 	local dataset="${1}";
 	local new_labels="${2}"
-	zfs set "${zfs_labels_prop}=${new_labels}" "${dataset}"
+	zfs_set_property "${dataset}" "${zfs_labels_prop}" "${new_labels}"
 }
 
+# add a single label to the existing list of labels
 function zfs_add_label() {
 	local dataset="${1}"
 	local new_label="${2}"
@@ -42,6 +122,7 @@ function zfs_add_label() {
 	zfs_set_labels "${dataset}" "${labels[*]}"
 }
 
+# remove a single label to the existing list of labels
 function zfs_remove_label() {
 	local dataset="${1}"
 	local old_label="${2}"
@@ -50,32 +131,51 @@ function zfs_remove_label() {
 	zfs_set_labels "${dataset}" "${new_labels[*]}"
 }
 
-# valid characters of userprops are: [0-9a-z:._-]
-# valid characters of clevis-zfs labels are: [0-9a-z_]
-function is_valid_label() {
-	local label="${1}"
-	# The length limit is quite arbitrary; but we have to draw the line
-	# somewhere and zfs-user-property names can be at most 256 characters long.
-	# We can't use all 256 characters because we need some space in the
-	# property name for the zfs_label_prefix and the chunk_counter suffix.
-	local limit=100
-	local regex='^[0-9a-z_]+$'
+# functions for checking zfs datasets
+#####################################
 
-	if [[ "${#label}" -gt "${limit}" ]]; then
-		echo >&2 "label is longer than ${limit}: ${label}"
-		return 1
-	fi
+# check if a dataset is bound to a specific label (or any label)
+function zfs_is_bound() {
+	local dataset="${1}"
+	local label="${2:-}"
 
-	if [[ "${label}" =~ ${regex} ]]; then
+	if [[ -z "${label}" ]] && [[ -n "$(zfs_get_labels "${dataset}")" ]]; then
+		return 0
+	elif [[ -n "$(zfs_get_label "${dataset}" "${label}")" ]]; then
 		return 0
 	else
-		echo >&2 "label is invalid: '${label}'. Expecting an alphanumeric string "
 		return 1
 	fi
 }
 
+# we can only load keys on encryptionroots
+# it does not make sense to add a binding elsewhere
+function zfs_is_encryptionroot() {
+	local dataset="${1}"
+	[[ "$(zfs_get_property "${dataset}" 'encryptionroot' -snone )" == "${dataset}" ]]
+}
 
-function read_key() {
+# does it even exist?
+function zfs_is_dataset() {
+	zfs_get_property "${dataset}" 'name' -snone &>/dev/null
+}
+
+
+function check_valid_dataset() {
+	local dataset="${1}"
+
+	if ! zfs_is_dataset; then
+		error "${dataset} is not a zfs dataset!"
+	fi
+
+	if ! zfs_is_encryptionroot "${dataset}"; then
+		error "given dataset is not an encryptionroot: ${dataset}"
+	fi
+}
+
+
+# functions to deal with I/O to the user
+function read_passphrase() {
 	local dataset="${1}"
 	local key="${2?need keyinput argument}"
 
@@ -105,63 +205,29 @@ function error() {
     exit 1
 }
 
-findexe() {
-    while read -r -d: path; do
-        [ -f "${path}/${1}" ] && [ -x "${path}/${1}" ] && \
-          echo "${path}/${1}" && return 0
-    done <<< "${PATH}:"
-    return 1
-}
 
-zfs_get_prop() {
-	local dataset="${1}"
-	local prop="${2}"
-	shift 2
-	zfs get "${prop}" "${dataset}" -H -o value -slocal "${@}"
-}
+# functions to deal with too large clevis data for a single ZFS property
+########################################################################
 
 function cut_into_chunks() {
-	fold -w "${zfs_userprop_max_size}"
-}
-
-function zfs_is_bound() {
-	local dataset="${1}"
-	local label_to_check="${2:-}"
-	local label="${label_to_check%:*}"
-
-	local labels="$(zfs_get_labels "${dataset}")"
-	if [[ -n "${label}" ]]; then
-		[[ " ${labels} " == *" ${label} "* ]] && return 0
-	else
-		# we don't check for a specific label, just that at least one label is set
-		[[ "${#labels}" -gt 0 ]] && return 0
-	fi
-	return 1
-}
-
-function zfs_is_encryptionroot() {
-	local dataset="${1}"
-	[[ "$(zfs_get_prop "${dataset}" 'encryptionroot' -snone )" == "${dataset}" ]]
-}
-
-function zfs_test_key() {
-	zfs_load_key "${1}" 'dry_run'
-}
-
-function zfs_load_key() {
-	local dataset="${1}"
-	local dry_run="${2:+-n}"
-	zfs load-key ${dry_run} -L prompt "${dataset}" >/dev/null
+	fold -w "${zfs_userprop_value_limit}"
 }
 
 function zero_pad() {
-	local num="${1}"
-	local width="${2}"
-	printf "%0${width}d" "${num}"
+	local width="${1}"; shift
+	printf "%0${width}d " "${@}"
+}
+
+function num_list() {
+	local last_index="${1}"
+	zero_pad "${#last_index}" $(eval "echo {0..${last_index}}")
 }
 
 
-function zfs_bind_clevis_data() {
+
+# functions to add/remove a clevis binding
+#########################################
+function zfs_bind_clevis_label() {
 	local dataset="${1}"
 	local label="${2}"
 	local clevis_data="${3}"
@@ -170,22 +236,22 @@ function zfs_bind_clevis_data() {
 
 	echo >&2 -n 'binding new clevis data... '
 	# use a single prop without number suffix if it will fit in one prop
-	if [[ "${#clevis_data}" -lt "${zfs_userprop_max_size}" ]]; then
-		zfs set "${zfs_label_prop}=${clevis_data}" "${dataset}"
+	if [[ "${#clevis_data}" -lt "${zfs_userprop_value_limit}" ]]; then
+		zfs_set_property "${dataset}" "${zfs_label_prop}" "${clevis_data}"
 	else
 		clevis_chunks=( $(cut_into_chunks <<<"${clevis_data}") )
 		last_index="$(( "${#clevis_chunks[@]}" - 1 ))"
 		width="${#last_index}"
 
 		local chunk chunk_num
-		for i in $(seq 0 "${last_index}" ); do
+		for chunk_num in $(num_list "${last_index}"); do
+			# bash assumes numbers are octal when prefixed with a 0, so we
+			# remove it
+			i="${chunk_num##0}"
+			i="${i:-0}" # if we removed all zeroes, we are at the start
 			chunk="${clevis_chunks[${i}]}"
-			# we add zero-padding so the props sort nicely when we want to combine
-			# them when we unlock
-			chunk_num="$(zero_pad "${i}" "${width}" )"
-
 			# e.g. latchset.clevis.label:${label}-01=chunk_data
-			zfs set "${zfs_label_prop}-${chunk_num}=${chunk}" "${dataset}"
+			zfs_set_property "${dataset}" "${zfs_label_prop}-${chunk_num}" "${chunk}"
 		done
 
 		label="${label}:${last_index}"
@@ -194,30 +260,40 @@ function zfs_bind_clevis_data() {
 
 	# check if unlocking works
 	echo >&2 -n 'testing new clevis data... '
-	if ! (zfs_get_clevis_label "${dataset}" "${label}" | clevis decrypt | zfs_test_key "${dataset}"); then
-		zfs_wipe_clevis_label "${dataset}" "${label}"
+
+	# somehow clevis-decrypt exits with a non-zero code, but still outputs the
+	# correct data, so we ignore the exit code. zfs_test_key will fail anyway
+	# if something goes wrong
+	if ! unlock_with_label "${dataset}" "${label}" 'dry_run'; then
+		zfs_unbind_clevis_label "${dataset}" "${label}"
 		error "could not unlock dataset with clevis configuration: ${dataset}"
 	fi
+
 	echo >&2 'ok'
 	zfs_add_label "${dataset}" "${label}"
 }
 
-function zfs_wipe_clevis_label() {
+function zfs_unbind_clevis_label() {
 	local dataset="${1}"
 	local label="${2%:*}"
-	local last_index="${2#*:}"
+	local last_index
+
+	label="$(zfs_get_label "${dataset}" "${label}")"
+	last_index="${label#*:}"
+	label="${label%:*}"
 
 	local zfs_label_prop="${zfs_label_prefix}:${label}"
 
 	if [[ "${label}" == "${last_index}" ]]; then
-		zfs inherit "${zfs_label_prop}" "${dataset}"
+		zfs_remove_property "${dataset}" "${zfs_label_prop}"
 	else
-		for num in $(seq -w 0 "${last_index}"); do
-			zfs inherit "${zfs_label_prop}-${num}" "${dataset}"
+		for num in $(num_list "${last_index}"); do
+			zfs_remove_property "${dataset}" "${zfs_label_prop}-${num}"
 		done
 	fi
 	zfs_remove_label "${dataset}" "${label}"
 }
+
 
 function zfs_get_clevis_label() {
 	local dataset="${1}"
@@ -226,12 +302,29 @@ function zfs_get_clevis_label() {
 
 	local zfs_label_prop="${zfs_label_prefix}:${label}"
 	if [[ "${label}" == "${last_index}" ]]; then
-		zfs_get_prop "${dataset}" "${zfs_label_prop}"
+		zfs_get_property "${dataset}" "${zfs_label_prop}"
 	else
-		for num in $(seq -w 0 "${last_index}"); do
-			zfs_get_prop "${dataset}" "${zfs_label_prop}-${num}" | tr -d '\n'
+		clevis_data=()
+		for num in $(num_list "${last_index}"); do
+			clevis_data+=( $(zfs_get_property "${dataset}" "${zfs_label_prop}-${num}") )
 		done
+		local IFS=''
+		echo "${clevis_data[*]}"
 	fi
+}
+
+
+function unlock_with_label(){
+	local dataset="${1}"
+	local label="${2}"
+	local test_only="${3:-}"
+
+	# somehow clevis-decrypt exits with a non-zero code, but still outputs the
+	# correct data, so we ignore the exit code. zfs_load_key will fail anyway
+	# if something goes wrong
+	zfs_get_clevis_label "${dataset}" "${label}" \
+	| (clevis decrypt || true) \
+	| zfs_load_key "${dataset}" "${test_only}"
 }
 
 

@@ -27,6 +27,8 @@ function findexe() {
 }
 
 cmd=clevis
+input_commands="$cmd $@"
+
 while [ $# -gt 0 ]; do
     [[ "$1" =~ ^- ]] && break
     cmd="$cmd-$1"
@@ -36,8 +38,11 @@ while [ $# -gt 0 ]; do
 done
 
 exec >&2
-echo
-echo "Command '$cmd' is invalid"
+if [ "$cmd" != "clevis" ];
+then
+    echo
+    echo "Command '$input_commands' is invalid"
+fi
 echo
 echo "Usage: clevis COMMAND [OPTIONS]"
 echo

@@ -174,7 +174,7 @@ rm -rf "${CLEVIS_EDIT_TMP}"
 
 echo "Updating binding..."
 if ! clevis_luks_do_bind "${DEV}" "${SLT}" "" "${pin}" "${new_cfg}" \
-                         "-y" "overwrite" 2>/dev/null; then
+                         "-y" "overwrite"; then
     echo "Unable to update binding in ${DEV}:${SLT}. Operation cancelled." >&2
     exit 1
 fi

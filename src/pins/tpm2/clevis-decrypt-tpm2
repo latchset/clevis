@@ -101,12 +101,12 @@ if ! key="$(jose fmt -j- -Og clevis -g tpm2 -g key -Su- <<< "$jhd")"; then
 fi
 
 if ! jwk_pub="$(jose fmt -j- -Og clevis -g tpm2 -g jwk_pub -Su- <<< "$jhd")"; then
-    echo "JWE missing required 'key' header parameter!" >&2
+    echo "JWE missing required 'jwk_pub' header parameter!" >&2
     exit 1
 fi
 
 if ! jwk_priv="$(jose fmt -j- -Og clevis -g tpm2 -g jwk_priv -Su- <<< "$jhd")"; then
-    echo "JWE missing required 'key' header parameter!" >&2
+    echo "JWE missing required 'jwk_priv' header parameter!" >&2
     exit 1
 fi
 

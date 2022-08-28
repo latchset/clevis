@@ -122,7 +122,7 @@ key. This key is added to LUKS as an additional passphrase. We then encrypt
 this key using Clevis, and store the output JWE inside the LUKS header using
 [LUKSMeta](http://github.com/latchset/luksmeta).
 
-Here is an example where we bind `/dev/sda1` using the Tang ping:
+Here is an example where we bind `/dev/sda1` using the Tang pin:
 
 ```bash
 $ sudo clevis luks bind -d /dev/sda1 tang '{"url": "http://tang.local"}'

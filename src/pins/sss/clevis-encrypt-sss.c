@@ -115,26 +115,34 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg, int assume_yes)
     if (!pipe)
         return NULL;
 
+    char buf[4096] = {};
+    size_t rd = 0;
+    json_t *tmp = NULL;
     while (!feof(pipe)) {
-        char buf[1024] = {};
-        json_t *tmp = NULL;
-        size_t rd = 0;
+        char tmp_buf[4096] = {};
+        size_t tmp_rd = 0;
 
-        rd = fread(buf, 1, sizeof(buf), pipe);
+        tmp_rd = fread(tmp_buf, 1, sizeof(tmp_buf), pipe);
         if (ferror(pipe)) {
             fclose(pipe);
             return NULL;
         }
-
-        tmp = json_pack("s+%", json_string_value(jwe), buf, rd);
-        if (!tmp) {
+        if (rd + tmp_rd > sizeof(buf)) {
             fclose(pipe);
+            fprintf(stderr, "sss: read buffer overflow\n");
             return NULL;
         }
-
-        json_decref(jwe);
-        jwe = tmp;
+        memcpy(buf + rd, tmp_buf, tmp_rd);
+        rd += tmp_rd;
     }
+    tmp = json_pack("s+%", json_string_value(jwe), buf, rd);
+    if (!tmp) {
+        fclose(pipe);
+        return NULL;
+    }
+
+    json_decref(jwe);
+    jwe = tmp;
 
     fclose(pipe);
     waitpid(pid, &status, 0);

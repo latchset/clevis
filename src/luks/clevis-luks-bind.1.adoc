@@ -9,7 +9,7 @@ clevis-luks-bind - Bind a LUKS device using the specified policy
 
 == SYNOPSIS
 
-*clevis luks bind* [-f] [-y] -d DEV [-t TKN_ID] [-s SLT] [-k KEY] PIN CFG
+*clevis luks bind* [-f] [-y] -d DEV [-t TKN_ID] [-s SLT] [-k KEY] [-e EXISTING_TOKEN_ID] PIN CFG
 
 == OVERVIEW
 
@@ -53,6 +53,12 @@ Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlock
 
 * *-k* - :
   Non-interactively read LUKS password from standard input
+
+* *-e* _E_TKN_ID_ :
+  LUKS token ID for existing passphrase; only available for LUKS2.
+  This parameter allows providing a configured token ID in LUKS2
+  containing the existing passphrase for this device, so that
+  existing passphrase is not prompted by clevis
 
 == CAVEATS
 

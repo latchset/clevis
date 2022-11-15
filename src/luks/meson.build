@@ -14,6 +14,15 @@ else
     endif
 endif
 
+libcryptsetup_ext_token_id = dependency('libcryptsetup', version: '>=2.6.0', required: false)
+if libcryptsetup_ext_token_id.found()
+    luksmeta_data.set('OLD_CRYPTSETUP_EXISTING_TOKEN_ID', '0')
+    message('cryptsetup version supports existing token id')
+else
+    luksmeta_data.set('OLD_CRYPTSETUP_EXISTING_TOKEN_ID', '1')
+    warning('cryptsetup version does not support existing token id')
+endif
+
 clevis_luks_common_functions = configure_file(
   input: 'clevis-luks-common-functions.in',
   output: 'clevis-luks-common-functions',

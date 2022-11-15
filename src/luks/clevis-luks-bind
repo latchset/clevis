@@ -25,7 +25,7 @@ SUMMARY="Binds a LUKS device using the specified policy"
 usage() {
     exec >&2
     echo
-    echo "Usage: clevis luks bind [-y] [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] -d DEV PIN CFG"
+    echo "Usage: clevis luks bind [-y] [-f] [-s SLT] [-k KEY] [-t TOKEN_ID] [-e EXISTING_TOKEN_ID] -d DEV PIN CFG"
     echo
     echo "$SUMMARY":
     echo
@@ -42,6 +42,8 @@ usage() {
     echo "  -k KEY       Non-interactively read LUKS password from KEY file"
     echo "  -k -         Non-interactively read LUKS password from standard input"
     echo
+    echo "  -e E_TKN_ID  Existing LUKS token ID for existing passphrase; only available for LUKS2"
+    echo
     exit 2
 }
 
@@ -52,13 +54,14 @@ fi
 
 FRC=
 YES=
-while getopts ":hfyd:s:k:t:" o; do
+while getopts ":hfyd:s:k:t:e:" o; do
     case "$o" in
     f) FRC='-f';;
     d) DEV="$OPTARG";;
     s) SLT="$OPTARG";;
     k) KEY="$OPTARG";;
     t) TOKEN_ID="$OPTARG";;
+    e) EXISTING_TOKEN_ID="$OPTARG";;
     y) FRC='-f'
        YES='-y';;
     *) usage;;
@@ -99,11 +102,20 @@ if [ "${luks_type}" = "luks1" ] && [ -n "${TOKEN_ID}" ]; then
     exit 1
 fi
 
+if [ -n "${EXISTING_TOKEN_ID}" ] && ! clevis_luks_luks2_existing_token_id_supported; then
+    echo "Existing token ID not supported in this cryptsetup version" >&2
+    exit 1
+fi
+
 # Get the existing passphrase/keyfile.
 existing_key=
 keyfile=
 case "${KEY}" in
-"") IFS= read -r -s -p "Enter existing LUKS password: " existing_key; echo >&2;;
+ "")
+    if [ -z "${EXISTING_TOKEN_ID}" ] ; then
+        IFS= read -r -s -p "Enter existing LUKS password: " existing_key; echo >&2
+    fi
+    ;;
  -) IFS= read -r -s -p "" existing_key ||:
     if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}" \
                                     && [ -z "${FRC}" ]; then
@@ -119,6 +131,13 @@ case "${KEY}" in
     ;;
 esac
 
+# Check if existing token id for keyring read is provided
+# If so, keyfile is not allowed
+if [ -n "${EXISTING_TOKEN_ID}" ] && [ -n "${keyfile}" ] ; then
+    echo "Cannot specify kernel keyring description together with key file" >&2
+    exit 1
+fi
+
 # If necessary, initialize the LUKS volume.
 if [ "${luks_type}" = "luks1" ] && ! luksmeta test -d "${DEV}"; then
     luksmeta init -d "${DEV}" ${FRC}
@@ -127,7 +146,7 @@ fi
 if ! clevis_luks_do_bind "${DEV}" "${SLT}" "${TOKEN_ID}" \
                          "${PIN}" "${CFG}" \
                          "${YES}" "" \
-                         "${existing_key}" "${keyfile}"; then
+                         "${existing_key}" "${keyfile}" "${EXISTING_TOKEN_ID}"; then
     echo "Error adding new binding to ${DEV}" >&2
     exit 1
 fi

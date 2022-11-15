@@ -307,14 +307,20 @@ clevis_luks_check_valid_key_or_keyfile() {
     local KEY="${2:-}"
     local KEYFILE="${3:-}"
     local SLT="${4:-}"
+    local EXISTING_TOKEN_ID="${5:-}"
 
     [ -z "${DEV}" ] && return 1
-    [ -z "${KEYFILE}" ] && [ -z "${KEY}" ] && return 1
+    [ -z "${EXISTING_TOKEN_ID}" ] && [ -z "${KEYFILE}" ] && [ -z "${KEY}" ] && return 1
 
     local extra_args
     extra_args="$([ -n "${SLT}" ] && printf -- '--key-slot %s' "${SLT}")"
     if [ -n "${KEYFILE}" ]; then
         cryptsetup open --test-passphrase "${DEV}" --key-file "${KEYFILE}" \
+                   ${extra_args}
+        return
+    fi
+    if [ -n "${EXISTING_TOKEN_ID}" ]; then
+        cryptsetup open --test-passphrase "${DEV}" --token-id "${EXISTING_TOKEN_ID}" \
                    ${extra_args}
         return
     fi
@@ -764,15 +770,20 @@ clevis_luks_add_key() {
     local NEWKEY="${3}"
     local KEY="${4}"
     local KEYFILE="${5:-}"
+    local EXISTING_TOKEN_ID="${6:-}"
 
     [ -z "${DEV}" ] && return 1
     [ -z "${NEWKEY}" ] && return 1
-    [ -z "${KEY}" ] && [ -z "${KEYFILE}" ] && return 1
+    [ -z "${EXISTING_TOKEN_ID}" ] && [ -z "${KEY}" ] && [ -z "${KEYFILE}" ] && return 1
 
     local extra_args='' input
     input="$(printf '%s\n%s' "${KEY}" "${NEWKEY}")"
     if [ -n "${KEYFILE}" ]; then
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
+        input="$(printf '%s' "${NEWKEY}")"
+    fi
+    if [ -n "${EXISTING_TOKEN_ID}" ]; then
+        extra_args="$(printf -- '--token-id %s' "${EXISTING_TOKEN_ID}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
     local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
@@ -791,6 +802,7 @@ clevis_luks_update_key() {
     local NEWKEY="${3}"
     local KEY="${4}"
     local KEYFILE="${5:-}"
+    local EXISTING_TOKEN_ID="${6:-}"
 
     [ -z "${DEV}" ] && return 1
     [ -z "${NEWKEY}" ] && return 1
@@ -800,7 +812,7 @@ clevis_luks_update_key() {
     local in_place
     clevis_luks_check_valid_key_or_keyfile "${DEV}" \
                                            "${KEY}" "${KEYFILE}" \
-                                           "${SLT}" 2>/dev/null \
+                                           "${SLT}" "${EXISTING_TOKEN_ID}" 2>/dev/null \
                                            && in_place=true
 
     local input extra_args=
@@ -809,6 +821,11 @@ clevis_luks_update_key() {
         extra_args="$(printf -- '--key-file %s' "${KEYFILE}")"
         input="$(printf '%s' "${NEWKEY}")"
     fi
+    if [ -n "${EXISTING_TOKEN_ID}" ]; then
+        extra_args="$(printf -- '--token-id %s' "${EXISTING_TOKEN_ID}")"
+        input="$(printf '%s' "${NEWKEY}")"
+    fi
+
     local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
 
     if [ -n "${in_place}" ]; then
@@ -838,6 +855,7 @@ clevis_luks_save_key_to_slot() {
     local KEY="${4}"
     local KEYFILE="${5:-}"
     local OVERWRITE="${6:-}"
+    local EXISTING_TOKEN_ID="${7:-}"
 
     [ -z "${DEV}" ] && return 1
     [ -z "${SLT}" ] && return 1
@@ -855,13 +873,13 @@ clevis_luks_save_key_to_slot() {
         [ -n "${OVERWRITE}" ] || return 1
 
         clevis_luks_update_key "${DEV}" "${SLT}" \
-                               "${NEWKEY}" "${KEY}" "${KEYFILE}"
+                               "${NEWKEY}" "${KEY}" "${KEYFILE}" "${EXISTING_TOKEN_ID}"
         return
     fi
 
     # Add a new key.
     clevis_luks_add_key "${DEV}" "${SLT}" \
-                        "${NEWKEY}" "${KEY}" "${KEYFILE}"
+                        "${NEWKEY}" "${KEY}" "${KEYFILE}" "${EXISTING_TOKEN_ID}"
 }
 
 # clevis_luks_generate_key() generates a new key for use with clevis.
@@ -957,15 +975,17 @@ clevis_luks_do_bind() {
     local OVERWRITE="${7:-}"
     local KEY="${8:-}"
     local KEYFILE="${9:-}"
+    local EXISTING_TOKEN_ID="${10:-}"
 
     [ -z "${DEV}" ] && return 1
     [ -z "${PIN}" ] && return 1
     [ -z "${CFG}" ] && return 1
 
-
     if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" \
                                                 "${KEY}" \
                                                 "${KEYFILE}" \
+                                                "" \
+                                                "${EXISTING_TOKEN_ID}" \
                     && ! KEY="$(clevis_luks_get_existing_key "${DEV}" \
                                 "Enter existing LUKS password: " \
                                 "recover")"; then
@@ -1014,7 +1034,7 @@ clevis_luks_do_bind() {
 
     if ! clevis_luks_save_key_to_slot "${DEV}" "${SLT}" \
                                       "${newkey}" "${KEY}" "${KEYFILE}" \
-                                      "${OVERWRITE}"; then
+                                      "${OVERWRITE}" "${EXISTING_TOKEN_ID}"; then
         echo "Unable to save/update key slot; operation cancelled" >&2
         clevis_luks_restore_dev "${CLEVIS_TMP_DIR}" || :
         rm -rf "${CLEVIS_TMP_DIR}"
@@ -1035,10 +1055,17 @@ clevis_luks_do_bind() {
 }
 
 # clevis_luks_luks2_supported() indicates whether we support LUKS2 devices.
-# Suppor is determined at build time.
+# Support is determined at build time.
 function clevis_luks_luks2_supported() {
     # We require cryptsetup >= 2.0.4 to fully support LUKSv2.
     return @OLD_CRYPTSETUP@
+}
+
+# clevis_luks_luks2_existing_token_id_supported() indicates whether
+# cryptsetup allows token id for passphrase providing
+function clevis_luks_luks2_existing_token_id_supported() {
+    # We require cryptsetup >= 2.6.0 to fully support LUKSv2 addkey/open by token ID
+    return @OLD_CRYPTSETUP_EXISTING_TOKEN_ID@
 }
 
 # clevis_luks_type() returns the LUKS type of a device, e.g. "luks1".

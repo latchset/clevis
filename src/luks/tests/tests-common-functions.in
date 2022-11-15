@@ -36,6 +36,12 @@ luks2_supported() {
     return @OLD_CRYPTSETUP@
 }
 
+# We require cryptsetup >= 2.6.0 to fully support LUKSv2 addkey/open by token ID
+# Support is determined at build time.
+luks2_existing_token_id_supported() {
+    return @OLD_CRYPTSETUP_EXISTING_TOKEN_ID@
+}
+
 # Creates a new LUKS1 or LUKS2 device to be used.
 new_device() {
     local LUKS="${1}"

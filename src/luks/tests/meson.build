@@ -5,6 +5,15 @@ jq = find_program('jq', required: false)
 # given token slot.
 cryptsetup = find_program('cryptsetup', required: true)
 
+# Use keyctl to check an existing token id can be created from
+# kernel keyring password
+keyutils = find_program('keyctl', required: false)
+if keyutils.found()
+    message('keyutils installed')
+else
+    warning('keyutils not installed, unable to test existing token id binding')
+endif
+
 common_functions = configure_file(input: 'tests-common-functions.in',
   output: 'tests-common-functions',
   configuration: luksmeta_data,
@@ -69,6 +78,10 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('bind-luks2', find_program('bind-luks2'), env: env, timeout: 60)
   test('unbind-unbound-slot-luks2', find_program('unbind-unbound-slot-luks2'), env: env)
   test('unbind-luks2', find_program('unbind-luks2'), env: env, timeout: 60)
+
+  if keyutils.found() and luksmeta_data.get('OLD_CRYPTSETUP_EXISTING_TOKEN_ID') == '0'
+    test('bind-luks2-ext-token', find_program('bind-luks2-ext-token'), env: env, timeout: 60)
+  endif
 
   if jq.found()
     test('list-recursive-luks2', find_program('list-recursive-luks2'), env: env, timeout: 60)

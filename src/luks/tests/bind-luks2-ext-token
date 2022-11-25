@@ -1,0 +1,74 @@
+#!/bin/bash -ex
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2022 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+create_existing_token_id_from_keyring() {
+    local DEV="${1}"
+    local KEYDESC="${2}"
+    local TOKEN_ID="${3}"
+    local PASS="${4}"
+    if [[ -z "${DEV}" ]] || [[ -z "${KEYDESC}" ]] || [[ -z "${TOKEN_ID}" ]]; then
+        return 1
+    fi
+    KEYRING_ID=$(keyctl add user "${KEYDESC}" "${PASS}" @s)
+    keyctl print "${KEYRING_ID}" 2>/dev/null 1>/dev/null
+    cryptsetup token add --token-id "${TOKEN_ID}" --key-description "${KEYDESC}" "${DEV}"
+}
+
+if ! luks2_supported; then
+    skip_test "${TEST}: LUKS2 is not supported."
+fi
+
+if  ! luks2_existing_token_id_supported; then
+    skip_test "${TEST}: Existing token ID not supported"
+fi
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+ADV="${TMP}/adv.jws"
+tang_create_adv "${TMP}" "${ADV}"
+CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
+
+EXISTING_TOKEN_ID=5
+KEYDESC="testkey"
+PASS="123exttokenid_"
+DEV="${TMP}/luks2-device-ext-token"
+new_device "luks2" "${DEV}" "${PASS}"
+
+create_existing_token_id_from_keyring "${DEV}" "${KEYDESC}" "${EXISTING_TOKEN_ID}" "${PASS}"
+
+if ! clevis luks bind -y -d "${DEV}" -e "${EXISTING_TOKEN_ID}" tang "${CFG}"; then
+    error "${TEST}: Binding expected to succeed with existing token id:${EXISTING_TOKEN_ID}" >&2
+fi
+
+KEYFILE="${TMP}/keyfile.txt"
+touch "${KEYFILE}"
+if clevis luks bind -y -d "${DEV}" -e "${EXISTING_TOKEN_ID}" -k "${KEYFILE}" tang "${CFG}"; then
+    error "${TEST}: Using existing token id and keyfile should dump an error" >&2
+fi

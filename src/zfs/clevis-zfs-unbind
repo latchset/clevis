@@ -28,9 +28,9 @@ function main() {
 		exit 0
 	fi
 
-	local dataset
-	local key
-	local label
+	local dataset=
+	local key=
+	local label=
 	while getopts ":hfd:k:l:" o; do
 		case "$o" in
 		d) dataset="$OPTARG";;

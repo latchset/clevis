@@ -187,11 +187,17 @@ function _zfs_test_teardown() {
 function _zfs_create_encrypted_dataset() {
 	local dataset="${1}"
 	testing "creating encrypted test dataset: ${dataset}"
-	# zfs create will work with the permissions as described, but will exit
-	# with an error code because mounting failed
+	# zfs create will work, assuming we have the permissions as described in
+	# zfs_usage, but will exit with an error code because only the root user
+	# can mount the dataset
 	zfs create "${dataset}" -o encryption=on -o keyformat=passphrase <<<"${testing_password}" &>${shutup} || true
 	# we need to make sure the dataset is created because of the error-code shenanigans
-	zfs list "${dataset}" &>${shutup} && success || return 1
+	if zfs list "${dataset}" &>${shutup}; then
+		success
+		return 0
+	else
+		return 1
+	fi
 }
 
 function _test_zfs_functions() {

@@ -31,12 +31,17 @@ function main() {
 	local dataset=
 	local key=
 	local label=
-	while getopts ":hfd:k:l:" o; do
+	local force_unbind='false'
+	local unbind_all='false'
+	while getopts "hafd:k:l:" o; do
 		case "$o" in
+		h) usage; exit 0;;
+		a) unbind_all='true';;
 		d) dataset="$OPTARG";;
+		f) force_unbind='true';;
 		k) key="$OPTARG";;
 		l) label="$OPTARG";;
-		*) error "unrecognized argument: -${OPTARG}";;
+		*) error "unrecognized argument: -${o}";;
 		esac
 	done
 
@@ -44,21 +49,34 @@ function main() {
 		error "did not specify a device!"
 	fi
 
-	if ! zfs_is_bound "${dataset}"; then
-		error "dataset is not bound with clevis: ${dataset}"
+	if [[ "${force_unbind}" != 'true' ]]; then
+
+		if ! zfs_is_bound "${dataset}"; then
+			error "dataset is not bound with clevis: ${dataset}"
+		fi
+
+		local existing_key
+		echo >&2 "Loading existing key... "
+		existing_key="$(read_passphrase "${dataset}" "${key}")"
+
+		if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
+			error "given key does not unlock ${dataset}"
+		fi
 	fi
 
-	local existing_key
-	echo >&2 "Loading existing key... "
-	existing_key="$(read_passphrase "${dataset}" "${key}")"
 
-	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
-		error "given key does not unlock ${dataset}"
-	fi
 
 	echo >&2 -n 'wiping clevis data... '
-	zfs_unbind_clevis_label "${dataset}" "${label}"
+	if [[ "${unbind_all}" == 'true' ]]; then
+		labels="$(zfs_get_labels "${dataset}")"
+		for label in ${labels}; do
+			zfs_unbind_clevis_label "${dataset}" "${label}"
+		done
+	else
+		zfs_unbind_clevis_label "${dataset}" "${label}"
+	fi
 	echo >&2 'ok'
+
 }
 
 main "${@}"

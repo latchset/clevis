@@ -29,6 +29,9 @@ provisioned Clevis policy. For example:
 * *-t* _SLT_ :
   Test the passphrase for the given slot without unlocking the device
 
+* *-o* _PARAMS_ :
+  Pass arbitrary parameters to cryptsetup; quote parameters as necessary
+
 == SEE ALSO
 
 link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)]

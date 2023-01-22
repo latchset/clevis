@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# Copyright (c) 2023 Sebastian Kussl
+# Author: Sebastian Kussl
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+function create_credential () {
+  local device
+  local rp_id
+  local type
+
+  device="$1"
+  rp_id="$2"
+  type="$3"
+  client_data="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
+  user_id="$(echo -n 'clevis' | base64 -w0)"
+  cred_id="$(printf '%s\n%s\n%s\n%s\n' "${client_data}" "${rp_id}" 'clevis' "${user_id}" \
+    | fido2-cred -M -h "${device}" "${type}" \
+    | head -n5 | tail -n1)" >&2
+
+  echo -n "${cred_id}"
+}
+
+function generate_hmac () {
+  local device
+  local rp_id
+  local cred_id
+  local hmac_salt
+
+  device="$1"
+  rp_id="$2"
+  cred_id="$3"
+  hmac_salt="$4"
+
+  client_hash="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
+  hmac="$(printf '%s\n%s\n%s\n%s\n' "${client_hash}" "${rp_id}" "${cred_id}" "${hmac_salt}" | \
+    fido2-assert -G -h -t "uv=${uv}" -t "up=${up}" -t "pin=${pin}" "${device}" | \
+    head -n5 | tail -n1 | jose b64 enc -I -)" >&2
+
+  echo -n "${hmac}"
+}
+
+cfg=''
+
+if ! cfg="$(jose fmt -j- -Oo- <<< "$1" 2>/dev/null)"; then
+    echo "Error: Configuration is malformed!" >&2
+    exit 1
+fi
+
+type="$(jose fmt -j- -Og type -Bo- <<< "$cfg")" || type='es256'
+uv="$(jose fmt -j- -Og uv -Bo- <<< "$cfg")" || uv='true'
+up="$(jose fmt -j- -Og up -Bo- <<< "$cfg")" || up='true'
+pin="$(jose fmt -j- -Og pin -Bo- <<< "$cfg")" || pin='false'
+rp_id="$(jose fmt -j- -Og rp_id -Su- <<< "$cfg")" || rp_id='clevis'
+
+if ! fido2_token="$(jose fmt -j- -Og device -u- <<< "$cfg")"; then
+  fido2_tokens="$(fido2-token -L)"
+
+  if [ -z "${fido2_tokens}" ]; then
+    echo "Please insert your FIDO2 token." >&2
+    exit 1
+  fi
+
+  fido2_token="$(echo "${fido2_tokens}" | head -n1 | cut -d':' -f1)"
+  num_tokens="$(echo "${fido2_tokens}" | wc -l)"
+  if ((num_tokens > 1)); then
+    echo "Warning: There are multiple tokens. Will use the first one (${fido2_token})." >&2
+  fi
+fi
+
+cred_id="$(jose fmt -j- -Og cred_id -Su- <<< "$cfg")" || cred_id="$(create_credential "${fido2_token}" "${rp_id}" "${type}")"
+
+# generate a random salt for each encrypted payload to pass to the fido2 token,
+# where it will be concatenated with a hardware-protected secret to produce an hmac.
+hmac_salt="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
+
+# retrieve the hmac result which will be the password to use for key wrapping a CEK.
+hmac="$(generate_hmac "${fido2_token}" "${rp_id}" "${cred_id}" "${hmac_salt}")"
+
+if [ -z "${hmac}" ]; then
+  echo "Error: could not generate key."
+  exit 1
+fi
+
+# use the secret in a key wrapping key
+jwk='{"kty":"oct", "alg":"PBES2-HS512+A256KW"}'
+jwk="$(jose fmt -j "${jwk}" -q "${hmac}" -s k -Uo-)"
+
+jwe='{"protected":{"enc":"A256GCM","clevis":{"pin":"fido2","fido2":{}}}}'
+jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${type}" -s type -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${hmac_salt}" -s hmac_salt -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${rp_id}" -s rp_id -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${cred_id}" -s cred_id -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${uv}" -s uv -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${up}" -s up -UUUUo-)"
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${pin}" -s pin -UUUUo-)"
+
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

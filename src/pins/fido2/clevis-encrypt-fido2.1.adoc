@@ -1,0 +1,85 @@
+CLEVIS-ENCRYPT-FIDO2(1)
+======================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-fido2 - Encrypts using a FIDO2 token by using the hmac-secret extension for generating a symmetric key.
+
+== SYNOPSIS
+
+*clevis encrypt fido2* CONFIG [-y] < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt fido2* command encrypts using a FIDO2 token.
+Its only argument is the JSON configuration object.
+
+FIDO2 is a standard for web authentication using secure tokens, such as a security key.
+For symmetrically encrypting data using a FIDO2 token, the token must support the hmac-secret
+extension. The encryption then works by generating a random 32 byte public hmac-salt that is
+sent to the token/authenticator, where an hmac over the salt is created using a key only known
+to the authenticator. This secret value is then used to as a "keyWrap" JWK.
+
+Clevis provides support for encrypting data using such symmetric keys derived from a FIDO2
+hardware token. The following shows a basic example, using the default configuration options:
+
+    $ clevis encrypt fido2 '{}' < PT > JWE
+    Enter PIN for /dev/hidraw0:
+
+By default, a new (non-discoverable) credential will be generated and its credential id, as well
+as the randomly generated hmac-salt, is stored as metadata along with the ciphertext. Creating
+the credential might require entering the device PIN (as shown above) and verifying user presence
+by touching the token. If the "pin" option is set to true, the PIN must be entered again and at
+every decryption. For example:
+
+    $ clevis encrypt fido2 '{"pin": true}' < PT > JWE
+    Enter PIN for /dev/hidraw0:
+    Enter PIN for /dev/hidraw0:
+
+The options "up" and "uv" can be used to set the desired behaviour for user presence and user 
+verification when decrypting the ciphertext (see below). In a "headless" setup, e.g., when 
+encrypting a LUKS partition, those could be set to "false" in order to automatically decrypt
+without any user actions. Note that there are currently no prompts when you need to tap on
+the device, but the token might signal that by blinking. 
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *type* (string) :
+  The type of the credential, as supported by libfido2, i.e., "es256", "rs256" or "eddsa". 
+  Default: "es256".
+
+* *cred_id* (string) :
+  A credential id generated for the specific token. If not specified, a new
+  (non-discoverable) will be generated using the **fido2-cred** command. Please
+  note that the credential must have the "hmac-extension" enabled.
+
+* *rp_id* (string) :
+  The reyling party id of the credential (that will be created or is provided via
+  the "cred_id" field). 
+  Default: 'clevis'.
+
+* *up* (boolean) :
+  Whether or not to ask the authenticator to require user presence. 
+  Default: true.
+
+* *uv* (string) :
+  Whether or not to ask the authenticator to require user verification. 
+  Default: true.
+
+* *pin* (string) :
+  Whether or not to ask the authenticator to require the PIN and user verification. 
+  Default: false.
+
+* *device* (string) :
+  The device, i.e., the fido2 token, to use (e.g., "/dev/hidraw0"). If not specified,
+  the first device from the list of connected tokens will be used. When setting this
+  option, you should be sure that the token's slot remains the same, as the decrypt
+  command will not be able to find the device, otherwise.
+
+== SEE ALSO
+
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

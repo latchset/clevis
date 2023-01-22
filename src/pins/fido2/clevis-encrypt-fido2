@@ -82,8 +82,7 @@ fi
 
 cred_id="$(jose fmt -j- -Og cred_id -Su- <<< "$cfg")" || cred_id="$(create_credential "${fido2_token}" "${rp_id}" "${type}")"
 
-# generate a random salt for each encrypted payload to pass to the fido2 token,
-# where it will be concatenated with a hardware-protected secret to produce an hmac.
+# generate a random salt for each encrypted payload
 hmac_salt="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
 
 # retrieve the hmac result which will be the password to use for key wrapping a CEK.

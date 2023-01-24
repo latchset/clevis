@@ -98,7 +98,6 @@ jwk='{"kty":"oct", "alg":"PBES2-HS512+A256KW"}'
 jwk="$(jose fmt -j "${jwk}" -q "${hmac}" -s k -Uo-)"
 
 jwe='{"protected":{"enc":"A256GCM","clevis":{"pin":"fido2","fido2":{}}}}'
-jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${type}" -s type -UUUUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${hmac_salt}" -s hmac_salt -UUUUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g fido2 -q "${rp_id}" -s rp_id -UUUUo-)"

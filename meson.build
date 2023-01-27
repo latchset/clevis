@@ -1,5 +1,5 @@
 project('clevis', 'c', license: 'GPL3+',
-  version: '18',
+  version: '19',
   default_options: 'c_std=c99'
 )
 

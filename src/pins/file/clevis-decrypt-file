@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -eu
+
+# Copyright (c) 2020 Christoph Biedl
+# Author: Christoph Biedl <debian.axhn@manchmal.in-ulm.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+[ $# -eq 1 ] && [ "${1:-}" = "--summary" ] && exit 2
+
+if [ -t 0 ] ; then
+    echo >&2
+    echo 'Usage: clevis decrypt file < JWE > PLAINTEXT' >&2
+    echo >&2
+    exit 1
+fi
+
+read -d . hdr64
+if ! hdr="$(jose fmt --quote="$hdr64" --string --b64load --object --output=-)" ; then
+    echo 'JWE header corrupt' >&2
+    exit 1
+fi
+
+if [ "$(jose fmt --json="$hdr" --get clevis --get pin --unquote=-)" != 'file' ] ; then
+    echo 'JWE pin mismatch!' >&2
+    exit 1
+fi
+
+if ! name="$(jose fmt --json="$hdr" --get clevis --get file --get name --unquote=-)" ; then
+    echo 'JWE missing 'clevis.file.name' header parameter!' >&2
+    exit 1
+fi
+
+if [ ! -f "$name" ] ; then
+    echo "Key file $name not found" >&2
+    exit 1
+fi
+
+jwk="$(cat "$name")"
+
+if ! jose fmt --json="$jwk" --object --output=/dev/null 2>/dev/null ; then
+    echo "Key file $name is malformed" >&2
+    exit 1
+fi
+
+( printf '%s' "$jwk$hdr64." ; cat ) | exec jose jwe dec --key=- --input=-

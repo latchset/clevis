@@ -1,0 +1,65 @@
+#!/bin/sh
+
+set -eu
+
+# Copyright (c) 2020 Christoph Biedl
+# Author: Christoph Biedl <debian.axhn@manchmal.in-ulm.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+SUMMARY='Encrypts using a jwk stored in a file policy'
+
+if [ "${1:-}" = '--summary' ] ; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ] ; then
+    exec >&2
+    echo
+    echo 'Usage: clevis encrypt file CONFIG < PLAINTEXT > JWE'
+    echo
+    echo "$SUMMARY"
+    echo
+    echo 'his command uses the following configuration properties:'
+    echo
+    echo '  name: <string>  The file that holds the encryption key (REQUIRED)'
+    echo
+    exit 2
+fi
+
+if ! cfg="$(jose fmt --json="$1" --object --output=- 2>/dev/null)" ; then
+    echo 'Configuration is malformed!' >&2
+    exit 1
+fi
+
+if ! name="$(jose fmt --json="$cfg" --object --get name --unquote=-)" ; then
+    echo 'Missing the required name property!' >&2
+    exit 1
+fi
+
+if [ -e "$name" ] ; then
+    echo "File $name already exists" >&2
+    exit 1
+fi
+
+jwk="$(jose jwk gen --input='{"alg":"A256GCM"}')"
+
+( umask 0377 ; echo "$jwk" >"$name" )
+
+jwe='{"protected":{"clevis":{"pin":"file","file":{}}}}'
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get file --quote "$name" --set name -UUUU --output=-)"
+
+( printf '%s' "$jwe$jwk" ; cat ) | exec jose jwe enc --input=- --key=- --detached=- --compact

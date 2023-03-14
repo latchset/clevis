@@ -18,7 +18,7 @@
 
 set -eu
 
-read -d . hdr64
+read -r -d . hdr64
 if ! hdr="$(jose fmt --quote="$hdr64" --string --b64load --object --output=-)" ; then
     echo 'JWE header corrupt' >&2
     exit 1
@@ -28,28 +28,28 @@ if [ "$(jose fmt --json="$hdr" --get clevis --get pin --unquote=-)" != 'fido2' ]
     exit 1
 fi
 if ! hmac_salt="$(jose fmt --json="$hdr" --get clevis --get fido2 --get hmac_salt --unquote=-)" ; then
-    echo 'JWE missing 'hmac_salt' header parameter!' >&2
+    echo "JWE missing 'hmac_salt' header parameter!" >&2
     exit 1
 fi
 
 if ! rp_id="$(jose fmt --json="$hdr" --get clevis --get fido2 --get rp_id --unquote=-)" ; then
-    echo 'JWE missing 'rp_id' header parameter!' >&2
+    echo "JWE missing 'rp_id' header parameter!" >&2
     exit 1
 fi
 if ! cred_id="$(jose fmt --json="$hdr" --get clevis --get fido2 --get cred_id --unquote=-)" ; then
-    echo 'JWE missing 'cred_id' header parameter!' >&2
+    echo "JWE missing 'cred_id' header parameter!" >&2
     exit 1
 fi
 if ! uv="$(jose fmt --json="$hdr" --get clevis --get fido2 --get uv --unquote=-)" ; then
-    echo 'JWE missing 'uv' header parameter!' >&2
+    echo "JWE missing 'uv' header parameter!" >&2
     exit 1
 fi
 if ! up="$(jose fmt --json="$hdr" --get clevis --get fido2 --get up --unquote=-)" ; then
-    echo 'JWE missing 'up' header parameter!' >&2
+    echo "JWE missing 'up' header parameter!" >&2
     exit 1
 fi
 if ! pin="$(jose fmt --json="$hdr" --get clevis --get fido2 --get pin --unquote=-)" ; then
-    echo 'JWE missing 'pin' header parameter!' >&2
+    echo "JWE missing 'pin' header parameter!" >&2
     exit 1
 fi
 

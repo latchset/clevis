@@ -88,11 +88,11 @@ recursively). Additionally, you define the threshold `t`. If at least `t`
 pieces can be decrypted, then the encryption key can be recovered and
 decryption can succeed.
 
-Here is an example where we use the SSS pin with both the Tang and HTTP pins:
+Here is an example where we use the SSS pin with both the Tang and TPM2 pins:
 
 ```bash
 $ echo hi | clevis encrypt sss \
-'{"t": 2, "pins": {"http": {"url": "http://server.local/key"}, "tang": {"url": "http://tang.local"}}}' \
+'{"t": 2, "pins": {"tpm2": {"pcr_ids": "0"}, "tang": {"url": "http://tang.local"}}}' \
 > hi.jwe
 ```
 

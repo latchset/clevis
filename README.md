@@ -12,7 +12,9 @@ volumes.
 What does this look like? Well, the first step is encrypting some data. We do
 this with a simple command:
 
-    $ clevis encrypt PIN CONFIG < PLAINTEXT > CIPHERTEXT.jwe
+```bash
+$ clevis encrypt PIN CONFIG < PLAINTEXT > CIPHERTEXT.jwe
+```
 
 This command takes plaintext on standard input and produces an encrypted JWE
 object on standard output. Besides the plaintext, we need to specify two

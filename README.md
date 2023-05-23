@@ -60,7 +60,7 @@ Alternatively, you can manually load the advertisement using the `adv`
 parameter. This parameter takes either a string referencing the file where the
 advertisement is stored, or the JSON contents of the advertisement itself. When
 the advertisement is specified manually like this, Clevis presumes that the
-advertisement is trusted.z
+advertisement is trusted.
 
 #### PIN: TPM2
 

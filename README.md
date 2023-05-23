@@ -60,7 +60,7 @@ Alternatively, you can manually load the advertisement using the `adv`
 parameter. This parameter takes either a string referencing the file where the
 advertisement is stored, or the JSON contents of the advertisement itself. When
 the advertisement is specified manually like this, Clevis presumes that the
-advertisement is trusted.
+advertisement is trusted.z
 
 #### PIN: TPM2
 
@@ -139,7 +139,9 @@ Upon successful completion of this binding process, the disk can be unlocked
 using one of the provided unlockers.
 
 #### Network based unlocking
-If you want to use network based unlocking you will need to specify `rd.neednet=1` as kernel argument or use `--hostonly-cmdline` when creating dracut.
+If you want to use network based unlocking you will need to specify `rd.neednet=1` as kernel argument or use `--hostonly-cmdline` when creating with dracut.
+
+If you're using **tang** as pin and the tang server is using tls (Example: `'{"url": "https://tang.remote"}'`), the folder `/etc/ssl` should be included in the initramfs image, `--include /etc/ssl /etc/ssl --force` when creating with dracut.
 
 #### Unlocker: Dracut
 

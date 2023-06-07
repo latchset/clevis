@@ -102,16 +102,16 @@ In the above example, we define two child pins and have a threshold of 2.
 This means that during decryption **both** child pins must succeed in order for
 SSS itself to succeed.
 
-Here is another example where we use just the HTTP pin:
+Here is another example where we use just the Tang pin:
 
 ```bash
 $ echo hi | clevis encrypt sss \
-'{"t": 1, "pins": {"http": [{"url": "http://server1.local/key"}, {"url": "http://server1.local/key"}]}}' \
+'{"t": 1, "pins": {"tang": [{"url": "http://server1.local/key"}, {"url": "http://server2.local/key"}]}}' \
 > hi.jwe
 ```
 
-In this example, we define two child instances of the HTTP pin - each with its
-own configuration. Since we have a threshold of 1, if **either** of the HTTP
+In this example, we define two child instances of the Tang pin - each with its
+own configuration. Since we have a threshold of 1, if **either** of the Tang
 pin instances succeed during decryption, SSS will succeed.
 
 ### Binding LUKS Volumes

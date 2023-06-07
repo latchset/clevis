@@ -29,7 +29,7 @@ debian:*|ubuntu:*)
     done
     ;;
 
-fedora:*)
+*fedora:*)
     printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update

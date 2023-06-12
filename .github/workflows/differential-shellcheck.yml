@@ -5,6 +5,8 @@ name: Differential ShellCheck
 on:
   pull_request:
     branches: [master]
+    ignore-paths:
+      - '**.md'
 
 permissions:
   contents: read

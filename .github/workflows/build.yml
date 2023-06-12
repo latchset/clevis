@@ -1,7 +1,13 @@
 ---
 name: build
 
-on: [push, pull_request]
+on:
+  push:
+    ignore-paths:
+      - '**.md'
+  pull_request:
+    ignore-paths:
+      - '**.md'
 
 jobs:
   build:

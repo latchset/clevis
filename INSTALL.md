@@ -57,7 +57,7 @@ $ sudo ninja -C build install
 
 This will install Clevis to a location determined at configure time.
 
-See the output of `meson --help` for the available options. Typically
+See the output of `meson --help` for the available options. Typically,
 much won't be needed besides providing an alternative --prefix option at
 configure time, and maybe DESTDIR at install time if you're packaging for
 a distro.

@@ -1,0 +1,43 @@
+name: Spellcheck
+on: 
+  push:
+    # branches: [main]
+jobs: 
+  spell-check:
+    name: Language tool & Misspell check
+    runs-on: ubuntu-latest
+    steps:
+      - name: check out code
+        uses: actions/checkout@v3
+      - name: running language tool 
+        uses: reviewdog/action-languagetool@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          # Change reviewdog reporter if you need [github-pr-check,github-check,github-pr-review].
+          reporter: github-check
+          # Change reporter level if you need.
+          level: info
+          language: en-US
+          disabled_categories: 'TYPOS,TYPOGRAPHY,CASING'
+          disabled_rules: 'WHITESPACE_RULE,EN_QUOTES,DASH_RULE,WORD_CONTAINS_UNDERSCORE,UPPERCASE_SENTENCE_START,ARROWS,COMMA_PARENTHESIS_WHITESPACE,UNLIKELY_OPENING_PUNCTUATION,SENTENCE_WHITESPACE,CURRENCY,EN_UNPAIRED_BRACKETS,PHRASE_REPETITION,PUNCTUATION_PARAGRAPH_END,METRIC_UNITS_EN_US,ENGLISH_WORD_REPEAT_BEGINNING_RULE,DOUBLE_PUNCTUATION,'
+          enabled_only: 'false'
+          enabled_rules: ''
+          enabled_categories: ''
+          patterns: |
+            "**.md"
+            
+    
+    
+      - name: running misspell
+        # To perform misspell check even after the language tool test fails 
+        if: success() || failure()  
+        uses: reviewdog/action-misspell@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          locale: "US"
+          reporter: github-check
+          level: info
+          pattern: "**.md"
+          exclude: |
+            ./.git/*
+            ./.cache/*

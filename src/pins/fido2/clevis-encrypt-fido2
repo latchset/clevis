@@ -47,7 +47,7 @@ function generate_hmac () {
   client_hash="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
   hmac="$(printf '%s\n%s\n%s\n%s\n' "${client_hash}" "${rp_id}" "${cred_id}" "${hmac_salt}" | \
     fido2-assert -G -h -t "uv=${uv}" -t "up=${up}" -t "pin=${pin}" "${device}" | \
-    head -n5 | tail -n1 | jose b64 enc -I -)" >&2
+    head -n5 | tail -n1 | base64 -d | jose b64 enc -I -)" >&2
 
   echo -n "${hmac}"
 }
@@ -63,7 +63,7 @@ type="$(jose fmt -j- -Og type -Bo- <<< "$cfg")" || type='es256'
 uv="$(jose fmt -j- -Og uv -Bo- <<< "$cfg")" || uv='true'
 up="$(jose fmt -j- -Og up -Bo- <<< "$cfg")" || up='true'
 pin="$(jose fmt -j- -Og pin -Bo- <<< "$cfg")" || pin='false'
-rp_id="$(jose fmt -j- -Og rp_id -Su- <<< "$cfg")" || rp_id='clevis'
+rp_id="$(jose fmt -j- -Og rp_id -Su- <<< "$cfg")" || rp_id='fido2.clevis'
 
 if ! fido2_token="$(jose fmt -j- -Og device -u- <<< "$cfg")"; then
   fido2_tokens="$(fido2-token -L)"
@@ -93,8 +93,7 @@ if [ -z "${hmac}" ]; then
   exit 1
 fi
 
-# use the secret in a key wrapping key
-jwk='{"kty":"oct", "alg":"PBES2-HS512+A256KW"}'
+jwk='{"kty":"oct", "alg":"A256GCM"}'
 jwk="$(jose fmt -j "${jwk}" -q "${hmac}" -s k -Uo-)"
 
 jwe='{"protected":{"enc":"A256GCM","clevis":{"pin":"fido2","fido2":{}}}}'

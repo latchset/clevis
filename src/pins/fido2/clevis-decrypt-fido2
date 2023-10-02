@@ -71,10 +71,10 @@ client_hash="$(dd if=/dev/urandom bs=1 count=32 status=none | base64 -w0)"
 
 hmac="$(printf '%s\n%s\n%s\n%s\n' "${client_hash}" "${rp_id}" "${cred_id}" "${hmac_salt}" | \
   fido2-assert -G -t "uv=${uv}" -t "up=${up}" -t "pin=${pin}" -h "${fido2_token}" | \
-  head -n5 | tail -n1 | jose b64 enc -I -)"
+  head -n5 | tail -n1 | base64 -d | jose b64 enc -I -)"
 
 # use the secret in a key wrapping key
-jwk='{"alg":"PBES2-HS512+A256KW", "kty":"oct"}'
+jwk='{"alg":"A256GCM", "kty":"oct"}'
 jwk="$(jose fmt -j "${jwk}" -q "${hmac}" -s k -Uo-)"
 
 ( printf '%s' "$jwk$hdr64." ; cat ) | exec jose jwe dec --key=- --input=-

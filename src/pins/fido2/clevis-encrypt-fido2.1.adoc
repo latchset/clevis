@@ -38,18 +38,18 @@ every decryption. For example:
     Enter PIN for /dev/hidraw0:
     Enter PIN for /dev/hidraw0:
 
-The options "up" and "uv" can be used to set the desired behaviour for user presence and user 
-verification when decrypting the ciphertext (see below). In a "headless" setup, e.g., when 
+The options "up" and "uv" can be used to set the desired behaviour for user presence and user
+verification when decrypting the ciphertext (see below). In a "headless" setup, e.g., when
 encrypting a LUKS partition, those could be set to "false" in order to automatically decrypt
 without any user actions. Note that there are currently no prompts when you need to tap on
-the device, but the token might signal that by blinking. 
+the device, but the token might signal that by blinking.
 
 == CONFIG
 
 This command uses the following configuration properties:
 
 * *type* (string) :
-  The type of the credential, as supported by libfido2, i.e., "es256", "rs256" or "eddsa". 
+  The type of the credential, as supported by libfido2, i.e., "es256", "rs256" or "eddsa".
   Default: "es256".
 
 * *cred_id* (string) :
@@ -59,19 +59,19 @@ This command uses the following configuration properties:
 
 * *rp_id* (string) :
   The reyling party id of the credential (that will be created or is provided via
-  the "cred_id" field). 
-  Default: 'clevis'.
+  the "cred_id" field).
+  Default: 'fido2.clevis'.
 
 * *up* (boolean) :
-  Whether or not to ask the authenticator to require user presence. 
+  Whether or not to ask the authenticator to require user presence.
   Default: true.
 
 * *uv* (string) :
-  Whether or not to ask the authenticator to require user verification. 
+  Whether or not to ask the authenticator to require user verification.
   Default: true.
 
 * *pin* (string) :
-  Whether or not to ask the authenticator to require the PIN and user verification. 
+  Whether or not to ask the authenticator to require the PIN and user verification.
   Default: false.
 
 * *device* (string) :

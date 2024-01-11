@@ -217,3 +217,41 @@ UDisks2 unlocker, respectively.
 ```bash
 $ sudo dnf install clevis clevis-dracut clevis-udisks2
 ```
+
+## Manual compilation
+
+As remarked in the previous section, **it is suggested not to install Clevis directly**.
+However, in case no Clevis packages exist for your Linux distribution, the steps to 
+manually compile and install Clevis are next ones:
+
+* Download latest version of the binaries (not that the latest version could change):
+```bash
+$ wget https://github.com/latchset/clevis/releases/download/v19/clevis-19.tar.xz
+```
+
+* Untar the binaries file:
+```bash
+$ tar Jxvf clevis-19.tar.xz 
+```
+
+* Create build directory and change path to it:
+```bash
+$ cd clevis-19
+$ mkdir build
+$ cd build
+```
+
+* Execute `meson` to setup compilation:
+```bash
+$ meson setup ..
+```
+
+* Compile with `ninja` command:
+```bash
+$ ninja
+```
+
+* Install with `ninja install` command (you will need root permissions for it):
+```bash
+$ sudo ninja install
+```

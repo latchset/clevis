@@ -2,6 +2,7 @@ name: Spellcheck
 on: 
   push:
     # branches: [main]
+  pull_request:  
 jobs: 
   spell-check:
     name: Language tool & Misspell check

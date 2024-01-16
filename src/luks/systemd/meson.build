@@ -10,7 +10,6 @@ sd_reply_pass = find_program(
 
 if systemd.found() and sd_reply_pass.found()
   data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.path())
-  subdir('dracut')
 
   unitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
 

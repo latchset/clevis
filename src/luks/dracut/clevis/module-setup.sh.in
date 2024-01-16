@@ -27,7 +27,10 @@ install() {
     if dracut_module_included "systemd"; then
         inst_multiple \
             $systemdsystemunitdir/clevis-luks-askpass.service \
-            $systemdsystemunitdir/clevis-luks-askpass.path
+            $systemdsystemunitdir/clevis-luks-askpass.path \
+            @SYSTEMD_REPLY_PASS@ \
+            @libexecdir@/clevis-luks-askpass
+
         systemctl -q --root "$initdir" add-wants cryptsetup.target clevis-luks-askpass.path
     else
         inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
@@ -36,8 +39,6 @@ install() {
 
     inst_multiple \
         /etc/services \
-        @SYSTEMD_REPLY_PASS@ \
-        @libexecdir@/clevis-luks-askpass \
         clevis-luks-common-functions \
         grep sed cut \
         clevis-decrypt \

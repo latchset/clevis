@@ -34,6 +34,9 @@ clevis_luks_unbind = configure_file(input: 'clevis-luks-unbind.in',
 
 if libcryptsetup.found() and luksmeta.found()
   subdir('systemd')
+  # systemd should come before dracut in order to set up
+  # variables like SYSTEMD_REPLY_PASS.
+  subdir('dracut')
   subdir('udisks2')
 
   bins += clevis_luks_unbind

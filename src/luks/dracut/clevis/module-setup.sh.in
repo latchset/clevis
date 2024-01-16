@@ -19,7 +19,11 @@
 #
 
 depends() {
-    echo crypt systemd
+    local __depends=crypt
+    if dracut_module_included "systemd"; then
+        __depends=$(printf '%s systemd' "${__depends}")
+    fi
+    echo "${__depends}"
     return 255
 }
 
@@ -35,6 +39,10 @@ install() {
     else
         inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
         inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
+        inst_multiple \
+            @libexecdir@/clevis-luks-unlocker \
+            clevis-luks-unlock \
+            blkid
     fi
 
     inst_multiple \

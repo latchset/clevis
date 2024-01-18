@@ -66,8 +66,7 @@ advertisement is trusted.
 
 Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
 chip. The cryptographically-strong, random key used for encryption is encrypted
-using the TPM2 chip, and then at decryption time is decrypted using the TPM2 to
-allow clevis to decrypt the secret stored in the JWE.
+using the TPM2 chip, and is decrypted using TPM2 at the time of decryption to allow clevis to decrypt the secret stored in the JWE.
 
 For example:
 
@@ -164,7 +163,7 @@ initramfs you will need to run:
 sudo update-initramfs -u -k 'all'
 ```
 
-Upon reboot it will behave exactly as if using Dracut.
+Upon reboot, it will behave exactly as if using Dracut.
 
 #### Unlocker: UDisks2
 

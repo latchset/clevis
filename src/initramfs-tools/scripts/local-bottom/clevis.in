@@ -34,8 +34,10 @@ esac
 [ -s /run/clevis.pid ] || exit 0
 
 pid=$(cat /run/clevis.pid)
-ps -l | awk -v pid="$pid" '$4==pid { system("kill " $3) }'
-kill "$pid"
+child_pids=$(ps -o pid,ppid | awk -v pid="$pid" '$2==pid { print $1 }')
+for kill_pid in $pid $child_pids; do
+	kill "$kill_pid"
+done
 
 # Not really worried about downing extra interfaces: they will come up
 # during the actual boot. Might make this configurable later if needed.

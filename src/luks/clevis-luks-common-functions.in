@@ -202,6 +202,11 @@ clevis_luks_print_pin_config() {
         pin=$(printf '{"url":"%s"}' "${url}")
         printf "tang '%s'" "${pin}"
         ;;
+    tpm1)
+        pcr_ids="$(jose fmt -j- -g pcr_ids -u- <<< "${content}")"
+        pin=$(printf '"pcr_ids":"%s"' "${pcr_ids}")
+        printf "tpm1 '{%s}'" "${pin}"
+        ;;
     tpm2)
         # Valid properties for tpm2 pin are the following:
         # hash, key, pcr_bank, pcr_ids, pcr_digest.
@@ -258,6 +263,7 @@ clevis_luks_process_sss_pin() {
     local sss_null
     local sss_pkcs11
     local sss_tang
+    local sss_tpm1
     local sss_tpm2
     local sss
     local pin_cfg
@@ -280,6 +286,9 @@ clevis_luks_process_sss_pin() {
         tang)
             sss_tang="${sss_tang},${cfg}"
             ;;
+        tpm1)
+            sss_tpm1="${sss_tpm1},${cfg}"
+            ;;
         tpm2)
             sss_tpm2="${sss_tpm2},${cfg}"
             ;;
@@ -296,6 +305,10 @@ clevis_luks_process_sss_pin() {
 
     if [ -n "${sss_tang}" ]; then
         cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tpm1}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tpm1" "${sss_tpm1}")
     fi
 
     if [ -n "${sss_tpm2}" ]; then

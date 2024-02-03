@@ -8,6 +8,7 @@ endforeach
 if all
   bins += join_paths(meson.current_source_dir(), 'clevis-decrypt-tpm1')
   bins += join_paths(meson.current_source_dir(), 'clevis-encrypt-tpm1')
+  subdir('tests')
 else
   warning('Will not install tpm1 pin due to missing dependencies!')
 endif

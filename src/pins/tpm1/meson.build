@@ -11,3 +11,24 @@ if all
 else
   warning('Will not install tpm1 pin due to missing dependencies!')
 endif
+
+# Tests.
+env = environment()
+env.prepend('PATH',
+            join_paths(meson.source_root(), 'src'),
+            join_paths(meson.source_root(), 'src', 'luks'),
+            join_paths(meson.source_root(), 'src', 'luks', 'tests'),
+            join_paths(meson.source_root(), 'src', 'pins', 'sss'),
+            join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+            join_paths(meson.source_root(), 'src', 'pins', 'tpm1'),
+            join_paths(meson.source_root(), 'src', 'pins', 'tpm2'),
+            join_paths(meson.build_root(), 'src'),
+            join_paths(meson.build_root(), 'src', 'luks'),
+            join_paths(meson.build_root(), 'src', 'luks', 'tests'),
+            join_paths(meson.build_root(), 'src', 'pins', 'sss'),
+            join_paths(meson.build_root(), 'src', 'pins', 'tang'),
+            join_paths(meson.build_root(), 'src', 'pins', 'tpm1'),
+            join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
+            separator: ':'
+)
+test('pin-tpm1', find_program('pin-tpm1'), env: env, timeout: 300)

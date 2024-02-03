@@ -1,0 +1,102 @@
+CLEVIS-ENCRYPT-TPM1(1)
+======================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-tpm1 - Encrypts using a TPM 1.2 chip binding policy
+
+== SYNOPSIS
+
+*clevis encrypt tpm1* CONFIG < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt tpm1* command encrypts using a Trusted Platform
+Module{nbsp}1.2 (TPM{nbsp}1.2) chip. It might work with Trusted Platform
+Module{nbsp}1.1 too, but it is untested. The tpm1 pin does not support Trusted
+Platform Module{nbsp}2.0 and higher, please use the tpm2 pin instead.
+
+The only argument is the JSON configuration object.
+
+When using the tpm1 pin, we create a new, cryptographically-strong, random key.
+This key is encrypted using the TPM{nbsp}1.2 chip. Then at decryption time, the
+key is decrypted again using the TPM{nbsp}1.2 chip.
+
+    $ clevis encrypt tpm1 '{}' < PT > JWE
+
+To decrypt the data, simply provide the ciphertext (JWE):
+
+    $ clevis decrypt < JWE > PT
+
+Note that like other pins no configuration is used for decryption, this is due
+to clevis storing the sealed encryption key in the JWE so clevis can fetch that
+key from there and unseal it by using the TPM{nbsp}1.2 chip.
+
+The pin also supports sealing data to a Platform Configuration Registers (PCR)
+state. That way the data can only be unsealed if the PCRs hash values match
+the values used when sealing.
+
+For example, to seal the data to the PCR with indexes 0, 4 and 7, use:
+
+    $ clevis encrypt tpm1 '{"pcr_ids":"0,4,7"}' < PT > JWE
+
+The BIOS, boot loader, Grub and Linux kernel incrementally add hashes of the
+various system states to the registers. The added hashes represent state of
+different components such as the BIOS (PCR{nbsp}0 and{nbsp}1), option ROMs
+(PCR{nbsp}2 and{nbsp}3), boot loader (PCR{nbsp}4), EFI Secure Boot state
+(PCR{nbsp}0 and{nbsp}7), etc. The requirement for exact matching of values
+ensures that the TPM{nbsp}1.2 chip unseals the data only when the system state
+measured by the selected registers has not changed.
+
+Although the usage of Platform Configuration Registers is standardized, the BIOS
+implementation might differ slightly, so always test how the particular register
+value changes when the system is updated, most notably when the Grub boot
+loaded or Linux kernel is updated. The PCR values can be checked with:
+
+    $ cat /sys/class/tpm/tpm0/pcrs
+
+== Limitations
+
+To prevent asking for the password during unlocking, encryption and decryption
+expects that the well-known storage root key (SRK) has been configured when
+gaining the TPM 1.2 chip ownership. This means that either the
+`tpm_takeownership --srk-well-known` command has been used during setup or
+`tpm_changeownerauth --srk --well-known` has been called to change it. Please
+note that the _well-known key_ is not equivalent to an empty key.
+
+== Threat model
+
+The Clevis security model relies in the fact that an attacker will not be able
+to access both the encrypted data and the decryption key.
+
+For most Clevis pins, the decryption key is not locally stored, so the
+decryption policy is only satisfied if the decryption key can be remotely
+accessed. It could for example be stored in a remote server or in a hardware
+authentication device that has to be plugged into the machine.
+
+The tpm1 pin is different in this regard, since a key is wrapped by
+a{nbsp}TPM{nbsp}1.2 chip that is always present in the machine. This does not
+mean that there are not use cases for this pin, but it is important to
+understand the fact that an attacker that has access to both the encrypted data
+and the local TPM{nbsp}1.2 chip will be able to decrypt the data.
+
+The use of specific Platform Configuration Registers along with Secure Boot
+limits the attack surface because an attacker must reproduce the exact register
+values that are present during sealing before the TPM{nbsp}1.2 chip will allow
+the encryption key to be unsealed. Careful selection of registers ensures that
+any change to the boot process will prevent the TPM{nbsp}1.2 from unsealing the
+encryption key.
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *pcr_ids*  (string) :
+  Comma separated list of PCR used for policy. If not present, no policy is used
+
+== SEE ALSO
+
+link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)],
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

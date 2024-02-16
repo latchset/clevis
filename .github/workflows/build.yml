@@ -22,7 +22,7 @@ jobs:
           - debian:testing
           - debian:latest
           - ubuntu:rolling
-          - ubuntu:bionic
+          - ubuntu:latest
         stable: [true]
         include:
           - os: quay.io/fedora/fedora:rawhide
@@ -30,7 +30,7 @@ jobs:
           - os: ubuntu:devel
             stable: false
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Show OS information
         run: cat /etc/os-release 2>/dev/null || echo /etc/os-release not available

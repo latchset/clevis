@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: running language tool 
         uses: reviewdog/action-languagetool@v1
         with:

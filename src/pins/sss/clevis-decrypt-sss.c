@@ -275,6 +275,7 @@ main(int argc, char *argv[])
         const uint8_t *xy[t];
         size_t i = 0;
 
+        memset(xy, 0, t * sizeof(uint8_t));
         for (struct pin *pin = chldrn.next; pin != &chldrn; pin = pin->next) {
             if (pin->pt && i < (size_t) t)
                 xy[i++] = pin->pt;

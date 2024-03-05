@@ -591,6 +591,9 @@ main(int argc, char *const argv[])
         req.used = recv(pair[0], req.data, sizeof(req.data), 0);
         if (req.used < 1 || req.data[req.used - 1])
             break;
+        /* Technically, req.data is already NULL-terminated, but let's
+         * be explicit. */
+        req.data[req.used - 1] = '\0';
 
         if (crypt_init(&cd, req.data) < 0)
             goto next;

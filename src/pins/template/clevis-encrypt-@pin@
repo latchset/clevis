@@ -1,0 +1,140 @@
+#%# Creating an encrypting pin
+#%#
+#%# Read README.md first.
+#%#
+#%# The shell interpreter. For portability, it should have as little
+#%# requirements as possibly. Especially the decrypt should be executable
+#%# in busybox' ash as well
+#!/bin/sh
+
+#%# Some hardening. Safeguard against coding errors.
+set -eu
+
+#%# Legal stuff. Put your name etc. here.
+#%# Of course you're not bound to GPL-3+ but it will certainly ease
+#%# inclusion in upstream clevis if you use that.
+# Copyright (c) @year@ @name@
+# Author: @name@ <@email@>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+#%# A one-line summary. Will be used in the help messages below.
+SUMMARY='Encrypts using a @pin@ @@ policy'
+
+#%# Some option parsing, very simple.
+#%# Don't touch, it's hardcoded in the `clevis` program.
+if [ "${1:-}" = '--summary' ] ; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+#%# Regular operation assumes output goes to a file. If not, print
+#%# some usage information and bail out.
+if [ -t 0 ] ; then
+#!# Since this script runs in a pipe, *all* operational messages
+#!# must go to stderr.
+    exec >&2
+    echo
+#%# Don't be confused: This script is called from `clevis`, so
+#%# the usage text has spaces, not dashes.
+#%# Also, the configuration is in $1, see below.
+    echo 'Usage: clevis encrypt @pin@ CONFIG < PLAINTEXT > JWE'
+    echo
+    echo "$SUMMARY"
+    echo
+    echo 'This command uses the following configuration properties:'
+    echo
+#%# For the sake of users: Give a good explanation of your pin's
+#%# parameters.
+#%# Mandatory parameters should contain the string "REQUIRED"
+    echo '  @mand1@: <string>  One parameter @@ (REQUIRED)'
+    echo
+    echo '  @mand2@: <string>  Another parameter @@ (REQUIRED)'
+    echo
+#%# Optional parameters should mention the default value.
+    echo '  @opt1@: <string>   An optional parameter @@ (default: @@)'
+    echo
+#%# Pure visual: Make sure the short descriptions are aligned to the
+#%# same column.
+    exit 2
+fi
+
+#%# The CONFIG parameter in $1 has to be valid JSON
+if ! cfg="$(jose fmt --json="${1:-}" --object --output=- 2>/dev/null)" ; then
+    echo 'Configuration is malformed!' >&2
+    exit 1
+fi
+
+#%# Load the values from the configuration into shell variables.
+#%# Re-using the name is certainly a good idea
+#%#
+#%# For mandatory parameters it's like that:
+if ! @mand1@="$(jose fmt --json="$cfg" --object --get @mand1@ --unquote=-)" ; then
+    echo 'Missing the required @mand1@ property!' >&2
+    exit 1
+fi
+if ! @mand2@="$(jose fmt --json="$cfg" --object --get @mand2@ --unquote=-)" ; then
+    echo 'Missing the required @mand2@ property!' >&2
+    exit 1
+fi
+
+#%# For optional parameters, use:
+@opt1@="$(jose fmt --json="$cfg" --object --get @opt1@ --unquote=-)" || @opt1@='@@'
+
+#%# Possibly validate parameters. If a check can be done at *en*crypt
+#%# time, it should be done now.
+
+#%# Now everything is set up for your pin's business logic.
+#%#
+#%# Your jobs, in no particular order:
+#%#
+#%# 1. Have the key in `jwk`:
+#%# If you want to create a new key:
+jwk="$(jose jwk gen --input='{"alg":"A256GCM"}')"
+#%# Feel free to use different algorithms for `"alg"`,
+#%# jose-jwk-gen(1) and jose-alg(1) have more on all this.
+#%#
+#%# Or, if you want to use an existing key, just load it into `jwk`
+#%# from wherever you got it from:
+jwk="$(somehow_get_the_key)"
+#%# Remember the result must be a valid jwk object.
+
+#%# 2. Store the key somewhere. That's your logic.
+store_the_jwk "$jwk"
+#%# It is a good idea to store the entire `$jwk`. If you want to
+#%# extract the actual key, use
+#%#     jose fmt --json="$jwk" --object --get k --unquote=-
+#%# ... but you're probably wrong if you want to do that.
+
+#%# 3. Assemble all the information you will need to re-create
+#%# the key later in `jwe`:
+#%#
+#%# First create a skeleton that declares the pin, and creates a store.
+jwe='{"protected":{"clevis":{"pin":"@pin@","@pin@":{}}}}'
+#%# Then populate that store. Possibly you'll just have to pass
+#%# the parameters. Leave out those you will not need for decryption.
+#%# NB: The long form of the `-U` parameter of `jose fmt` is "--unwind"
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get @pin@ --quote "$@mand1@" --set @mand1@ -UUUU --output=-)"
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get @pin@ --quote "$@opt1@" --set @opt1@ -UUUU --output=-)"
+
+#%# Almost there!
+#%# Forward everything to `jose jwe enc` which does the encryption job -
+#%# including reading the plaintext from stdin which gets replicated
+#%# using `cat`.
+( printf '%s' "$jwe$jwk" ; cat ) | exec jose jwe enc --input=- --key=- --detached=- --compact
+#%# Anything that follows is executed only if jose failed.
+#%#
+#!# When using mktemp or the like, cleaning up has to be done
+#!# manually. See clevis-{en,de}crypt-tpm2 for an example.

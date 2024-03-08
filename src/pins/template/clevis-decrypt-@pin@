@@ -1,0 +1,73 @@
+#%# Creating an decrypting pin
+#%#
+#%# Read README.md and clevis-encrypt-@pin@ first, this file aims to
+#%# to avoid information duplication.
+#%# Unfortunately, this one uses a bashism (read -d) that is not at
+#%# all easy to eliminate.
+#!/bin/bash
+
+set -eu
+
+# Copyright (c) @year@ @name@
+# Author: @name@ <@email@>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+#%# This program takes no options - everything needed to know will be
+#%# read from stdin.
+[ $# -eq 1 ] && [ "${1:-}" = "--summary" ] && exit 2
+
+if [ -t 0 ] ; then
+    echo >&2
+    echo 'Usage: clevis decrypt @pin@ < JWE > PLAINTEXT' >&2
+    echo >&2
+    exit 1
+fi
+
+#%# The input is concatenated using the dot. Read the first element
+#%# but leave everything else in the buffer. Only read -d can to that.
+read -d . hdr64
+#%# The header is base64-encoded. Decode now and also verify this is valid JSON
+if ! hdr="$(jose fmt --quote="$hdr64" --string --b64load --object --output=-)" ; then
+    echo 'JWE header corrupt' >&2
+    exit 1
+fi
+
+#%# Input validation: The pin must exist by name.
+if [ "$(jose fmt --json="$hdr" --get clevis --get pin --unquote=-)" != '@pin@' ] ; then
+    echo 'JWE pin mismatch!' >&2
+    exit 1
+fi
+
+#%# Load the parameters into shell variables.
+if ! @param1@="$(jose fmt --json="$hdr" --get clevis --get @pin@ --get @param1@ --unquote=-)" ; then
+    echo 'JWE missing 'clevis.@pin@.@param1@' header parameter!' >&2
+    exit 1
+fi
+if ! @param2@="$(jose fmt --json="$hdr" --get clevis --get @pin@ --get @param2@ --unquote=-)" ; then
+    echo 'JWE missing 'clevis.@pin@.@param2@' header parameter!' >&2
+    exit 1
+fi
+
+#%# Possibly some pre-checks on your parameters are needed.
+
+#%# Now everything is set up for your pin's business logic
+#%#
+#%# Your job: Somehow bring the key into `jwk`.
+jwk="$(load_jwk)"
+
+#%# Finally, forward everything to `jose jwe dec` which does the
+#%# decryption job.
+( printf '%s' "$jwk$hdr64." ; cat ) | exec jose jwe dec --key=- --input=-

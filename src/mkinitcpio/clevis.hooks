@@ -1,0 +1,10 @@
+#!/usr/bin/ash
+
+run_hook() {
+    IFS=: read cryptdev cryptname cryptoptions <<EOF
+$cryptdevice
+EOF
+    if resolved=$(resolve_device "${cryptdev}" ${rootdelay}); then
+        clevis luks unlock -d "$resolved" -n "$cryptname"
+    fi
+}

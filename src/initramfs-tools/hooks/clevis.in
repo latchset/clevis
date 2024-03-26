@@ -103,3 +103,5 @@ done
 for so in $(ldconfig -p | sed -nr 's/^\s*libnss_dns\.so\.[0-9]+\s.*=>\s*//p'); do
   copy_exec "${so}"
 done
+
+copy_file data @sysconfdir@/ssl/certs/ca-certificates.crt || die 2 "Unable to copy certificate bundle to initrd image"

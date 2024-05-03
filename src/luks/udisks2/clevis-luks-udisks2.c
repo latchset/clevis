@@ -264,8 +264,10 @@ child_main(int sock)
 
 error:
     g_list_free_full(ctx.lst, g_free);
-    g_main_loop_unref(ctx.loop);
-    g_object_unref(ctx.clt);
+    if (ctx.loop)
+        g_main_loop_unref(ctx.loop);
+    if (ctx.clt)
+        g_object_unref(ctx.clt);
     close(sock);
     return exit_status;
 }

@@ -301,12 +301,12 @@ on_signal(int sig)
     safeclose(&pair[0]);
 }
 
-static ssize_t
-recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
+static uint32_t
+recover_key(const pkt_t *jwe, char *out, int32_t max, uid_t uid, gid_t gid)
 {
     int push[2] = { -1, -1 };
     int pull[2] = { -1, -1 };
-    ssize_t bytes = 0;
+    int32_t bytes = 0;
     pid_t chld = 0;
 
     if (pipe(push) != 0)
@@ -381,12 +381,18 @@ recover_key(const pkt_t *jwe, char *out, size_t max, uid_t uid, gid_t gid)
     }
 
     bytes = 0;
-    for (ssize_t block = 1; block > 0; bytes += block) {
-        block = read(pull[PIPE_RD], &out[bytes], max - bytes);
-        if (block < 0) {
+    ssize_t block = 0;
+    while (max > 0 && max > bytes) {
+        do {
+            block = read(pull[PIPE_RD], &out[bytes], max - bytes);
+        } while (block < 0 && errno == EINTR);
+        if (block < 0 || block < INT32_MIN || block > INT32_MAX) {
             kill(chld, SIGTERM);
             goto error;
         }
+        if (block == 0)
+            break;
+        bytes += block;
     }
 
     safeclose(&pull[PIPE_RD]);

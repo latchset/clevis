@@ -32,8 +32,8 @@ trap 'on_exit' EXIT
 
 export TMP=$(mktemp -d)
 
-port=$(tang_new_random_port)
-tang_run "${TMP}" "${port}"
+tang_run "${TMP}"
+port=$(tang_get_port "${TMP}")
 
 url="http://localhost:${port}"
 adv="${TMP}/adv"

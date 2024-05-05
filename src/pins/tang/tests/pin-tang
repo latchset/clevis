@@ -31,9 +31,8 @@ trap 'on_exit' EXIT
 
 TMP="$(mktemp -d)"
 
-port=$(tang_new_random_port)
-
-tang_run "${TMP}" "${port}" sig exc
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
 
 thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
 adv="${TMP}/adv.jws"

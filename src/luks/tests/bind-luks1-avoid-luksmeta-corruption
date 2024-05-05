@@ -37,8 +37,9 @@ DEV="${TMP}/luks1-device"
 new_device "luks1" "${DEV}"
 
 # TANG server specifics
-port=$(tang_new_random_port)
-tang_run "${TMP}" "${port}"
+tang_run "${TMP}"
+port=$(tang_get_port "${TMP}")
+
 url="http://localhost:${port}"
 
 # Initial binding to ensure luksmeta gets corrupted

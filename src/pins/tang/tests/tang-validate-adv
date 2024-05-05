@@ -22,17 +22,21 @@
 
 on_exit() {
     local exit_status=$?
-    tang_stop "${TMP}"
-    [ -d "${TMP}" ] && rm -rf "${TMP}"
+    for d in "${TMP}" "${TMP2}"; do
+        [ ! -d "${d}" ] && continue
+        tang_stop "${d}"
+        rm -rf "${d}"
+    done
     exit "${exit_status}"
 }
 
 do_test() {
-    local port="${1}"
-    local response="${2}"
-    local stderr="${3:-/dev/stderr}"
+    local response="${1}"
+    local stderr="${2:-/dev/stderr}"
+    local port
 
-    run_test_server "${port}" "${response}"
+    run_test_server "${TMP2}" "${response}"
+    port=$(tang_get_port "${TMP2}")
     cfg="$(printf '{"url":"localhost:%d"}' "${port}")"
     if ! echo foo | clevis encrypt tang "${cfg}" -y 2>"${stderr}"; then
         echo "Error (do_test) response: ${response}" >&2
@@ -42,11 +46,10 @@ do_test() {
 }
 
 do_test_with_adv() {
-    local port="${1}"
-    local adv="${2}"
-    local stderr="${3:-/dev/stderr}"
+    local adv="${1}"
+    local stderr="${2:-/dev/stderr}"
 
-    cfg="$(printf '{"url":"localhost:%d","adv":"%s"}' "${port}" "${adv}")"
+    cfg="$(printf '{"url":"127.1.2.3:1234","adv":"%s"}' "${adv}")"
     if ! echo foo-adv | clevis encrypt tang "${cfg}" 2>"${stderr}"; then
         echo "Error (do_test_with_adv) adv: ${adv} response: ${response}" >&2
         [ -r "${stderr}" ] && cat "${stderr}" >&2
@@ -64,10 +67,10 @@ validate_output() {
 trap 'on_exit' EXIT
 
 TMP="$(mktemp -d)"
+TMP2="$(mktemp -d)"
+
 CASES="${TMP}/cases"
 mkdir -p "${CASES}"
-
-port=$(tang_new_random_port)
 
 # Let's test server responses.
 # Case 1 - regular advertisement - PASS.
@@ -109,29 +112,28 @@ HTTP/1.0 500 Internal Server Error
 EOF
 
 for c in "${CASES}"/good-*; do
-    port=$(tang_new_random_port)
     STDERR="${c}".stderr
-    do_test "${port}" "${c}" "${STDERR}"
+    do_test "${c}" "${STDERR}"
     validate_output "${STDERR}"
 done
 
 # Tests where bind is expected to fail (validate is still expected to succeed).
 for c in "${CASES}"/bad-*; do
-    port=$(tang_new_random_port)
     STDERR="${c}".stderr
-    ! do_test "${port}" "${c}" "${STDERR}"
+    ! do_test "${c}" "${STDERR}"
     validate_output "${STDERR}"
 done
 
 # Now let's do some tests passing "adv" in the configuration.
 STDERR="${CASES}"/stderr
 for adv in "[]" "]" "" "{}"; do
-    ! do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    ! do_test_with_adv "${adv}" "${STDERR}"
     validate_output "${STDERR}"
 done
 
 # Now let's use existing files as well.
-tang_run "${TMP}" "${port}"
+tang_run "${TMP}"
+port=$(tang_get_port "${TMP}")
 
 touch "${CASES}"/adv-bad-01
 echo '{' > "${CASES}"/adv-bad-02
@@ -141,13 +143,13 @@ tang_get_adv "${port}" "${CASES}"/adv-good-01
 # Tests where bind is expected to pass.
 for adv in "${CASES}"/adv-good-*; do
     STDERR="${adv}".stderr
-    do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    do_test_with_adv "${adv}" "${STDERR}"
     validate_output "${STDERR}"
 done
 
 # Tests where bind is expected to fail. validate still should pass.
 for adv in "${CASES}"/adv-bad-*; do
     STDERR="${adv}".stderr
-    ! do_test_with_adv "${port}" "${adv}" "${STDERR}"
+    ! do_test_with_adv "${adv}" "${STDERR}"
     validate_output "${STDERR}"
 done

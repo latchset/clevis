@@ -56,12 +56,6 @@ tang_create_adv() {
                        --key="${SIG}" --output="${adv}"
 }
 
-# Get a random port to be used with a test tang server.
-tang_new_random_port() {
-    tang_sanity_check
-    shuf -i 1024-65535 -n 1
-}
-
 # Removes tang rotated keys from the test server.
 tang_remove_rotated_keys() {
     tang_sanity_check
@@ -112,19 +106,30 @@ tang_new_keys() {
     return 0
 }
 
+# Find listening port of a process
+tang_find_port() {
+    local pid="${1}"
+
+    [ -z "${pid}" ] && \
+        tang_error "tang_find_port: please specify 'pid'"
+
+    local port
+    port=$(lsof -Pan -p "${pid}" -iTCP -sTCP:LISTEN -Fn | grep '^n.*:' | cut -d: -f2)
+    [ -n "${port}" ] && echo "${port}"
+}
+
 # Wait for the tang server to be operational.
 tang_wait_until_ready() {
     tang_sanity_check
-    local port="${1}"
+    local pid="${1}"
 
-    [ -z "${port}" ] && \
-        tang_error "tang_wait_until_ready: please specify 'port'"
+    [ -z "${pid}" ] && \
+        tang_error "tang_wait_until_ready: please specify 'pid'"
 
     local max_timeout_in_s=5
     local start elapsed
     start="${SECONDS}"
-    while ! curl --output /dev/null --silent --fail \
-                "http://localhost:${port}/adv"; do
+    while ! tang_find_port "${pid}" >/dev/null; do
         elapsed=$((SECONDS - start))
         if [ "${elapsed}" -gt "${max_timeout_in_s}" ]; then
             tang_error "Timeout (${max_timeout_in_s}s) waiting for tang server"
@@ -138,12 +143,10 @@ tang_wait_until_ready() {
 tang_run() {
     tang_sanity_check
     local basedir="${1}"
-    local port="${2}"
-    local sig_name="${3:-}"
-    local exc_name="${4:-}"
+    local sig_name="${2:-}"
+    local exc_name="${3:-}"
 
     [ -z "${basedir}" ] && tang_error "tang_run: please specify 'basedir'"
-    [ -z "${port}" ] && tang_error "tang_run: please specify 'port'"
 
     if ! tang_new_keys "${basedir}" "" "${sig_name}" "${exc_name}"; then
         tang_error "Error creating new keys for tang server"
@@ -152,15 +155,17 @@ tang_run() {
     local KEYS="${basedir}/cache"
     [ -z "${TANGD_UPDATE}" ] && KEYS="${basedir}/db"
 
-    local pid pidfile
+    local pid pidfile portfile
     pidfile="${basedir}/tang.pid"
+    portfile="${basedir}/tang.port"
 
-    "${SOCAT}" -v -v TCP-LISTEN:${port},reuseaddr,fork \
+    "${SOCAT}" -v -v TCP4-LISTEN:0,reuseaddr,fork \
                exec:"${TANGD} ${KEYS}" &
-
     pid=$!
+
     echo "${pid}" > "${pidfile}"
-    tang_wait_until_ready "${port}"
+    tang_wait_until_ready "${pid}"
+    tang_find_port "${pid}" > "${portfile}"
 }
 
 # Stop tang server.
@@ -172,9 +177,23 @@ tang_stop() {
     local pidfile="${basedir}/tang.pid"
     [ -f "${pidfile}" ] || return 0
 
+    local portfile="${basedir}/tang.port"
+
     local pid
     pid=$(<"${pidfile}")
     kill -9 "${pid}" 2>/dev/null || :
+    rm -f "${portfile}"
+    rm -f "${pidfile}"
+}
+
+tang_get_port() {
+    local basedir="${1}"
+    [ -z "${basedir}" ] && tang_error "tang_get_port: please specify 'basedir'"
+
+    local portfile="${basedir}/tang.port"
+    [ -f "${portfile}" ] || tang_error "tang_get_port: tang is not running"
+
+    cat "${portfile}"
 }
 
 # Get tang advertisement.
@@ -188,13 +207,23 @@ tang_get_adv() {
 }
 
 run_test_server() {
+    local basedir="${1}"
     local port="${1}"
     local response="${2}"
 
     [ -z "${SOCAT}" ] && tang_skip "run_test_server: socat is not available"
+    [ -z "${basedir}" ] && tang_error "run_test_server: please specify 'basedir'"
     [ -z "${port}" ] && tang_error "run_test_server: please specify 'port'"
     [ -z "${response}" ] && tang_error "run_test_server: please specify 'response'"
 
-    "${SOCAT}" -v -v TCP-LISTEN:${port},reuseaddr SYSTEM:"cat ${response}" &
-    sleep 1
+    local pid pidfile portfile
+    pidfile="${basedir}/tang.pid"
+    portfile="${basedir}/tang.port"
+
+    "${SOCAT}" -v -v TCP4-LISTEN:0,reuseaddr,bind=localhost SYSTEM:"cat ${response}" &
+    pid=$!
+
+    echo "${pid}" > "${pidfile}"
+    tang_wait_until_ready "${pid}"
+    tang_find_port "${pid}" > "${portfile}"
 }

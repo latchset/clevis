@@ -33,7 +33,7 @@ debian:*|ubuntu:*)
     printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
-    dnf -y install dnf-utils jq socat cryptsetup keyutils
+    dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts
     dnf -y builddep clevis
     ;;
 

@@ -138,7 +138,9 @@ Upon successful completion of this binding process, the disk can be unlocked
 using one of the provided unlockers.
 
 #### Network based unlocking
-If you want to use network based unlocking you will need to specify `rd.neednet=1` as kernel argument or use `--hostonly-cmdline` when creating dracut.
+If you want to use network based unlocking you will need to specify `rd.neednet=1` as kernel argument or use `--hostonly-cmdline` when creating with dracut.
+
+If you're using **Tang** with TLS (Example: `'{"url": "https://tang.remote"}'`), the folder `/etc/ssl` should be included in the initramfs image, `--include /etc/ssl /etc/ssl --force` when creating with dracut.
 
 #### Unlocker: Dracut
 

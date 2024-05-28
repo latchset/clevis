@@ -34,6 +34,7 @@ debian:*|ubuntu:*)
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof
+    command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) || dnf -y install dnf-command\(builddep\)
     dnf -y builddep clevis
     ;;
 

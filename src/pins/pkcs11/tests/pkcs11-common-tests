@@ -1,0 +1,106 @@
+#!/bin/bash
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>
+#
+# This file is based on OpenSC common test infrastructure:
+# https://github.com/OpenSC/OpenSC/blob/master/tests/common.sh
+#
+SOPIN="12345678"
+PIN="123456"
+P11LIB=""
+SOFTHSM_PATHS="/usr/local/lib/softhsm/libsofthsm2.so \
+/usr/lib/softhsm/libsofthsm2.so \
+/usr/lib64/pkcs11/libsofthsm2.so"
+
+for hsmlib in ${SOFTHSM_PATHS}; do
+    if [[ -f "${hsmlib}" ]]; then
+        P11LIB="${hsmlib}"
+        break
+    fi
+done
+
+# Check required libraries
+if [[ -z "${P11LIB}" ]]; then
+    echo "Warning: Could not find the softhsm pkcs11 module library"
+    echo "Warning: Searched files:${SOFTHSM_PATHS}"
+fi
+
+# Check required commands
+if ! type pkcs11-tool; then
+    echo "Warning: Could not find pkcs11-tool"
+fi
+if ! type openssl; then
+    echo "Warning: Could not find openssl command"
+fi
+
+function generate_public_key() {
+    TYPE="$1"
+    ID="$2"
+    LABEL="$3"
+
+    # Generate key pair
+    if ! pkcs11-tool --keypairgen --key-type="${TYPE}" --login --pin="${PIN}" \
+        --module="${P11LIB}" --label="${LABEL}" --id="${ID}"; then
+        echo "Couldn't generate ${TYPE} key pair"
+    return 1
+    fi
+
+    # Extract public key
+    if ! pkcs11-tool --read-object --id "${ID}" --type pubkey --output-file \
+         "${ID}".der --module="${P11LIB}";
+    then
+        echo "Couldn't read generated ${TYPE} public key"
+        return 1
+    fi
+
+    if [[ ${TYPE:0:3} == "RSA" ]]; then
+        openssl rsa -inform DER -outform PEM -in "${ID}".der -pubin > "${ID}".pub
+    else
+        echo "Unsupported key type:${TYPE}"
+        return 1
+    fi
+    rm "${ID}".der
+}
+
+function softhsm_initialize() {
+    echo "directories.tokendir = $(realpath .tokens)" > .softhsm2.conf
+    if [ -d ".tokens" ]; then
+        rm -rf ".tokens"
+    fi
+    mkdir ".tokens"
+    SOFTHSM2_CONF=$(realpath ".softhsm2.conf")
+    export SOFTHSM2_CONF
+    # Init token
+    softhsm2-util --init-token --slot 0 --label "Clevis PKCS11 test" \
+        --so-pin="${SOPIN}" --pin="${PIN}"
+}
+
+function softhsm_lib_setup() {
+    softhsm_initialize
+    # Generate 2048b RSA Key pair (this will generate 00.pub file)
+    generate_public_key "RSA:2048" "00" "RSA2048" || return 1
+}
+
+function softhsm_cleanup() {
+    rm -rf .softhsm2.conf
+    rm -rf ".tokens"
+}
+
+function softhsm_lib_cleanup() {
+    softhsm_cleanup
+    rm 00.pub
+}

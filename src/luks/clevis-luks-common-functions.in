@@ -177,6 +177,22 @@ clevis_luks_print_pin_config() {
 
     local pin=
     case "${P}" in
+    pkcs11)
+        local uri
+        uri="$(jose fmt -j- -g uri -u- <<< "${content}")"
+        mechanism="$(jose fmt -j- -g mechanism -u- <<< "${content}")"
+        if [ -z "${mechanism}" ]; then
+            pin=$(printf '{"uri":"%s"}' "${uri}")
+        else
+            pin=$(printf '{"uri":"%s", "mechanism":"%s"}' "${uri}" "${mechanism}")
+        fi
+        printf "pkcs11 '%s'" "${pin}"
+        ;;
+    sss)
+        local threshold
+        threshold=$(jose fmt -j- -Og t -o- <<< "${content}")
+        clevis_luks_process_sss_pin "${content}" "${threshold}"
+        ;;
     tang)
         local url
         url="$(jose fmt -j- -g url -u- <<< "${content}")"
@@ -196,11 +212,6 @@ clevis_luks_print_pin_config() {
         # Remove possible leading comma.
         pin=${pin/#,/}
         printf "tpm2 '{%s}'" "${pin}"
-        ;;
-    sss)
-        local threshold
-        threshold=$(jose fmt -j- -Og t -o- <<< "${content}")
-        clevis_luks_process_sss_pin "${content}" "${threshold}"
         ;;
     *)
         printf "unknown pin '%s'" "${P}"
@@ -241,6 +252,7 @@ clevis_luks_process_sss_pin() {
     local jwe="${1}"
     local threshold="${2}"
 
+    local sss_pkcs11
     local sss_tang
     local sss_tpm2
     local sss
@@ -255,6 +267,9 @@ clevis_luks_process_sss_pin() {
         fi
         read -r pin cfg <<< "${pin_cfg}"
         case "${pin}" in
+        pkcs11)
+            sss_pkcs11="${sss_pkcs11},${cfg}"
+            ;;
         tang)
             sss_tang="${sss_tang},${cfg}"
             ;;
@@ -274,6 +289,10 @@ clevis_luks_process_sss_pin() {
 
     if [ -n "${sss_tpm2}" ]; then
         cfg="${cfg},"$(clevis_luks_join_sss_cfg "tpm2" "${sss_tpm2}")
+    fi
+
+    if [ -n "${sss_pkcs11}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "pkcs11" "${sss_pkcs11}")
     fi
 
     if [ -n "${sss}" ]; then

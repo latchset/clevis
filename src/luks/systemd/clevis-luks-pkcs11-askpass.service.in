@@ -1,0 +1,8 @@
+[Unit]
+Description=Unencrypt through PKCS11
+DefaultDependencies=no
+PartOf=clevis-luks-pkcs11-askpass.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/clevis-luks-pkcs11-askpass

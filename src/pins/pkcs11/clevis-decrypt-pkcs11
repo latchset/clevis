@@ -1,0 +1,134 @@
+#!/bin/bash
+set -eo pipefail
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+PIN_NAME=pkcs11
+PIN_FILE="/run/systemd/clevis-pkcs11.pin"
+. clevis-pkcs11-common
+
+[ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
+
+if [ -t 0 ]; then
+    exec >&2
+    echo
+    echo "Usage: clevis decrypt pkcs11 < JWE > PLAINTEXT"
+    echo
+    exit 2
+fi
+
+on_exit() {
+    [ -d "${CLEVIS_PKCS11}" ] || exit 0
+    rm -rf "${CLEVIS_PKCS11}"
+}
+
+unset CLEVIS_PKCS11
+
+read -r -d . hdr64
+
+# Check for corruption in the header.
+if ! hdr="$(jose fmt --quote="${hdr64}" --string --b64load --object \
+            --output=- 2>/dev/null)" ; then
+    echo "JWE header corrupt" >&2
+    exit 1
+fi
+
+# Check if the pin is the expected one.
+if ! pin="$(jose fmt --json="${hdr}" --get clevis --get pin \
+            --unquote=- 2>/dev/null)" || [ -z "${pin}" ]; then
+    echo "Invalid JWE header: unable to identify 'pin'" >&2
+    exit 1
+fi
+if [ "${pin}" != "${PIN_NAME}" ]; then
+    echo "JWE pin mismatch: found: ${pin}; expected: ${PIN_NAME}" >&2
+    exit 1
+fi
+
+if ! uri="$(jose fmt -j- -Og clevis -g "${PIN_NAME}" -g uri -Su- <<< "${hdr}")"; then
+    echo "URI missing required 'clevis.pkcs11.uri' header parameter!" >&2
+    exit 1
+fi
+
+mechanism_option=""
+mechanism="$(jose fmt -j- -Og clevis -g "${PIN_NAME}" -g mechanism -Su- <<< "${hdr}")" \
+             2>/dev/null || :
+if [ -n "${mechanism}" ]; then
+    mechanism_option="--mechanism ${mechanism}"
+fi
+
+if ! clevis_valid_pkcs11_uri "${uri}"; then
+    echo "PKCS#11 URI with invalid format:[${uri}]" >&2
+    echo "PKCS#11 URI expected format:[${URI_EXPECTED_FORMAT}]" >&2
+    exit 1
+fi
+
+module_opt=""
+if module_path="$(clevis_get_module_path_from_uri ${uri})"; then
+     module_opt="--module ${module_path}"
+fi
+
+if ! slot=$(clevis_get_pkcs11_final_slot_from_uri "${uri}"); then
+    slot_opt=""
+else
+    slot_opt=" --slot-index=${slot}"
+fi
+
+# Check if key parameter is present.
+if ! enc_jwk="$(jose fmt --json="${hdr}" --get clevis --get "${PIN_NAME}" \
+                --get key --unquote=- 2>/dev/null)" \
+                || [ -z "${enc_jwk}" ]; then
+    echo "JWE missing 'clevis.${PIN_NAME}.key' header parameter" >&2
+    exit 1
+fi
+
+if ! CLEVIS_PKCS11="$(mktemp -d)" || [ -z "${CLEVIS_PKCS11}" ]; then
+    echo "Creating a temporary dir for PKCS11 files failed" >&2
+    exit 1
+fi
+trap 'on_exit' EXIT
+
+# Error file
+ERR="${CLEVIS_PKCS11}/decerr"
+
+# Decrypt the key.
+ENC="${CLEVIS_PKCS11}/enc"
+if ! printf '%s' "${enc_jwk}" | jose b64 dec -i- > "${ENC}"  2>"${ERR}"; then
+    cat "${ERR}" >&2
+    echo "Unable to base64-decode the JWK" >&2
+    exit 1
+fi
+
+PIN_value=""
+if ! PIN_value="$(clevis_get_pin_value_from_uri ${uri})"; then
+    PIN_value=$(cat "${PIN_FILE}" 2>/dev/null || :)
+fi
+
+if ! jwk="$(pkcs11-tool --login --decrypt --input-file ${ENC} \
+            -p ${PIN_value} ${module_opt} ${mechanism_option} ${slot_opt} 2>${ERR})" \
+            || [ -z "${jwk}" ]; then
+    cat "${ERR}" >&2
+    echo "Unable to decrypt the JWK" >&2
+    # TODO: Verify invalid PIN more accurately
+    echo "Invalid PIN?" >&2
+    exit 1
+fi
+
+rm -rf "${PIN_FILE}" 2>/dev/null || :
+
+# Decrypt the data using the decrypted JWK.
+( printf '%s' "${jwk}${hdr64}." ; cat ) | exec jose jwe dec --key=- --input=-

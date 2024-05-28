@@ -1,0 +1,154 @@
+#!/bin/bash -xe
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# shellcheck disable=SC1091
+. pkcs11-common-tests
+. tests-common-functions
+. clevis-luks-common-functions
+
+on_exit() {
+    exit_status=$?
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+if [[ ! -f "${P11LIB}" ]]; then
+    echo "WARNING: The SoftHSM is not installed. Can not run this test"
+    exit 77;
+fi
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+softhsm_lib_setup
+test "$?" == 0
+
+SECRET_WORD="secret"
+SUPPORTED_MECHANISM="RSA-PKCS"
+CLEVIS_PIN="pkcs11"
+DEFAULT_SLOT="0"
+
+sword=$(echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB}?pin-value=${PIN}\"\
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" | clevis decrypt)
+test "${sword}" == "${SECRET_WORD}"
+
+sword=$(echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB};slot=${DEFAULT_SLOT}\
+?pin-value=${PIN}\",\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" \
+| clevis decrypt)
+test "${sword}" == "${SECRET_WORD}"
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB}?pin-value=${PIN}\" \
+,\"mechanism\":\"INVALID_MECHANISM\"}" 2>/dev/null
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB}?pin-value=${PIN}\"\
+,\"mechanism\":\"INVALID_MECHANISM\"}" 2>/dev/null
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB};slot=1?pin-value=${PIN}\" \
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" 2>/dev/null
+
+sword=$(echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB}?pin-value=INVALID_PIN\"\
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" 2>/dev/null | clevis decrypt 2>/dev/null || :)
+test "${sword}" != "${SECRET_WORD}" 2>/dev/null
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=/usr/lib/wrong_modulepath.so?pin-value=${PIN}\"\
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" 2>/dev/null
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:?pin-value=${PIN}\"\
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}" 2>/dev/null
+
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 "{\"uri\":\"pkcs12:\"}" \
+2>/dev/null
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 "{\"uri\":\":\"}" 2>/dev/null
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 "{\"uri\":\"\"}" 2>/dev/null
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 "{\"uri\":}" 2>/dev/null
+! echo "${SECRET_WORD}" | clevis encrypt pkcs11 "{}" 2>/dev/null
+
+# Let's try some bindings
+# LUKS2.
+DEV="${TMP}/luks2-device"
+new_device "luks2" "${DEV}"
+
+CFG=$(printf '{"uri": "pkcs11:module-path=%s?pin-value=%s", "mechanism":"%s"}' \
+"${P11LIB}" "${PIN}" "${SUPPORTED_MECHANISM}")
+if ! clevis luks bind -f -d "${DEV}" "${CLEVIS_PIN}" "${CFG}" <<< \
+"${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is expected to succeed when given a correct \
+(${DEFAULT_PASS}) password."
+fi
+
+SLT=1
+if ! read -r slot pin cfg < <(clevis luks list -d "${DEV}" -s "${SLT}"); then
+    error "${TEST}: clevis luks list is expected to succeed for device(${DEV}) \
+and slot (${SLT})"
+fi
+
+if [[ "${slot}" != "${SLT}:" ]]; then
+    error "${TEST}: slot (${slot}) is expected to be ${SLT}"
+fi
+
+if [[ "${pin}" != "${CLEVIS_PIN}" ]]; then
+    error "${TEST}: pin (${pin}) is expected to be '${CLEVIS_PIN}'"
+fi
+
+# Check configuration has "uri:"
+if ! [[ "${cfg}" == *"uri"* ]]; then
+    error "${TEST}: configuration (${cfg}) is expected to be contain uri"
+fi
+
+# Test the passphrase
+SLT=1
+PASS=$(clevis luks pass -d "${DEV}" -s "${SLT}")
+if ! clevis_luks_check_valid_key_or_keyfile "${DEV}" "${PASS}" "" "${SLT}"; then
+    error "Passphrase obtained from clevis luks pass failed."
+fi
+
+if ! clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: Unbind is expected to succeed for device ${DEV} and slot ${SLT}"
+fi
+
+SLT=0
+if clevis luks unbind -f -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: Unbind is expected to fail for device ${DEV}:${SLT} \
+that is not bound with clevis"
+fi
+
+WRONGCFG=$(printf '{"uri": "pkcs12:"}')
+if clevis luks bind -f -d "${DEV}" "${CLEVIS_PIN}" "${WRONGCFG}" <<< "${DEFAULT_PASS}"; \
+then
+    error "${TEST}: Binding is expected to fail when given an incorrect configuration:\
+(${WRONGCFG})"
+fi
+
+WRONGCFG=$(printf '{"uri":""}')
+if clevis luks bind -f -d "${DEV}" "${CLEVIS_PIN}" "${WRONGCFG}" <<< "${DEFAULT_PASS}"; \
+then
+    error "${TEST}: Binding is expected to fail when given an empty uri:\
+(${WRONGCFG})"
+fi
+
+softhsm_lib_cleanup
+test "$?" == 0

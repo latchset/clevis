@@ -1,0 +1,245 @@
+#!/bin/bash
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+if [ "$1" = "--summary" ]; then
+    exit 1
+fi
+
+. clevis-luks-common-functions
+
+serial_devices_array=""
+
+URI_EXPECTED_FORMAT="pkcs11:"
+DEFAULT_CRYPTTAB_FILE="/etc/crypttab"
+
+clevis_parse_devices_array() {
+    INPUT_ARRAY=$(pkcs11-tool -L | grep Slot)
+    counter=0
+    while read -r; do
+        serial=$(pkcs11-tool -L | sed -n "/Slot ${counter}/,/Slot $((counter+1))/p" | grep -i "serial num"| awk -F ":" '{print $2}' | tr -d ' ')
+        serial_devices_array[$counter]="${serial}"
+        ((counter++))
+    done <<< "${INPUT_ARRAY}"
+}
+
+clevis_get_serial_by_slot() {
+    clevis_parse_devices_array
+    serial=${serial_devices_array[$1]}
+    if [ -z "${serial}" ]; then
+        return 1
+    fi
+    echo "${serial}"
+    return 0
+}
+
+clevis_valid_pkcs11_uri() {
+    echo "$1" | grep -E "^${URI_EXPECTED_FORMAT}" >/dev/null 2>&1 || return 1
+}
+
+clevis_get_module_path_from_uri() {
+    echo "$1" | grep -E "module-path=" >/dev/null 2>&1 || return 1
+    echo "$1" | awk -F 'module-path=' '{print $2}' | awk -F ";" '{print $1}' \
+        | awk -F "?" '{print $1}'
+}
+
+clevis_get_module_path_from_pkcs11_config() {
+    CRYPTTABFILE="$1"
+    module_list=""
+    [ -z "${CRYPTTABFILE}" ] && CRYPTTABFILE="${DEFAULT_CRYPTTAB_FILE}"
+    while read -r line; do
+        uuid=$(echo "${line}" | awk '{print $2}')
+        if ! mapped_device=$(clevis_map_device "${uuid}"); then
+            echo "Could not check mapped device for UID:${uuid}"
+            continue
+        fi
+        # If no PKCS#11 configuration, advance to next device
+        if ! clevis luks list -d "${mapped_device}" | grep pkcs11 >/dev/null 2>&1; then
+            echo "Device:${mapped_device} does not contain PKCS#11 configuration"
+            continue
+        fi
+        # Get configuration PKCS#11 URI
+        uri=$(clevis luks list -d "${mapped_device}" | awk -F '"uri":' '{print $2}' \
+                | awk -F '"' '{print $2}' | awk -F '"' '{print $1}')
+            if module_path=$(clevis_get_module_path_from_uri "${uri}"); then
+            if [ -z "${module_list}" ]; then
+                module_list="${module_path}"
+            else
+                module_list="${module_list};${module_path}"
+            fi
+        fi
+    done < <(grep -v "^#" "${CRYPTTABFILE}")
+    echo "${module_list}"
+}
+
+clevis_get_pin_value_from_uri() {
+    echo "$1" | grep -E "pin-value=" >/dev/null 2>&1 || return 1
+    echo "$1" | awk -F 'pin-value=' '{print $2}' | awk -F ";" '{print $1}'
+}
+
+clevis_get_slot_from_uri() {
+    echo "$1" | grep -E "slot-id=" >/dev/null 2>&1 || return 1
+    echo "$1" | awk -F 'slot-id=' '{print $2}' | awk -F ";" '{print $1}' \
+        | awk -F "?" '{print $1}'
+}
+
+clevis_percent_unencoding() {
+    echo "$1" | sed -E 's@%20@ @g' | sed -E 's@%21@!@g' | sed -E 's@%22@"@g' \
+        | sed -E 's@%23@#@g' | sed -E 's@%24@$@g' | sed -E 's@%25@%@g' \
+        | sed -E 's@%26@&@g' | sed -E "s@%27@'@g" | sed -E 's@%28@(@g' \
+        | sed -E 's@%29@)@g' | sed -E "s@%2A@*@g" | sed -E 's@%2B@+@g' \
+        | sed -E 's@%2C@,@g' | sed -E "s@%2F@/@g" | sed -E 's@%3A@:@g' \
+        | sed -E 's@%3B@;@g' | sed -E "s@%3D@=@g" | sed -E 's@%3F@?@g' \
+        | sed -E 's!%40!@!g' | sed -E "s@%5B@[@g" | sed -E 's@%5D@]@g'
+}
+
+clevis_get_model_from_uri() {
+    if ! echo "$1" | grep -E "model=" >/dev/null 2>&1; then
+        return 1
+    fi
+    model=$(echo "$1" | awk -F 'model=' '{print $2}' | awk -F ";" '{print $1}' \
+        | awk -F "?" '{print $1}')
+    clevis_percent_unencoding "${model}"
+}
+
+clevis_get_token_from_uri() {
+    if ! echo "$1" | grep -E "token=" >/dev/null 2>&1; then
+        return 1
+    fi
+    token=$(echo "$1" | awk -F 'token=' '{print $2}' | awk -F ";" '{print $1}' \
+        | awk -F "?" '{print $1}')
+    clevis_percent_unencoding "${token}"
+}
+
+clevis_get_serial_from_uri() {
+    if ! echo "$1" | grep -E "serial=" >/dev/null 2>&1; then
+        return 1
+    fi
+    serial=$(echo "$1" | awk -F 'serial=' '{print $2}' | awk -F ";" '{print $1}' \
+        | awk -F "?" '{print $1}')
+    clevis_percent_unencoding "${serial}"
+}
+
+clevis_get_max_pkcs11_slot() {
+    if [ -z "${1}" ]; then
+        module_opt=""
+    else
+        module_opt="--module ${1}"
+    fi
+    if ! pkcs11-tool -L ${module_opt} | grep -i "^slot" | awk '{print $2}' | tail -1; then
+        echo "-1"
+    fi
+}
+
+clevis_pkcs11_filter_uri() {
+    echo "$1" | sed -E 's@module-path=[a-z,A-Z,0-9,/,.]{1,};{0,1}@@' | sed -E 's@;$@@g'
+}
+
+clevis_get_slot_by_serial_from_uri() {
+    module_path=""
+    if ! module_path=$(clevis_get_module_path_from_uri "${1}"); then
+        module_opt=""
+    else
+        module_opt=" --module ${module_path}"
+    fi
+    serialuri=$(clevis_get_serial_from_uri "${1}")
+    for ((s=0; s<=$(clevis_get_max_pkcs11_slot "${module_path}"); s++))
+    do
+        if ! pkcs11-tool -O --slot-index=${s} 1>/dev/null 2>/dev/null; then
+            continue
+        fi
+	serial=$(clevis_get_serial_by_slot "${s}")
+        if [ "${serial}" = "${serialuri}" ]; then
+            echo "${s}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+clevis_get_slot_by_serial_and_token_from_uri() {
+    module_path=""
+    if ! module_path=$(clevis_get_module_path_from_uri "${1}"); then
+        module_opt=""
+    else
+        module_opt=" --module ${module_path}"
+    fi
+    serialuri=$(clevis_get_serial_from_uri "${1}")
+    tokenuri="$(clevis_get_token_from_uri "${1}")"
+    for ((s=0; s<=$(clevis_get_max_pkcs11_slot "${module_path}"); s++))
+    do
+        if pkcs11-tool -L ${module_opt} 2>/dev/null | \
+            grep -i 'serial num' | head -$((s+1)) | tail -1 | \
+            awk -F ':' '{print $2}' | tr -d ' ' | \
+            grep "${serialuri}" 2>/dev/null 1>/dev/null; then
+            pkcs11tokenuri="$(pkcs11-tool -L ${module_opt} 2>/dev/null \
+                | grep -i 'token label' | head -$((s+1)) | tail -1 \
+                | awk -F ':' '{print $2}' | sed -E 's@^ {0,}@@g')"
+            if [ "${tokenuri}" = "${pkcs11tokenuri}" ]; then
+                echo "${s}"
+	        return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+clevis_get_pkcs11_pubkey_slot_from_uri() {
+    module_path=""
+    if ! module_path=$(clevis_get_module_path_from_uri "${1}"); then
+        module_opt=""
+    else
+        module_opt=" --module ${module_path}"
+    fi
+    uri=$(clevis_pkcs11_filter_uri "${1}")
+    for ((s=0; s<=$(clevis_get_max_pkcs11_slot "${module_path}"); s++))
+    do
+        if pkcs11-tool -O ${module_opt} --slot-index ${s} --type pubkey 2>/dev/null \
+            | grep -i 'uri:' | awk -F 'uri:' '{print $2}' | tr -d ' ' \
+            | grep "${uri}" 2>/dev/null 1>/dev/null; then
+            echo "${s}"
+                return 0
+        fi
+    done
+    return 1
+}
+
+clevis_get_pkcs11_final_slot_from_uri() {
+    if slot=$(clevis_get_slot_from_uri "${1}"); then
+        echo "${slot}"
+        return 0
+    fi
+    if [ -z "${slot}" ]; then
+        if slot=$(clevis_get_pkcs11_pubkey_slot_from_uri "${1}"); then
+            echo "${slot}"
+            return 0
+        fi
+    fi
+    if [ -z "${slot}" ]; then
+        if slot=$(clevis_get_slot_by_serial_and_token_from_uri "${1}"); then
+            echo "${slot}"
+            return 0
+        fi
+    fi
+    if [ -z "${slot}" ]; then
+        if slot=$(clevis_get_slot_by_serial_from_uri "${1}"); then
+            echo "${slot}"
+            return 0
+        fi
+    fi
+    return 1
+}

@@ -23,8 +23,7 @@ debian:*|ubuntu:*)
     while ! apt-get -y install ${COMMON} \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
-        libudisks2-dev libaudit-dev systemd; do
-
+        libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev; do
         sleep 5
     done
     ;;
@@ -33,8 +32,10 @@ debian:*|ubuntu:*)
     printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
     dnf -y clean all
     dnf -y --setopt=deltarpm=0 update
-    dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof
-    command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) || dnf -y install dnf-command\(builddep\)
+    dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
+        opensc pcsc-lite softhsm
+    command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) \
+        || dnf -y install dnf-command\(builddep\)
     dnf -y builddep clevis
     ;;
 
@@ -48,7 +49,8 @@ debian:*|ubuntu:*)
     yum -y --allowerasing install ${COMMON}
     yum -y install pkgconfig openssl-devel openssl zlib-devel \
         jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
-        audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts
+        audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts opensc \
+        pcsc-lite softhsm
     sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
     ;;
 esac

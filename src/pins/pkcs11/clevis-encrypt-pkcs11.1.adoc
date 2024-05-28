@@ -1,0 +1,78 @@
+CLEVIS-ENCRYPT-PKCS11(1)
+========================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-pkcs11 - Encrypts using a PKCS#11 device
+
+== SYNOPSIS
+
+*clevis encrypt pkcs11* CONFIG < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt pkcs11* command encrypts using a PKCS#11 device.
+Its only argument is the JSON configuration object.
+
+When using this pin, we create a new random key which is encrypted using the PKCS#11 chip.
+Then at decryption time, the key is decrypted again using the PKCS#11 chip, normally,
+by providing a PIN (Personal Identity Number) at boot time.
+Configuration object must be provided with *uri* JSON key, and JSON value
+associated to *uri* key must start with *pkcs11:* word:
+
+    $ clevis encrypt pkcs11 '{"uri":"pkcs11:"}' < PT > JWE
+
+As an alternative, PIN can be stored at configuration time. For security reasons,
+this is NOT recommended. But, if still required, it can be done through
+*pin-value* parameter:
+
+    $ clevis encrypt pkcs11 '{"uri":"pkcs11:?pin-value=123456"}' < PT > JWE
+
+In case it is required to provide a module library, it can be done through URI
+*module-path" parameter:
+
+    $ clevis encrypt pkcs11 '{"uri":"pkcs11:module-path=/usr/lib64/libykcs11.so"}' < PT > JWE
+
+Clevis will be used in top of OpenSC to provide PKCS#11 functionality. OpenSC, and,
+in particular, `pkcs11-tool`, provides an option to indicate the mechanism to use for decryption.
+For testing purposes, some libraries, such as https://www.opendnssec.org/softhsm[SoftHSM],
+don't work with default `pkcs11-tool` mechanism, so it is required to provide a particular
+mechanism for them to work. For this reason, Clevis can be provided with
+the mechanism to use, in case the default one, *RSA-PKCS-OAEP*, is not valid:
+
+    $ clevis luks bind -d /dev/sda1 pkcs11 '{"uri": "pkcs11:", "mechanism":"RSA-PKCS"}'
+
+To decrypt the data, simply provide the ciphertext (JWE):
+
+    $ clevis decrypt < JWE > PT
+
+Note that like other pins no configuration is used for decryption, this is due
+clevis storing the public and private keys to unseal the encrypted object
+in the JWE so clevis can fetch that information from there.
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *uri*  (string) :
+  The PKCS#11 URI to use (REQUIRED)
+
+* *mechanism*  (string) :
+  Mechanism to be used when working with pkcs11-tool.
+  It must be supported by pkcs11-tool. Examples of supported mechanisms are:
+  - *RSA-PKCS-OAEP* (default one)
+  - *RSA-PKCS*
+
+For a complete list of supported mechanisms, execute next command:
+
+  $ pkcs11-tool -M
+
+It must be highlighted that previous command will show if the mechanism allows
+encryption/decryption, something that is required for PKCS#11 Clevis pin to work
+appropriately.
+
+== SEE ALSO
+
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

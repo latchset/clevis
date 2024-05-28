@@ -19,15 +19,33 @@ if systemd.found() and sd_reply_pass.found()
     install_dir: unitdir,
     configuration: data,
   )
-
+  configure_file(
+    input: 'clevis-luks-pkcs11-askpass.service.in',
+    output: 'clevis-luks-pkcs11-askpass.service',
+    install_dir: unitdir,
+    configuration: data,
+  )
   configure_file(
     input: 'clevis-luks-askpass.in',
     output: 'clevis-luks-askpass',
     install_dir: libexecdir,
     configuration: data
   )
+  configure_file(
+    input: 'clevis-luks-pkcs11-askpass.in',
+    output: 'clevis-luks-pkcs11-askpass',
+    install_dir: libexecdir,
+    configuration: data
+  )
+  configure_file(
+    input: 'clevis-luks-pkcs11-askpin.in',
+    output: 'clevis-luks-pkcs11-askpin',
+    install_dir: libexecdir,
+    configuration: data
+  )
 
   install_data('clevis-luks-askpass.path', install_dir: unitdir)
+  install_data('clevis-luks-pkcs11-askpass.socket', install_dir: unitdir)
 else
   warning('Will not install systemd support due to missing dependencies!')
 endif

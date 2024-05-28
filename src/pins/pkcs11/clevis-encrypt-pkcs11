@@ -1,0 +1,134 @@
+#!/bin/bash
+set -eo pipefail
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+PIN_NAME=pkcs11
+
+SUMMARY="Encrypts using a PKCS#11 token"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ]; then
+    exec >&2
+    echo
+    echo "Usage: clevis encrypt pkcs11 CONFIG < PLAINTEXT > JWE"
+    echo
+    echo "$SUMMARY"
+    echo
+    echo "This command uses the following configuration properties:"
+    echo
+    echo "  uri: <string>   The PKCS#11 URI (REQUIRED)"
+    echo
+    exit 2
+fi
+
+. clevis-pkcs11-common
+
+on_exit() {
+    [ -d "${CLEVIS_PKCS11}" ] || exit 0
+    rm -rf "${CLEVIS_PKCS11}"
+}
+unset CLEVIS_PKCS11
+
+# We first check whether the configuration is a valid JSON.
+if ! cfg="$(jose fmt --json="$1" --object --output=-)" ; then
+    echo 'Configuration is malformed' >&2
+    exit 1
+fi
+
+if ! uri="$(jose fmt -j- -Og uri -u- <<< "$cfg")"; then
+    uri="pkcs11:"
+fi
+
+mechanism="$(jose fmt -j- -Og mechanism -u- <<< "$cfg" 2>/dev/null || :)"
+
+if ! clevis_valid_pkcs11_uri "${uri}"; then
+    echo "PKCS#11 URI with invalid format:[${uri}]" >&2
+    echo "PKCS#11 URI expected format:[${URI_EXPECTED_FORMAT}]" >&2
+    exit 1
+fi
+
+if ! module_path=$(clevis_get_module_path_from_uri "${uri}"); then
+    module_opt=""
+else
+    module_opt=" --module ${module_path}"
+fi
+
+if ! slot=$(clevis_get_pkcs11_final_slot_from_uri "${uri}"); then
+   slot_opt=""
+else
+   slot_opt=" --slot-index=${slot}"
+fi
+
+if ! CLEVIS_PKCS11="$(mktemp -d)" || [ -z "${CLEVIS_PKCS11}" ]; then
+    echo "Creating a temporary dir for PKCS11 files failed" >&2
+    exit 1
+fi
+trap 'on_exit' EXIT
+
+# Error file
+ERR="${CLEVIS_PKCS11}/encerr"
+
+# Let's generate a key.
+if ! jwk="$(jose jwk gen --input='{"alg":"A256GCM"}')" \
+            || [ -z "${jwk}" ]; then
+    echo "Unable to generate JWK" >&2
+    exit 1
+fi
+
+# Now let's encrypt it with the device public key.
+PKEY="${CLEVIS_PKCS11}/pubkey"
+if ! id=$(pkcs11-tool ${slot_opt} -O 2>${ERR} ${module_opt} \
+          | grep -i 'Public' -A10 2>${ERR} | grep 'ID:' \
+	  | head -1 | awk -F 'ID:' '{print $2}' | tr -d ' '); then
+    cat "${ERR}" >&2
+    echo "Unable to obtain public key ID from PKCS#11 device" >&2
+    exit 1
+fi
+
+if ! pkcs11-tool ${slot_opt} ${module_opt} --read-object --type pubkey --id "${id}" \
+    2> "${ERR}" > "${PKEY}"; then
+    cat "${ERR}" >&2
+    echo "Unable to obtain a public key from PKCS#11 device" >&2
+    exit 1
+fi
+
+if ! jwk_enc="$(printf '%s' "${jwk}" | openssl rsautl -encrypt -pubin \
+                                       -inkey "${PKEY}" 2>${ERR} \
+                                     | jose b64 enc -I-)"; then
+    cat "${ERR}" >&2
+    echo "Unable to encrypt JWK with PKCS#11 public key" >&2
+    exit 1
+fi
+
+# And the JWE.
+template=$(printf '{"protected":{"clevis":{"pin":"%s","%s":{"uri":"%s", "mechanism":"%s"}}}}' \
+                  "${PIN_NAME}" "${PIN_NAME}" "${uri}" "${mechanism}")
+
+# Save key.
+jwe="$(jose fmt --json="${template}" --get protected --get clevis \
+       --get "${PIN_NAME}" --quote "${jwk_enc}" --set key -UUUU --output=-)"
+
+# Now we encrypt the data using our key.
+( printf '%s' "${jwe}${jwk}" ; cat ) | exec jose jwe enc \
+                                            --input=- --key=- \
+                                            --detached=- --compact

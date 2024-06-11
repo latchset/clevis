@@ -1,22 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-SUMMARY="Unlock a ZFS dataset using the saved clevis data"
+SUMMARY="Unlock a ZFS dataset using the saved Clevis data"
 
 function usage() {
 	cat >&2 <<-USAGE_END
-		Usage: clevis zfs unlock [-n] [-k KEY] -d DATASET PIN CFG
+		Usage: clevis zfs unlock [-t] [-l LABEL] -d DATASET
 
 		$SUMMARY:
 
-		  -t          Test the clevis configuration without unlocking
-		  -d DATASET  The zfs dataset to unlock
+		  -t          Test the Clevis configuration without unlocking
+		  -d DATASET  The ZFS dataset to unlock
 		  -l LABEL    Use only this label to unlock (defaults to trying all labels)
 
 	USAGE_END
 }
-
-
 
 function main() {
 	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
@@ -27,25 +25,26 @@ function main() {
 	local dataset
 	local test_only=''
 	local label=''
-	while getopts ":d:l:t" o; do
+	while getopts "h:d:l:t" o; do
 		case "$o" in
-		d) dataset="$OPTARG" ;;
-		t) test_only=' (test)' ;;
-		l) label="$OPTARG" ;;
-		*) error "unrecognized argument: -${OPTARG}" ;;
+		h) usage; exit 0;;
+		d) dataset="$OPTARG";;
+		t) test_only=' (test)';;
+		l) label="$OPTARG";;
+		*) error "unrecognized argument: -${OPTARG}";;
 		esac
 	done
 
 	if [ -z "${dataset:-""}" ]; then
-		error "did not specify a device!"
+		error "did not specify a dataset!"
 	fi
 
 	if ! zfs_is_bound "${dataset}"; then
-		error "dataset is not bound with clevis: ${dataset}"
+		error "dataset is not bound with Clevis: ${dataset}"
 	fi
 
 	if [[ -n "${label}" ]]; then
-		label="$(zfs_get_label "${dataset}" "${label}" )"
+		label="$(zfs_get_label "${dataset}" "${label}")"
 		testing -n "unlocking ${dataset} with ${label} ${test_only}... "
 		if unlock_with_label "${dataset}" "${label}" "${test_only}"; then
 			testing 'ok'

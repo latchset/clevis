@@ -85,8 +85,6 @@ function _test() {
 	exit "${exit_code}"
 }
 
-
-
 function _test_is_valid_label() {
 	local expected
 	local result
@@ -139,7 +137,6 @@ function _test_is_valid_label() {
 	success
 }
 
-
 function _test_read_passphrase() {
 	# test with reading from stdin
 	local expected
@@ -162,18 +159,19 @@ function _test_read_passphrase() {
 	[[ "${expected}" == "${result}" ]] && success || failed
 }
 
-
 function _test_zero_pad() {
 	testing 'pad with 4 zeroes'
 	local expected='000051 '
-	local result="$(zero_pad 6 51)"
+	local result
+	result="$(zero_pad 6 51)"
 	[[ "${expected}" == "${result}" ]] && success || failed
 }
 
 function _test_num_list() {
 	testing 'list with zero padding'
 	local expected='00 01 02 03 04 05 06 07 08 09 10 '
-	local result="$(num_list 10)"
+	local result
+	result="$(num_list 10)"
 	[[ "${expected}" == "${result}" ]] && success || failed
 }
 

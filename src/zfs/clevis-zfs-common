@@ -42,7 +42,7 @@ function zfs_set_property() {
 }
 
 # defaults to getting just the value of the given property and only when it is set directly on the dataset ("local")
-zfs_get_property() {
+function zfs_get_property() {
 	local dataset="${1}"
 	local property="${2}"
 	shift 2
@@ -52,7 +52,7 @@ zfs_get_property() {
 function zfs_load_key() {
 	local dataset="${1}"
 	local dry_run="${2:+-n}"
-	zfs load-key ${dry_run} -L prompt "${dataset}" >/dev/null
+	zfs load-key "${dry_run}" -L prompt "${dataset}" >/dev/null
 }
 
 function zfs_test_key() {
@@ -64,7 +64,7 @@ function zfs_unload_key() {
 	zfs unload-key "${dataset}" >/dev/null
 }
 
-# ZFS properties functions to deal with clevis labels
+# ZFS properties functions to deal with Clevis labels
 ##############################################
 
 # valid characters of clevis-zfs labels are: [0-9a-z_]
@@ -102,7 +102,6 @@ function zfs_get_labels() {
 function zfs_get_label() {
 	local dataset="${1}"
 	local label="${2%%:*}"
-	zfs_get_labels "${dataset}" >&2
 	zfs_get_labels "${dataset}" | tr ' ' '\n' | grep -E "^${label}(:|$)"
 }
 
@@ -117,8 +116,9 @@ function zfs_set_labels() {
 function zfs_add_label() {
 	local dataset="${1}"
 	local new_label="${2}"
-	local labels=( $(zfs_get_labels "${dataset}") )
-	local labels+=( "${new_label}" )
+	local labels
+	read -ra labels <<< "$(zfs_get_labels "${dataset}")"
+	labels+=( "${new_label}" )
 	zfs_set_labels "${dataset}" "${labels[*]}"
 }
 
@@ -126,7 +126,8 @@ function zfs_add_label() {
 function zfs_remove_label() {
 	local dataset="${1}"
 	local old_label="${2}"
-	local labels=( $(zfs_get_labels "${dataset}") )
+	local labels
+	read -ra labels <<< "$(zfs_get_labels "${dataset}")"
 	local new_labels=( "${labels[@]/${old_label}}" )
 	zfs_set_labels "${dataset}" "${new_labels[*]}"
 }
@@ -157,6 +158,7 @@ function zfs_is_encryptionroot() {
 
 # does it even exist?
 function zfs_is_dataset() {
+	local dataset="${1}"
 	zfs_get_property "${dataset}" 'name' -snone &>/dev/null
 }
 
@@ -164,7 +166,7 @@ function zfs_is_dataset() {
 function check_valid_dataset() {
 	local dataset="${1}"
 
-	if ! zfs_is_dataset; then
+	if ! zfs_is_dataset "${dataset}"; then
 		error "${dataset} is not a zfs dataset!"
 	fi
 
@@ -187,7 +189,7 @@ function read_passphrase() {
 	"") IFS= read -r -s -p "Enter existing ZFS password for ${dataset}: " existing_key;
 		echo >&2
 		;;
-	 -) IFS= read -r -s -p "" existing_key ;;
+	 -) IFS= read -r -s -p "" existing_key;;
 	 *) keyfile="${key}"
 		if [ -r "${keyfile}" ]; then
 			existing_key="$(< "${keyfile}")"
@@ -206,7 +208,7 @@ function error() {
 }
 
 
-# functions to deal with too large clevis data for a single ZFS property
+# functions to deal with too large Clevis data for a single ZFS property
 ########################################################################
 
 function cut_into_chunks() {
@@ -220,12 +222,14 @@ function zero_pad() {
 
 function num_list() {
 	local last_index="${1}"
-	zero_pad "${#last_index}" $(eval "echo {0..${last_index}}")
+	local indices=()
+	read -ra indices <<< "$(eval "echo {0..${last_index}}")"
+	zero_pad "${#last_index}" "${indices[@]}"
 }
 
 
 
-# functions to add/remove a clevis binding
+# functions to add/remove a Clevis binding
 #########################################
 function zfs_bind_clevis_label() {
 	local dataset="${1}"
@@ -234,12 +238,13 @@ function zfs_bind_clevis_label() {
 
 	local zfs_label_prop="${zfs_label_prefix}:${label}"
 
-	echo >&2 -n 'binding new clevis data... '
+	echo >&2 -n 'binding new Clevis data... '
 	# use a single prop without number suffix if it will fit in one prop
 	if [[ "${#clevis_data}" -lt "${zfs_userprop_value_limit}" ]]; then
 		zfs_set_property "${dataset}" "${zfs_label_prop}" "${clevis_data}"
 	else
-		clevis_chunks=( $(cut_into_chunks <<<"${clevis_data}") )
+		local clevis_chunks=()
+		read -ra clevis_chunks <<< "$(cut_into_chunks <<<"${clevis_data}")"
 		last_index="$(( "${#clevis_chunks[@]}" - 1 ))"
 		width="${#last_index}"
 
@@ -259,7 +264,7 @@ function zfs_bind_clevis_label() {
 	echo >&2 'ok'
 
 	# check if unlocking works
-	echo >&2 -n 'testing new clevis data... '
+	echo >&2 -n 'testing new Clevis data... '
 
 	# somehow clevis-decrypt exits with a non-zero code, but still outputs the
 	# correct data, so we ignore the exit code. zfs_test_key will fail anyway
@@ -304,9 +309,9 @@ function zfs_get_clevis_label() {
 	if [[ "${label}" == "${last_index}" ]]; then
 		zfs_get_property "${dataset}" "${zfs_label_prop}"
 	else
-		clevis_data=()
+		local clevis_data=()
 		for num in $(num_list "${last_index}"); do
-			clevis_data+=( $(zfs_get_property "${dataset}" "${zfs_label_prop}-${num}") )
+			clevis_data+=( "$(zfs_get_property "${dataset}" "${zfs_label_prop}-${num}")" )
 		done
 		local IFS=''
 		echo "${clevis_data[*]}"
@@ -314,7 +319,7 @@ function zfs_get_clevis_label() {
 }
 
 
-function unlock_with_label(){
+function unlock_with_label() {
 	local dataset="${1}"
 	local label="${2}"
 	local test_only="${3:-}"
@@ -330,5 +335,5 @@ function unlock_with_label(){
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 	. clevis-zfs-test
-    _test "$@"
+	_test "$@"
 fi

@@ -132,7 +132,11 @@ function zfs_remove_label() {
 	local labels
 	read -ra labels <<< "$(zfs_get_labels "${dataset}")"
 	local new_labels=( "${labels[@]/${old_label}}" )
-	zfs_set_labels "${dataset}" "${new_labels[*]}"
+	if [[ "${#new_labels}" -eq 0 ]]; then
+		zfs_remove_property "${dataset}" "${zfs_labels_prop}"
+	else
+		zfs_set_labels "${dataset}" "${new_labels[*]}"
+	fi
 }
 
 # functions for checking zfs datasets

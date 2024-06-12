@@ -48,6 +48,10 @@ function main() {
 		error "did not specify a dataset!"
 	fi
 
+	if [ -z "${label}" ] && [ "${unbind_all}" == 'false' ]; then
+		error "did not specify a label!"
+	fi
+
 	if [[ "${force_unbind}" != 'true' ]]; then
 		if ! zfs_is_bound "${dataset}"; then
 			error "dataset is not bound with Clevis: ${dataset}"

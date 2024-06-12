@@ -20,11 +20,11 @@ function usage() {
 }
 
 function findexe() {
-    while read -r -d: path; do
-        [ -f "${path}/${1}" ] && [ -x "${path}/${1}" ] && \
-          echo "${path}/${1}" && return 0
-    done <<< "${PATH}:"
-    return 1
+	[ $# -eq 1 ] || return 1
+	while read -r -d: path; do
+		[ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+	done <<< "$PATH:"
+	return 1
 }
 
 function bind_zfs_dataset() {
@@ -92,7 +92,7 @@ function main() {
 	pin="${*:$((OPTIND++)):1}"
 	if [ -z "$pin" ]; then
 		error "did not specify a pin!"
-	elif ! findexe clevis-encrypt-"${pin}" &>/dev/null; then
+	elif ! eval "findexe clevis-encrypt-${pin}" &>/dev/null; then
 		error "'$pin' is not a valid pin!"
 	fi
 

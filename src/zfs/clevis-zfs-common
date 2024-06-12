@@ -205,8 +205,8 @@ function read_passphrase() {
 }
 
 function error() {
-	usage
 	echo >&2 -e "ERROR: ${*}"
+	usage
 	exit 1
 }
 

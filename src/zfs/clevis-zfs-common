@@ -51,8 +51,11 @@ function zfs_get_property() {
 
 function zfs_load_key() {
 	local dataset="${1}"
-	local dry_run="${2:+-n}"
-	zfs load-key "${dry_run}" -L prompt "${dataset}" >/dev/null
+	local args=( "-L" "prompt" )
+	if [[ -n "${2:-}" ]]; then
+		args+=( "-n" )
+	fi
+	zfs load-key "${args[@]}" "${dataset}" >/dev/null
 }
 
 function zfs_test_key() {

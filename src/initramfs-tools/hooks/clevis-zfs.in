@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2024 Joel Low
 # Author: Shawn Rose <shawnandrewrose@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +19,7 @@
 #
 
 
-PREREQ="cryptroot"
+PREREQ=""
 prereqs()
 {
      echo "$PREREQ"
@@ -47,21 +48,13 @@ find_binary() {
     echo "$resolved"
 }
 
-if [ -n "${FORCE_CLEVIS}" ] && [ "${FORCE_CLEVIS}" != "n" ]; then
-    for f in /sbin/cryptsetup /sbin/dmsetup /lib/cryptsetup/askpass; do
-        if [ ! -e "${DESTDIR}${f}" ]; then
-            die 2 "cryptsetup utility '$f' wasn't found in the generated ramdisk image. "
-        fi
-    done
-fi    
-
 
 copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
 copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
 copy_exec @bindir@/clevis-decrypt-null || die 1 "@bindir@/clevis-decrypt-null not found"
 copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"
-copy_exec @bindir@/clevis-luks-common-functions || die 1 "@bindir@/clevis-luks-common-functions not found"
-copy_exec @bindir@/clevis-luks-list || die 1 "@bindir@/clevis-luks-list not found"
+copy_exec @bindir@/clevis-zfs-common || die 1 "@bindir@/clevis-zfs-common not found"
+copy_exec @bindir@/clevis-zfs-unlock || die 1 "@bindir@/clevis-zfs-unlock not found"
 if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
     copy_exec @bindir@/clevis-decrypt-tpm2 || die 1 "@bindir@/clevis-decrypt-tpm2 not found"
     tpm2_creatprimary_bin=$(find_binary "tpm2_createprimary")
@@ -82,9 +75,7 @@ if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
 fi
 
 
-luksmeta_bin=$(find_binary "luksmeta")
 jose_bin=$(find_binary "jose")
-copy_exec "${luksmeta_bin}" || die 2 "Unable to copy ${luksmeta_bin}"
 copy_exec "${jose_bin}" || die 2 "Unable to copy ${jose_bin}"
 
 

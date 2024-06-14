@@ -106,6 +106,6 @@ function main() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-	. clevis-zfs-common
+	. @libexecdir@/clevis-zfs-common
 	main "${@}"
 fi

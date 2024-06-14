@@ -53,7 +53,7 @@ copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang no
 copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
 copy_exec @bindir@/clevis-decrypt-null || die 1 "@bindir@/clevis-decrypt-null not found"
 copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"
-copy_exec @bindir@/clevis-zfs-common || die 1 "@bindir@/clevis-zfs-common not found"
+copy_exec @libexecdir@/clevis-zfs-common || die 1 "@libexecdir@/clevis-zfs-common not found"
 copy_exec @bindir@/clevis-zfs-unlock || die 1 "@bindir@/clevis-zfs-unlock not found"
 if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
     copy_exec @bindir@/clevis-decrypt-tpm2 || die 1 "@bindir@/clevis-decrypt-tpm2 not found"

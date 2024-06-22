@@ -177,6 +177,9 @@ clevis_luks_print_pin_config() {
 
     local pin=
     case "${P}" in
+    null)
+        printf "null '{}'"
+        ;;
     pkcs11)
         local uri
         uri="$(jose fmt -j- -g uri -u- <<< "${content}")"
@@ -252,6 +255,7 @@ clevis_luks_process_sss_pin() {
     local jwe="${1}"
     local threshold="${2}"
 
+    local sss_null
     local sss_pkcs11
     local sss_tang
     local sss_tpm2
@@ -267,6 +271,9 @@ clevis_luks_process_sss_pin() {
         fi
         read -r pin cfg <<< "${pin_cfg}"
         case "${pin}" in
+        null)
+            sss_null="${sss_null},${cfg}"
+            ;;
         pkcs11)
             sss_pkcs11="${sss_pkcs11},${cfg}"
             ;;
@@ -283,6 +290,10 @@ clevis_luks_process_sss_pin() {
     done
 
     cfg=
+    if [ -n "${sss_null}" ]; then
+        cfg=$(clevis_luks_join_sss_cfg "null" "${sss_null}")
+    fi
+
     if [ -n "${sss_tang}" ]; then
         cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
     fi

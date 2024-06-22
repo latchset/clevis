@@ -33,6 +33,7 @@ TMP="$(mktemp -d)"
 ADV="${TMP}/adv.jws"
 tang_create_adv "${TMP}" "${ADV}"
 PIN="tang"
+PINS="tang"
 CFG=$(printf '{"url": "ADDR","adv": "%s"}' "${ADV}")
 
 # LUKS1.
@@ -61,4 +62,16 @@ to_remove_from_cfg=$(printf ',"adv": "%s"' "${ADV}")
 cfg_for_cmp=${CFG//"${to_remove_from_cfg}"/} #"
 if ! pin_cfg_equal "${cfg}" "${cfg_for_cmp}"; then
     error "${TEST}: config obtained from clevis luks list (${cfg}) is expected to match the one used to bind the test (${cfg_for_cmp})"
+fi
+
+if ! read -r slot pins < <(clevis luks list -d "${DEV}" -s "${SLT}" -p); then
+    error "${TEST}: clevis luks list -p is expected to succeed for device(${DEV}) and slot (${SLT})"
+fi
+
+if [[ "${slot}" != "${SLT}:" ]]; then
+    error "${TEST}: used pins slot (${slot}) is expected to be ${SLT}"
+fi
+
+if [[ "${pins}" != "${PINS}" ]]; then
+    error "${TEST}: used pins (${pins}) are expected to be '${PINS}'"
 fi

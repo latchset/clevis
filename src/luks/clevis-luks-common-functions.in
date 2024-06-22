@@ -208,6 +208,47 @@ clevis_luks_print_pin_config() {
     esac
 }
 
+clevis_luks_used_pins() {
+    local DEV="${1}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local pins=
+    local slt slot_config _ pin pin_cfg sss_pins
+    for slt in ${used_slots}; do
+        if slot_config=$(clevis_luks_read_pins_from_slot "${DEV}" "${slt}"); then
+            read -r _ pin pin_cfg <<< "${slot_config}"
+            if [ "${pin}" = "sss" ]; then
+                # Simple pin extraction - scan for keys in the form "key": and
+                # detect known pins
+                sss_pins=$(echo "${pin_cfg}" | grep -oE '"[^"]+":' | \
+                    sed 's/"\([^"]*\)":/\1/' | grep -E '^(null|tang|tpm1|tpm2|sss)$')
+                pins=$(printf "%s\n%s\n%s" "${pins}" "${pin}" "${sss_pins}")
+            else
+                [ "${pin}" = "unknown" ] && pin=$(echo -n "${pin_cfg}" | awk '{ print $2 }' | tr -d "'")
+                pins=$(printf "%s\n%s" "${pins}" "${pin}")
+            fi
+        fi
+    done
+
+    pins=$(echo -n "${pins}" | sed -e 's/^\n$//' | sort -u | tr '\n' ' ')
+    pins=${pins# }
+    pins=${pins% }
+
+    if [ -n "${pins}" ]; then
+        echo "${pins}"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # clevis_luks_decode_pin_config() will receive a JWE and extract a pin config
 # from it.
 clevis_luks_decode_pin_config() {

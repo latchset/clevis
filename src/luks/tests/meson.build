@@ -54,6 +54,7 @@ if jq.found()
   test('list-recursive-luks1', find_program('list-recursive-luks1'), env: env)
   test('list-tang-luks1', find_program('list-tang-luks1'), env: env)
   test('list-sss-tang-luks1', find_program('list-sss-tang-luks1'), env: env)
+  test('list-multiple-slots-luks1', find_program('list-multiple-slots-luks1'), env: env)
 else
   warning('Will not run "clevis luks list" tests due to missing jq dependency')
 endif
@@ -87,6 +88,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('list-recursive-luks2', find_program('list-recursive-luks2'), env: env, timeout: 60)
     test('list-tang-luks2', find_program('list-tang-luks2'), env: env, timeout: 60)
     test('list-sss-tang-luks2', find_program('list-sss-tang-luks2'), env: env, timeout: 60)
+    test('list-multiple-slots-luks2', find_program('list-multiple-slots-luks2'), env: env, timeout: 60)
   endif
 
   test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)

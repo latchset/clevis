@@ -27,7 +27,7 @@ have_tang_bindings() {
     . clevis-luks-common-functions
     local dev
     for dev in $(clevis_devices_to_unlock "list-open-devices"); do
-        if clevis luks list -d "${dev}" | grep -q tang; then
+        if clevis luks list -d "${dev}" -p | grep -q tang; then
             return 0
         fi
     done

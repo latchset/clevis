@@ -323,6 +323,92 @@ clevis_luks_read_pins_from_slot() {
     printf "%s: %s\n" "${SLOT}" "${cfg}"
 }
 
+# clevis_luks_decode_used_pins() will receive a JWE and extract used pins
+# (line-separated, unsorted, not deduped) from it.
+clevis_luks_decode_used_pins() {
+    local jwe="${1}"
+    local pins=
+
+    local decoded
+    if ! decoded=$(clevis_luks_decode_jwe "${jwe}"); then
+        return 1
+    fi
+
+    local P
+    if ! P=$(jose fmt -j- -Og clevis -g pin -u- <<< "${decoded}"); then
+        return 1
+    fi
+
+    pins=$(printf "%s\n%s" "${pins}" "${P}")
+    if [ "${P}" = "sss" ]; then
+        local sss_jwe
+        if ! sss_jwe="$(jose fmt -j- -g clevis -g "${P}" -o- <<< "${decoded}")" \
+                        || [ -z "${sss_jwe}" ]; then
+            return 1
+        fi
+
+        local coded sss_pins
+        for coded in $(jose fmt -j- -Og jwe -Af- <<< "${sss_jwe}"| tr -d '"'); do
+            if ! sss_pins="$(clevis_luks_decode_used_pins "${coded}")"; then
+                continue
+            fi
+            pins=$(printf "%s\n%s" "${pins}" "${sss_pins}")
+        done
+    fi
+
+    echo "${pins}"
+}
+
+# clevis_luks_read_used_pins_from_slot() will receive a given device and slot
+# and will then output space-separated sorted slot-prefixed list of used pins.
+clevis_luks_read_used_pins_from_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+
+    local jwe
+    if ! jwe=$(clevis_luks_read_slot "${DEV}" "${SLOT}" 2>/dev/null); then
+        return 1
+    fi
+
+    local pins
+    if ! pins=$(clevis_luks_decode_used_pins "${jwe}"); then
+        return 1
+    fi
+
+    pins=$(echo -n "${pins}" | sed -e '/^$/d' | sort -u | tr '\n' ' ' | sed -e 's/ $//')
+    printf "%s: %s\n" "${SLOT}" "${pins}"
+}
+
+# clevis_luks_read_used_pins() will receive a given device and will then output
+# space-separated sorted list of all used pins in all slots.
+clevis_luks_read_used_pins() {
+    local DEV="${1}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local pins=
+    local slot slot_pins used_pins
+    for slot in ${used_slots}; do
+        if ! slot_pins=$(clevis_luks_read_used_pins_from_slot "${DEV}" "${slot}"); then
+            continue
+        fi
+
+        read -r _ used_pins <<< "${slot_pins}"
+        pins=$(printf "%s\n%s" "${pins}" "${used_pins}")
+    done
+
+    pins=$(echo -n "${pins}" | tr ' ' '\n' | sed -e '/^$/d' | sort -u | tr '\n' ' ' | sed -e 's/ $//')
+    [ -z "${pins}" ] && return 1
+
+    echo "${pins}"
+}
+
 # clevis_luks_check_valid_key_or_keyfile() receives a devices and either a
 # passphrase or keyfile and then checks whether it is able to unlock the
 # device wih the received passphrase/keyfile.

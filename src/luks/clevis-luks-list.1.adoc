@@ -26,12 +26,20 @@ For example:
 * *-s* _SLT_ :
   The slot to use for listing the pin from
 
+* *-p* :
+  Print only a sorted space-separated list of bound pins
+
 == EXAMPLES
 
     clevis luks list -d /dev/sda1
     1: sss '{"t":1,"pins":{"tang":[{"url":"addr1"},{"url":"addr2"}],"tpm2":[{"hash":"sha256","key":"ecc"}],"sss":{"t":1,"pins":{"tang":[{"url":"addr3"}]}}}}'
     2: tang '{"url":"addr"}'
     3: tpm2 '{"hash":"sha256","key":"ecc","pcr_bank":"sha1","pcr_ids":"7"}'
+
+    clevis luks list -d /dev/sda1 -p
+    1: sss tang tpm2
+    2: tang
+    3: tpm2
 
 As we can see in the example above, */dev/sda1* has three slots bound each with a different pin.
 

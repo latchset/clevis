@@ -219,6 +219,77 @@ clevis_luks_print_pin_config() {
     esac
 }
 
+clevis_luks_print_used_pins() {
+    local jwe="${1}"
+    local pins=
+
+    local decoded
+    if ! decoded=$(clevis_luks_decode_jwe "${jwe}"); then
+        return 1
+    fi
+
+    local P
+    if ! P=$(jose fmt -j- -Og clevis -g pin -u- <<< "${decoded}"); then
+        return 1
+    fi
+
+    pins=$(printf "%s\n%s" "${pins}" "${P}")
+    if [ "${P}" = "sss" ]; then
+        local sss_jwe
+        if ! sss_jwe="$(jose fmt -j- -g clevis -g "${P}" -o- <<< "${decoded}")" \
+                        || [ -z "${sss_jwe}" ]; then
+            return 1
+        fi
+
+        local coded sss_pins
+        for coded in $(jose fmt -j- -Og jwe -Af- <<< "${sss_jwe}"| tr -d '"'); do
+            if ! sss_pins="$(clevis_luks_print_used_pins "${coded}")"; then
+                continue
+            fi
+            pins=$(printf "%s\n%s" "${pins}" "${sss_pins}")
+        done
+    fi
+
+    echo -n "${pins}"
+}
+
+clevis_luks_used_pins() {
+    local DEV="${1}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local pins=
+    local slt jwe slot_pins
+    for slt in ${used_slots}; do
+        if ! jwe=$(clevis_luks_read_slot "${DEV}" "${slt}" 2>/dev/null); then
+            continue
+        fi
+
+        if ! slot_pins=$(clevis_luks_print_used_pins "${jwe}"); then
+            continue
+        fi
+
+        pins=$(printf "%s\n%s" "${pins}" "${slot_pins}")
+    done
+
+    pins=$(echo -n "${pins}" | sed -e 's/^\n$//' | sort -u | tr '\n' ' ')
+    pins=${pins# }
+    pins=${pins% }
+
+    if [ -n "${pins}" ]; then
+        echo "${pins}"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # clevis_luks_decode_pin_config() will receive a JWE and extract a pin config
 # from it.
 clevis_luks_decode_pin_config() {

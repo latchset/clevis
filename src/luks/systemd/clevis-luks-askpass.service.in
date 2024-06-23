@@ -2,6 +2,8 @@
 Description=Forward Password Requests to Clevis
 Documentation=man:clevis-luks-unlockers(7)
 DefaultDependencies=no
+After=tcsd.service
+Wants=tcsd.service
 Before=shutdown.target
 Conflicts=shutdown.target
 

@@ -168,6 +168,7 @@ clevis_luks_decode_jwe() {
 clevis_luks_print_pin_config() {
     local P="${1}"
     local decoded="${2}"
+    local THP="${3}"
 
     local content
     if ! content="$(jose fmt -j- -g clevis -g "${P}" -o- <<< "${decoded}")" \
@@ -178,9 +179,15 @@ clevis_luks_print_pin_config() {
     local pin=
     case "${P}" in
     tang)
-        local url
+        local url adv thp
         url="$(jose fmt -j- -g url -u- <<< "${content}")"
-        pin=$(printf '{"url":"%s"}' "${url}")
+        if [ -z "${THP}" ]; then
+            pin=$(printf '{"url":"%s"}' "${url}")
+        else
+            adv="$(jose fmt -j- -g adv -o- <<< "${content}")"
+            thp="$(jose jwk thp -i- <<< "${adv}" | tail -n1)"
+            pin=$(printf '{"url":"%s","thp":"%s"}' "${url}" "${thp}")
+        fi
         printf "tang '%s'" "${pin}"
         ;;
     tpm2)
@@ -200,7 +207,7 @@ clevis_luks_print_pin_config() {
     sss)
         local threshold
         threshold=$(jose fmt -j- -Og t -o- <<< "${content}")
-        clevis_luks_process_sss_pin "${content}" "${threshold}"
+        clevis_luks_process_sss_pin "${content}" "${threshold}" "${THP}"
         ;;
     *)
         printf "unknown pin '%s'" "${P}"
@@ -212,6 +219,7 @@ clevis_luks_print_pin_config() {
 # from it.
 clevis_luks_decode_pin_config() {
     local jwe="${1}"
+    local THP="${2}"
 
     local decoded
     if ! decoded=$(clevis_luks_decode_jwe "${jwe}"); then
@@ -223,7 +231,7 @@ clevis_luks_decode_pin_config() {
         return 1
     fi
 
-    clevis_luks_print_pin_config "${P}" "${decoded}"
+    clevis_luks_print_pin_config "${P}" "${decoded}" "${THP}"
 }
 
 # clevis_luks_join_sss_cfg() will receive a list of configurations for a given
@@ -240,6 +248,7 @@ clevis_luks_join_sss_cfg() {
 clevis_luks_process_sss_pin() {
     local jwe="${1}"
     local threshold="${2}"
+    local THP="${3}"
 
     local sss_tang
     local sss_tpm2
@@ -250,7 +259,7 @@ clevis_luks_process_sss_pin() {
 
     local coded
     for coded in $(jose fmt -j- -Og jwe -Af- <<< "${jwe}"| tr -d '"'); do
-        if ! pin_cfg="$(clevis_luks_decode_pin_config "${coded}")"; then
+        if ! pin_cfg="$(clevis_luks_decode_pin_config "${coded}" "${THP}")"; then
             continue
         fi
         read -r pin cfg <<< "${pin_cfg}"
@@ -291,6 +300,7 @@ clevis_luks_process_sss_pin() {
 clevis_luks_read_pins_from_slot() {
     local DEV="${1}"
     local SLOT="${2}"
+    local THP="${3}"
 
     local jwe
     if ! jwe=$(clevis_luks_read_slot "${DEV}" "${SLOT}" 2>/dev/null); then
@@ -298,7 +308,7 @@ clevis_luks_read_pins_from_slot() {
     fi
 
     local cfg
-    if ! cfg="$(clevis_luks_decode_pin_config "${jwe}")"; then
+    if ! cfg="$(clevis_luks_decode_pin_config "${jwe}" "${THP}")"; then
         return 1
     fi
     printf "%s: %s\n" "${SLOT}" "${cfg}"

@@ -4,6 +4,8 @@ Documentation=man:clevis-luks-unlockers(7)
 DefaultDependencies=no
 Before=cryptsetup-pre.target
 Wants=cryptsetup-pre.target
+Before=shutdown.target
+Conflicts=shutdown.target
 
 [Path]
 DirectoryNotEmpty=/run/systemd/ask-password

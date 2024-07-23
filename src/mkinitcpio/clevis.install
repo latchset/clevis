@@ -1,0 +1,63 @@
+#!/bin/bash
+
+build() {
+    local mod
+
+    add_module "dm-crypt"
+    add_module "dm-integrity"
+    if [[ $CRYPTO_MODULES ]]; then
+        for mod in $CRYPTO_MODULES; do
+            add_module "$mod"
+        done
+    else
+        add_all_modules "/crypto/"
+    fi
+
+    add_binary "cryptsetup"
+
+    map add_udev_rule \
+        '10-dm.rules' \
+        '13-dm-disk.rules' \
+        '95-dm-notify.rules' \
+        '/usr/lib/initcpio/udev/11-dm-initramfs.rules'
+
+    # cryptsetup calls pthread_create(), which dlopen()s libgcc_s.so.1
+    add_binary "/usr/lib/libgcc_s.so.1"
+
+    add_binary "clevis"
+    add_binary "clevis-decrypt"
+    add_binary "clevis-decrypt-sss"
+    add_binary "clevis-decrypt-tang"
+    add_binary "clevis-decrypt-tpm2"
+    add_binary "clevis-luks-common-functions"
+    add_binary "clevis-luks-unlock"
+
+    add_binary "bash"
+    add_binary "curl"
+    add_binary "grep"
+    add_binary "jose"
+    [ -f "/usr/bin/luksmeta" ] && add_binary "luksmeta"
+
+    if [ -f "/usr/bin/tpm2" ]; then
+        add_checked_modules '/tpm/'
+        add_binary "tpm2_createprimary"
+        add_binary "tpm2_unseal"
+        add_binary "tpm2_load"
+        add_binary "tpm2_flushcontext"
+        add_binary "/usr/lib/libtss2-tcti-device.so.0"
+    fi
+
+    add_runscript
+}
+
+help() {
+    cat <<HELPEOF
+This hook allows to unlock an encrypted root device using Clevis. Users should
+specify the device to be unlocked using 'cryptdevice=device:dmname' on the
+kernel command line, where 'device' is the path to the raw device, and 'dmname'
+is the name given to the device after unlocking, and will be available as
+/dev/mapper/dmname.
+HELPEOF
+}
+
+# vim: set ft=sh ts=4 sw=4 et:

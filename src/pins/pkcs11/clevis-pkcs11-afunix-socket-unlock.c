@@ -70,21 +70,23 @@ get_control_socket_name(const char* file_sock, char* control_sock, uint32_t cont
 }
 
 static void insert_device(const char* dev) {
+    pthread_mutex_lock(&mutex);
     if(MAX_ENTRIES == entry_counter) {
+        pthread_mutex_unlock(&mutex);
         perror("No more entries accepted\n");
         return;
     }
-    pthread_mutex_lock(&mutex);
     strncpy(keys[entry_counter].dev, dev, MAX_DEVICE);
     pthread_mutex_unlock(&mutex);
 }
 
 static void insert_key(const char* key) {
+    pthread_mutex_lock(&mutex);
     if(MAX_ENTRIES == entry_counter) {
+        pthread_mutex_unlock(&mutex);
         perror("No more entries accepted\n");
         return;
     }
-    pthread_mutex_lock(&mutex);
     strncpy(keys[entry_counter++].key, key, MAX_KEY);
     pthread_mutex_unlock(&mutex);
 }

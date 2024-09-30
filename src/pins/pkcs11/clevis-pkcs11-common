@@ -27,6 +27,56 @@ serial_devices_array=""
 URI_EXPECTED_FORMAT="pkcs11:"
 DEFAULT_CRYPTTAB_FILE="/etc/crypttab"
 
+clevis_detect_pkcs11_device() {
+    dracut_mode="${1:false}"
+    retry_mode="${2:false}"
+    if ! pkcs11_device=$(pkcs11-tool -L 2>/dev/null | grep "Slot" | head -1 | \
+                         awk -F ":" '{print $2}' | sed -e 's@^ *@@g'); then
+        echo ""
+        return 1
+    fi
+
+    if ! pkcs11-tool -O 2>/dev/null 1>/dev/null; then
+        pkcs11_device=""
+        echo "No objects in PKCS11 device detected" >&2
+    fi
+
+    while [ -z "${pkcs11_device}" ]; do
+        if [ "${dracut_mode}" != true ]; then
+            module_paths=$(clevis_get_module_path_from_pkcs11_config "/etc/crypttab")
+            if [ -n "${module_paths}" ]; then
+                modules=$(echo ${module_paths} | tr ";" "\n")
+                for module in $modules; do
+                    pkcs11_device=$(pkcs11-tool -L --module ${module} | grep "Slot" \
+                                    | head -1 | awk -F ":" '{print $2}' | sed -e 's@^ *@@g')
+                    if [ -n "${pkcs11_device}" ]; then
+                        break;
+                    fi
+                done
+            fi
+        fi
+        if [ -z "${pkcs11_device}" ]; then
+            if [ "${retry_mode}" == true ]; then
+                option=$(systemd-ask-password --echo "Detected no PKCS#11 device, retry PKCS#11 detection? [yY/nN]")
+                if [ "${option}" == "N" ] || [ "${option}" == "n" ] ; then
+                    echo ""
+		    # Straight Forward Mode
+                    return 0
+                fi
+                pkcs11_device=$(pkcs11-tool -L | grep "Slot" \
+                                    | head -1 | awk -F ":" '{print $2}' | sed -e 's@^ *@@g')
+                if ! pkcs11-tool -O 2>/dev/null 1>/dev/null; then
+                    pkcs11_device=""
+                    echo "No objects in PKCS11 device detected" >&2
+                fi
+            else
+		echo "${pkcs11_device}"
+                return 0
+            fi
+        fi
+    done
+}
+
 clevis_parse_devices_array() {
     INPUT_ARRAY=$(pkcs11-tool -L | grep Slot)
     counter=0
@@ -64,12 +114,10 @@ clevis_get_module_path_from_pkcs11_config() {
     while read -r line; do
         uuid=$(echo "${line}" | awk '{print $2}')
         if ! mapped_device=$(clevis_map_device "${uuid}"); then
-            echo "Could not check mapped device for UID:${uuid}"
             continue
         fi
         # If no PKCS#11 configuration, advance to next device
         if ! clevis luks list -d "${mapped_device}" | grep pkcs11 >/dev/null 2>&1; then
-            echo "Device:${mapped_device} does not contain PKCS#11 configuration"
             continue
         fi
         # Get configuration PKCS#11 URI

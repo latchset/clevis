@@ -1,6 +1,6 @@
 #!/bin/bash -ex
 
-COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof ${CC}"
+COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof procps ${CC}"
 
 case "${DISTRO}" in
 debian:*|ubuntu:*)

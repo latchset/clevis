@@ -21,7 +21,7 @@
 # validation logic directly.
 
 TEST=$(basename "${0}")
-. tests-common-functions
+. luks-common-test-functions
 
 # is_valid_hash() mirrors the validation logic in clevis_luks_get_hash():
 #   case "${hash}" in *[!a-zA-Z0-9_-]*|"") return 1;; esac

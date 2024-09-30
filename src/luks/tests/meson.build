@@ -14,8 +14,8 @@ else
     warning('keyutils not installed, unable to test existing token id binding')
 endif
 
-common_functions = configure_file(input: 'tests-common-functions.in',
-  output: 'tests-common-functions',
+common_functions = configure_file(input: 'luks-common-test-functions.in',
+  output: 'luks-common-test-functions',
   configuration: luksmeta_data,
   install: false
 )

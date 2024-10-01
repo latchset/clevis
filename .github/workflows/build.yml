@@ -17,7 +17,7 @@ jobs:
       matrix:
         os:
           - fedora:latest
-          - quay.io/centos/centos:stream10-development
+          - quay.io/centos/centos:stream10
           - quay.io/centos/centos:stream9
           - debian:testing
           - debian:latest

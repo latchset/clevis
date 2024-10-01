@@ -23,7 +23,8 @@ debian:*|ubuntu:*)
     while ! apt-get -y install ${COMMON} \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
-        libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev; do
+        libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev \
+        swtpm-tools tpm-tools; do
         sleep 5
     done
     ;;
@@ -35,7 +36,7 @@ debian:*|ubuntu:*)
     dnf -y install --allowerasing systemd awk
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
-        opensc pcsc-lite softhsm
+        opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers
     command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) \
         || dnf -y install dnf-command\(builddep\)
     dnf -y builddep clevis
@@ -48,11 +49,12 @@ debian:*|ubuntu:*)
     yum config-manager -y --set-enabled crb || yum config-manager \
         -y --set-enabled powertools || :
     yum -y install epel-release
+    yum -y install epel-next-release || :
     yum -y --allowerasing install ${COMMON}
     yum -y install pkgconfig openssl-devel openssl zlib-devel \
         jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
         audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts opensc \
-        pcsc-lite softhsm
+        pcsc-lite softhsm swtpm-tools tpm-tools trousers
     sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
     ;;
 esac

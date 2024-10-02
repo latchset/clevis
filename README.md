@@ -455,22 +455,22 @@ $ sudo dnf install clevis clevis-dracut clevis-udisks2
 ## Manual compilation
 
 As remarked in the previous section, **it is suggested not to install Clevis directly**.
-However, in case no Clevis packages exist for your Linux distribution, the steps to 
+However, in case no Clevis packages exist for your Linux distribution, the steps to
 manually compile and install Clevis are next ones:
 
-* Download latest version of the binaries (not that the latest version could change):
+* Download latest version of the binaries (note that the latest version could change):
 ```bash
-$ wget https://github.com/latchset/clevis/releases/download/v19/clevis-19.tar.xz
+$ wget https://github.com/latchset/clevis/releases/download/v21/clevis-21.tar.xz
 ```
 
 * Untar the binaries file:
 ```bash
-$ tar Jxvf clevis-19.tar.xz 
+$ tar Jxvf clevis-21.tar.xz
 ```
 
 * Create build directory and change path to it:
 ```bash
-$ cd clevis-19
+$ cd clevis-21
 $ mkdir build
 $ cd build
 ```

@@ -20,43 +20,6 @@
 
 TEST=$(basename "${0}")
 
-# Code to return to mark test as skipped.
-SKIP_RET_CODE=77
-
-tpm2_available() {
-    # Old environment variables for tpm2-tools 3.0
-    export TPM2TOOLS_TCTI_NAME=device
-    export TPM2TOOLS_DEVICE_FILE=
-    for dev in /dev/tpmrm?; do
-        [ -e "${dev}" ] || continue
-        TPM2TOOLS_DEVICE_FILE="${dev}"
-        break
-    done
-
-    # New environment variable for tpm2-tools >= 3.1
-    export TPM2TOOLS_TCTI="${TPM2TOOLS_TCTI_NAME}:${TPM2TOOLS_DEVICE_FILE}"
-
-    if [ -z "${TPM2TOOLS_DEVICE_FILE}" ]; then
-        echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
-        return 1
-    fi
-
-    if ! [[ -r "${TPM2TOOLS_DEVICE_FILE}" \
-            && -w "${TPM2TOOLS_DEVICE_FILE}" ]]; then
-        echo "The ${TPM2TOOLS_DEVICE_FILE} device must be readable and writable!" >&2
-        return 1
-    fi
-
-    local _tpm2tools_info="$(tpm2_createprimary -v)"
-    local _match='version="(.)\.'
-    [[ ${_tpm2tools_info} =~ ${_match} ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
-    if [[ $TPM2TOOLS_VERSION -lt 3 ]] || [[ $TPM2TOOLS_VERSION -gt 5 ]]; then
-        echo "The tpm2 pin requires a tpm2-tools version between 3 and 5" >&2
-        return 1
-    fi
-    export TPM2TOOLS_VERSION
-}
-
 validate_pcrs() {
     local _pcr_bank="${1}"
     local _pcrs="${2}"
@@ -76,11 +39,6 @@ validate_pcrs() {
     fi
     return 0
 }
-
-# Checking if we can run this test.
-if ! tpm2_available; then
-    exit ${SKIP_RET_CODE}
-fi
 
 decode_jwe() {
     local jwe="${1}"
@@ -160,31 +118,16 @@ else
 fi
 
 # Test with policies if we have the PIN rewrite available
-if ! $(which clevis-pin-tpm2 >/dev/null 2>&1);
+if ! command -v clevis-pin-tpm2 >/dev/null 2>&1;
 then
     echo "No PIN rewrite available"
     exit 0
 fi
-if ! $(which clevis-pin-tpm2-signtool >/dev/null 2>&1);
+if ! command -v clevis-pin-tpm2-signtool >/dev/null 2>&1;
 then
     echo "No policy signtool available"
     exit 0
 fi
-
-function on_exit() {
-    popd
-    if [ ! -d "$TMP" ] || ! rm -rf "$TMP"; then
-        echo "Delete temporary files failed!" >&2
-        echo "You need to clean up: $TMP" >&2
-        exit 1
-    fi
-}
-if ! TMP="$(mktemp -d)"; then
-    echo "Creating a temporary dir for TPM files failed!" >&2
-    exit 1
-fi
-trap 'on_exit' EXIT
-pushd $TMP
 
 clevis-pin-tpm2-signtool >policy_working.json << EOP
 ---

@@ -24,7 +24,7 @@ debian:*|ubuntu:*)
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
         libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev \
-        swtpm-tools tpm-tools; do
+        swtpm-tools tpm-tools tpm2-tools; do
         sleep 5
     done
     ;;

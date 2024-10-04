@@ -58,7 +58,7 @@ if [ -t 0 ]; then
     echo
     echo "  key: <string>   Algorithm type for the generated key (default: ecc)"
     echo
-    echo "  pcr_bank: <string>   PCR algorithm bank to use for policy (default: sha1)"
+    echo "  pcr_bank: <string>   PCR algorithm bank to use for policy (default: first supported by TPM)"
     echo
     echo "  pcr_ids: <string>   PCR list used for policy. If not present, no policy is used"
     echo
@@ -130,7 +130,15 @@ hash="$(jose fmt -j- -Og hash -u- <<< "$cfg")" || hash="sha256"
 
 key="$(jose fmt -j- -Og key -u- <<< "$cfg")" || key="ecc"
 
-pcr_bank="$(jose fmt -j- -Og pcr_bank -u- <<< "$cfg")" || pcr_bank="sha1"
+pcr_bank="$(jose fmt -j- -Og pcr_bank -u- <<< "$cfg")" || {
+    if ! pcr_bank=$(tpm2_getcap pcrs |
+            awk '/^[[:space:]]*-[[:space:]]*([^:]+):[[:space:]]*\[[[:space:]]*[^][:space:]]/ \
+                     {found=1; split($0, m, /[-:[:space:]]+/); print m[2]; exit}
+                 END {exit !found}'); then
+        echo "Unable to find non-empty PCR algorithm bank, please check output of tpm2_getcap pcrs" >&2
+        exit 1
+    fi
+}
 
 # Trim the spaces from the config, so that we will not have issues parsing
 # the PCR IDs.

@@ -223,6 +223,7 @@ if [ -n "$pcr_ids" ]; then
         exit 1
     fi
     tpm2_flushcontext -t
+    tpm2_flushcontext -l
 
     policy_options+=(-L "$TMP/pcr.policy")
 else

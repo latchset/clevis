@@ -91,12 +91,16 @@ This command uses the following configuration properties:
   - *symcipher*
 
 * *pcr_bank*  (string) :
-  PCR algorithm bank to use for policy (default: sha1)
+  PCR algorithm bank to use for policy (default: first supported by TPM)
 
-  It must be one of the following:
+  Examples of PCR algorithm banks, support depends on TPM chip:
 
   - *sha1*
   - *sha256*
+
+  For the full list of algorithms supported by the TPM chip check output of
+  `tpm2_getcap pcrs` and use the algorithm which shows non-empty list of PCR
+  numbers.
 
 * *pcr_ids*  (string) :
   Comma separated list of PCR used for policy. If not present, no policy is used

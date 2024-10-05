@@ -159,7 +159,7 @@ tang_run() {
     pidfile="${basedir}/tang.pid"
     portfile="${basedir}/tang.port"
 
-    "${SOCAT}" -v -v TCP4-LISTEN:0,reuseaddr,fork \
+    "${SOCAT}" -v -v TCP4-LISTEN:0,fork \
                exec:"${TANGD} ${KEYS}" &
     pid=$!
 
@@ -208,12 +208,10 @@ tang_get_adv() {
 
 run_test_server() {
     local basedir="${1}"
-    local port="${1}"
     local response="${2}"
 
     [ -z "${SOCAT}" ] && tang_skip "run_test_server: socat is not available"
     [ -z "${basedir}" ] && tang_error "run_test_server: please specify 'basedir'"
-    [ -z "${port}" ] && tang_error "run_test_server: please specify 'port'"
     [ -z "${response}" ] && tang_error "run_test_server: please specify 'response'"
 
     local pid pidfile portfile

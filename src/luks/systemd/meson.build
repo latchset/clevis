@@ -1,6 +1,8 @@
 systemd = dependency('systemd', required: false)
+systemdutildir = systemd.found() ? systemd.get_pkgconfig_variable('systemdutildir', default: '') : ''
 
 sd_reply_pass = find_program(
+  (systemdutildir != '') ? join_paths(systemdutildir, 'systemd-reply-password') : '',
   join_paths(get_option('prefix'), get_option('libdir'), 'systemd', 'systemd-reply-password'),
   join_paths(get_option('prefix'), 'lib', 'systemd', 'systemd-reply-password'),
   join_paths('/', 'usr', get_option('libdir'), 'systemd', 'systemd-reply-password'),

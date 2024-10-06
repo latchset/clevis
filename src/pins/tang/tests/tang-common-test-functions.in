@@ -218,7 +218,7 @@ run_test_server() {
     pidfile="${basedir}/tang.pid"
     portfile="${basedir}/tang.port"
 
-    "${SOCAT}" -v -v TCP4-LISTEN:0,reuseaddr,bind=localhost SYSTEM:"cat ${response}" &
+    "${SOCAT}" -v -v TCP4-LISTEN:0,bind=localhost "SYSTEM:cat ${response}!!OPEN:/dev/null" &
     pid=$!
 
     echo "${pid}" > "${pidfile}"

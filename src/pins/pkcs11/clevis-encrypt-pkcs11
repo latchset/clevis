@@ -112,7 +112,7 @@ if ! pkcs11-tool ${slot_opt} ${module_opt} --read-object --type pubkey --id "${i
     exit 1
 fi
 
-if ! jwk_enc="$(printf '%s' "${jwk}" | openssl rsautl -encrypt -pubin \
+if ! jwk_enc="$(printf '%s' "${jwk}" | openssl rsautl -encrypt -pubin -keyform DER \
                                        -inkey "${PKEY}" 2>${ERR} \
                                      | jose b64 enc -I-)"; then
     cat "${ERR}" >&2

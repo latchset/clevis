@@ -17,6 +17,13 @@
 #
 # shellcheck disable=SC2154
 #
+
+check() {
+    require_binaries pcscd pkcs11-tool clevis-decrypt-pkcs11 || return 1
+    require_binaries awk head sed socat tail tr || return 1
+    return 0
+}
+
 depends() {
     echo clevis
     return 255

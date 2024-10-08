@@ -20,6 +20,7 @@
 . pkcs11-common-tests
 . tests-common-functions
 . clevis-luks-common-functions
+. clevis-pkcs11-common
 
 on_exit() {
     exit_status=$?
@@ -148,6 +149,17 @@ if clevis luks bind -f -d "${DEV}" "${CLEVIS_PIN}" "${WRONGCFG}" <<< "${DEFAULT_
 then
     error "${TEST}: Binding is expected to fail when given an empty uri:\
 (${WRONGCFG})"
+fi
+
+if command -v ps && command -v killall; then
+    if ! clevis_start_pcscd_server;
+    then
+        error "${TEST}: Could not start pcscd server"
+    fi
+    if ! killall -9 pcscd;
+    then
+        error "${TEST}: Could not kill pcscd server"
+    fi
 fi
 
 softhsm_lib_cleanup

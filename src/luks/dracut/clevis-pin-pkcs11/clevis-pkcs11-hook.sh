@@ -16,9 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
+. /usr/bin/clevis-pkcs11-common
+
 if [ ! -f /run/systemd/clevis-pkcs11.run ] && [ -d /run/systemd ];
 then
-  pcscd --disable-polkit
-  echo "" > /run/systemd/clevis-pkcs11.run
-  /usr/libexec/clevis-luks-pkcs11-askpin -d -r
+    clevis_start_pcscd_server
+    echo "" > /run/systemd/clevis-pkcs11.run
+    /usr/libexec/clevis-luks-pkcs11-askpin -d -r
 fi

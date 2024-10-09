@@ -62,20 +62,40 @@ advertisement is stored, or the JSON contents of the advertisement itself. When
 the advertisement is specified manually like this, Clevis presumes that the
 advertisement is trusted.
 
-#### PIN: TPM2
+#### PIN: TPM1 and TPM2
 
-Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
-chip. The cryptographically-strong, random key used for encryption is encrypted
-using the TPM2 chip, and is decrypted using TPM2 at the time of decryption to allow clevis to decrypt the secret stored in the JWE.
+Clevis provides support to encrypt a key in a Trusted Platform Module 1.2 (TPM1)
+and 2.0 (TPM2) chips. The cryptographically-strong, random key used for
+encryption is encrypted using the TPM chip, and is decrypted using TPM at the
+time of decryption to allow clevis to decrypt the secret stored in the JWE.
 
-For example:
+For example for TPM1 pin:
+
+```bash
+$ echo hi | clevis encrypt tpm1 '{}' > hi.jwe
+```
+
+or TPM2 pin:
 
 ```bash
 $ echo hi | clevis encrypt tpm2 '{}' > hi.jwe
 ```
 
 Clevis store the public and private keys of the encrypted key in the JWE object,
-so those can be fetched on decryption to unseal the key encrypted using the TPM2.
+so those can be fetched on decryption to unseal the key encrypted using the TPM
+chip.
+
+Check manual pages for `clevis-encrypt-tpm1` and `clevis-encrypt-tpm2` tools for
+more options, like binding to a particular PCR registry states and/or values.
+
+##### TPM1 PIN Limitations
+
+To prevent asking for the password during unlocking, encryption and decryption
+expects that the well-known storage root key (SRK) has been configured when
+gaining the TPM 1.2 chip ownership. This means that either the
+`tpm_takeownership --srk-well-known` command has been used during setup or
+`tpm_changeownerauth --srk --well-known` has been called to change it. Please
+note that the _well-known key_ is not equivalent to an empty key.
 
 #### PIN: PKCS#11
 

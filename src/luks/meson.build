@@ -66,6 +66,8 @@ if libcryptsetup.found() and luksmeta.found()
 
   bins += join_paths(meson.current_source_dir(), 'clevis-luks-pass')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-pass.1')
+
+  install_data('clevis-luks-tpm1-functions', install_dir: libexecdir)
 else
   warning('Will not install LUKS support due to missing dependencies!')
 endif

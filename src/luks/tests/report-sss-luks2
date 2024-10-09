@@ -19,7 +19,7 @@
 #
 
 TEST="${0}"
-. tests-common-functions
+. luks-common-test-functions
 . clevis-luks-common-functions
 
 function on_exit() {

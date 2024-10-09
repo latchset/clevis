@@ -14,8 +14,8 @@ else
     warning('keyutils not installed, unable to test existing token id binding')
 endif
 
-common_functions = configure_file(input: 'tests-common-functions.in',
-  output: 'tests-common-functions',
+common_functions = configure_file(input: 'luks-common-test-functions.in',
+  output: 'luks-common-test-functions',
   configuration: luksmeta_data,
   install: false
 )
@@ -26,6 +26,7 @@ env.prepend('PATH',
   join_paths(meson.source_root(), 'src', 'luks'),
   join_paths(meson.source_root(), 'src', 'pins', 'sss'),
   join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.source_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.source_root(), 'src', 'pins', 'tpm2'),
   meson.current_source_dir(),
   meson.current_build_dir(),
@@ -34,6 +35,7 @@ env.prepend('PATH',
   join_paths(meson.build_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
+  join_paths(meson.build_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
   separator: ':'
 )

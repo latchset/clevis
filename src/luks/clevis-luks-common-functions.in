@@ -177,6 +177,9 @@ clevis_luks_print_pin_config() {
 
     local pin=
     case "${P}" in
+    null)
+        printf "null '{}'"
+        ;;
     pkcs11)
         local uri
         uri="$(jose fmt -j- -g uri -u- <<< "${content}")"
@@ -199,6 +202,11 @@ clevis_luks_print_pin_config() {
         pin=$(printf '{"url":"%s"}' "${url}")
         printf "tang '%s'" "${pin}"
         ;;
+    tpm1)
+        pcr_ids="$(jose fmt -j- -g pcr_ids -u- <<< "${content}")"
+        pin=$(printf '"pcr_ids":"%s"' "${pcr_ids}")
+        printf "tpm1 '{%s}'" "${pin}"
+        ;;
     tpm2)
         # Valid properties for tpm2 pin are the following:
         # hash, key, pcr_bank, pcr_ids, pcr_digest.
@@ -217,6 +225,47 @@ clevis_luks_print_pin_config() {
         printf "unknown pin '%s'" "${P}"
         ;;
     esac
+}
+
+clevis_luks_used_pins() {
+    local DEV="${1}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local pins=
+    local slt slot_config _ pin pin_cfg sss_pins
+    for slt in ${used_slots}; do
+        if slot_config=$(clevis_luks_read_pins_from_slot "${DEV}" "${slt}"); then
+            read -r _ pin pin_cfg <<< "${slot_config}"
+            if [ "${pin}" = "sss" ]; then
+                # Simple pin extraction - scan for keys in the form "key": and
+                # detect known pins
+                sss_pins=$(echo "${pin_cfg}" | grep -oE '"[^"]+":' | \
+                    sed 's/"\([^"]*\)":/\1/' | grep -E '^(null|tang|tpm1|tpm2|sss)$')
+                pins=$(printf "%s\n%s\n%s" "${pins}" "${pin}" "${sss_pins}")
+            else
+                [ "${pin}" = "unknown" ] && pin=$(echo -n "${pin_cfg}" | awk '{ print $2 }' | tr -d "'")
+                pins=$(printf "%s\n%s" "${pins}" "${pin}")
+            fi
+        fi
+    done
+
+    pins=$(echo -n "${pins}" | sed -e 's/^\n$//' | sort -u | tr '\n' ' ')
+    pins=${pins# }
+    pins=${pins% }
+
+    if [ -n "${pins}" ]; then
+        echo "${pins}"
+        return 0
+    else
+        return 1
+    fi
 }
 
 # clevis_luks_decode_pin_config() will receive a JWE and extract a pin config
@@ -252,8 +301,10 @@ clevis_luks_process_sss_pin() {
     local jwe="${1}"
     local threshold="${2}"
 
+    local sss_null
     local sss_pkcs11
     local sss_tang
+    local sss_tpm1
     local sss_tpm2
     local sss
     local pin_cfg
@@ -267,11 +318,17 @@ clevis_luks_process_sss_pin() {
         fi
         read -r pin cfg <<< "${pin_cfg}"
         case "${pin}" in
+        null)
+            sss_null="${sss_null},${cfg}"
+            ;;
         pkcs11)
             sss_pkcs11="${sss_pkcs11},${cfg}"
             ;;
         tang)
             sss_tang="${sss_tang},${cfg}"
+            ;;
+        tpm1)
+            sss_tpm1="${sss_tpm1},${cfg}"
             ;;
         tpm2)
             sss_tpm2="${sss_tpm2},${cfg}"
@@ -283,8 +340,16 @@ clevis_luks_process_sss_pin() {
     done
 
     cfg=
+    if [ -n "${sss_null}" ]; then
+        cfg=$(clevis_luks_join_sss_cfg "null" "${sss_null}")
+    fi
+
     if [ -n "${sss_tang}" ]; then
         cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tpm1}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tpm1" "${sss_tpm1}")
     fi
 
     if [ -n "${sss_tpm2}" ]; then

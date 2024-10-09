@@ -142,8 +142,10 @@ test_pcr_ids "${orig}" '{"key": "ecc"}' "" || exit 1
 # arrays and check if we get the expected pcr_ids.
 
 # Let's first make sure this would be a valid configuration.
-_default_pcr_bank="sha1"
-if validate_pcrs "${_default_pcr_bank}" "4,16"; then
+_default_pcr_bank=$(tpm2_getcap pcrs |
+    awk '/^[[:space:]]*-[[:space:]]*([^:]+):[[:space:]]*\[[[:space:]]*[^][:space:]]/ \
+             {split($0, m, /[-:[:space:]]+/); print m[2]; exit}')
+if [ -n "$_default_pcr_bank" ] && validate_pcrs "${_default_pcr_bank}" "4,16"; then
     test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
     test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
     test_pcr_ids "${orig}" '{"pcr_ids": "4,  16"}' "4,16" || exit 1

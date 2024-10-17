@@ -52,22 +52,7 @@ get_pkcs11_error() {
     return 0
 }
 
-
-if command -v pcscd; then
-    echo "clevis-pkcs11: starting pcscd if not available ..."
-    PCSCD_PID=$(ps auxf | grep "[p]cscd")
-    echo -e "clevis-pkcs11: pcscd running?:[${PCSCD_PID}]\n"
-    if ! ps auxf | grep "[p]cscd";
-    then
-        if pcscd pcscd --help | grep disable-polkit 1>/dev/null 2>/dev/null; then
-            echo "clevis-pkcs11: starting pcscd with --disable-polkit option ..."
-            pcscd --disable-polkit
-        else
-            echo "clevis-pkcs11: starting pcscd ..."
-            pcscd
-        fi
-    fi
-fi
+clevis_start_pcscd_server
 
 if [ "${dracut_mode}" != true ]; then
     pkcs11-tool -L

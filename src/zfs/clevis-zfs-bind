@@ -1,0 +1,111 @@
+#!/bin/bash
+set -euo pipefail
+
+SUMMARY="Binds a ZFS dataset using the specified policy"
+
+function usage() {
+	cat >&2 <<-USAGE_END
+		Usage: clevis zfs bind [-f] [-k KEY] -d DATASET PIN CFG
+
+		$SUMMARY:
+
+		  -f          Do not prompt when overwriting configuration
+		  -d DATASET  The ZFS dataset on which to perform binding
+		  -l LABEL    The label to use for this binding. Valid characters: letters, numbers and underscores
+
+		  -k KEY      Non-interactively read ZFS password from KEY file
+		  -k -        Non-interactively read ZFS password from standard input
+
+	USAGE_END
+}
+
+function findexe() {
+	[ $# -eq 1 ] || return 1
+	while read -r -d: path; do
+		[ -f "$path/$1" ] && [ -x "$path/$1" ] && echo "$path/$1" && return 0
+	done <<< "$PATH:"
+	return 1
+}
+
+function bind_zfs_dataset() {
+	local dataset="${1}"
+	local label="${2}"
+	local pin="${3}"
+	local cfg="${4}"
+	local key="${5}"
+	local overwrite="${6:-}"
+
+	local existing_key clevis_data
+
+	if [[ -z "${overwrite}" ]] && zfs_is_bound "${dataset}" "${label}"; then
+		error "given label ${label} in dataset ${dataset} already has a Clevis binding, not overwriting."
+	fi
+
+	existing_key="$(read_passphrase "${dataset}" "${key}")"
+
+	if ! zfs_test_key "${dataset}" <<<"${existing_key}"; then
+		error "given key does not unlock ${dataset}"
+	fi
+
+	echo >&2 -n 'creating new Clevis data... '
+	clevis_data="$(clevis encrypt "${pin}" "${cfg}" <<<"${existing_key}")"
+	echo >&2 'ok'
+
+	[[ -n "${overwrite}" ]] && zfs_unbind_clevis_label "${dataset}" "${label}" && echo >&2 'unbound old clevis data'
+
+	zfs_bind_clevis_label "${dataset}" "${label}" "${clevis_data}"
+}
+
+function main() {
+	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
+		echo "$SUMMARY"
+		exit 0
+	fi
+
+	local dataset
+	local pin
+	local cfg
+	local label
+	local key=''
+	local overwrite=''
+	while getopts ":hfd:l:k:" o; do
+		case "$o" in
+		h) usage; exit 0;;
+		f) overwrite='yes';;
+		d) dataset="$OPTARG";;
+		l) label="$OPTARG";;
+		k) key="$OPTARG";;
+		*) error "unrecognized argument: -${OPTARG}";;
+		esac
+	done
+
+	if [ -z "${dataset:-""}" ]; then
+		error "did not specify a dataset!"
+	fi
+
+	check_valid_dataset "${dataset}"
+
+	if [ -z "${label:-}" ]; then
+		error "did not specify a label!"
+	fi
+
+	pin="${*:$((OPTIND++)):1}"
+	if [ -z "$pin" ]; then
+		error "did not specify a pin!"
+	elif ! eval "findexe clevis-encrypt-${pin}" &>/dev/null; then
+		error "'$pin' is not a valid pin!"
+	fi
+
+	cfg="${*:$((OPTIND++)):1}"
+	if [ -z "$cfg" ]; then
+		error "did not specify a pin config!"
+	fi
+
+	bind_zfs_dataset "${dataset}" "${label}" "${pin}" "${cfg}" "${key}" "${overwrite}"
+	echo >&2 "label ${label} on dataset ${dataset} is succesfully bound"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	. @libexecdir@/clevis-zfs-common
+	main "${@}"
+fi

@@ -334,10 +334,18 @@ clevis_luks_check_valid_key_or_keyfile() {
     local EXISTING_TOKEN_ID="${5:-}"
 
     [ -z "${DEV}" ] && return 1
-    [ -z "${EXISTING_TOKEN_ID}" ] && [ -z "${KEYFILE}" ] && [ -z "${KEY}" ] && return 1
 
     local extra_args
     extra_args="$([ -n "${SLT}" ] && printf -- '--key-slot %s' "${SLT}")"
+
+    # We have an empty key here.
+    if [ -z "${EXISTING_TOKEN_ID}" ] && [ -z "${KEYFILE}" ] \
+         && [ -z "${KEY}" ]; then
+        echo | cryptsetup open --force-password --test-passphrase "${DEV}" \
+               ${extra_args}
+        return
+    fi
+
     if [ -n "${KEYFILE}" ]; then
         cryptsetup open --test-passphrase "${DEV}" --key-file "${KEYFILE}" \
                    ${extra_args}
@@ -798,7 +806,6 @@ clevis_luks_add_key() {
 
     [ -z "${DEV}" ] && return 1
     [ -z "${NEWKEY}" ] && return 1
-    [ -z "${EXISTING_TOKEN_ID}" ] && [ -z "${KEY}" ] && [ -z "${KEYFILE}" ] && return 1
 
     local extra_args='' input
     input="$(printf '%s\n%s' "${KEY}" "${NEWKEY}")"

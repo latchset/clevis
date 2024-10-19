@@ -45,9 +45,21 @@ TOKEN_ID=5
 new_device "luks2" "${DEV}"
 
 if ! clevis luks bind -d "${DEV}" -t "$TOKEN_ID" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
-    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password." >&2
+    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password."
 fi
 
 if ! cryptsetup token export --token-id=5 "${DEV}"; then
-    error "${TEST}: Clevis did not add the LUKS2 token to the correct slot." >&2
+    error "${TEST}: Clevis did not add the LUKS2 token to the correct slot."
+fi
+
+# Empty password (issue #494)
+DEV="${TMP}/luks2-device-empty-pw"
+new_device "luks2" "${DEV}"
+
+# Let's create an empty password.
+printf '%s\n\n' "${DEFAULT_PASS}" | cryptsetup luksChangeKey \
+    --force-password --batch-mode "${DEV}"
+
+if ! clevis luks bind -d "${DEV}" tang "${CFG}" <<< ""; then
+    error "${TEST}: Binding is expected to succeed when the password is empty."
 fi

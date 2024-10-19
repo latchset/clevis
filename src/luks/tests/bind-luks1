@@ -40,18 +40,30 @@ UUID="cb6e8904-81ff-40da-a84a-07ab9ab5715e"
 new_device "luks1" "${DEV}"
 
 if ! clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
-    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password." >&2
+    error "${TEST}: Binding is expected to succeed when given a correct (${DEFAULT_PASS}) password."
 fi
 
 SLT=1
 if ! read -r _ state uuid < <(luksmeta show -d "${DEV}" | grep "^${SLT} *"); then
-    error "${TEST}: Error reading LUKSmeta info for slot ${SLT} of ${DEV}." >&2
+    error "${TEST}: Error reading LUKSmeta info for slot ${SLT} of ${DEV}."
 fi
 
 if [ "${state}" != "active" ]; then
-    error "${TEST}: state (${state}) is expected to be 'active'." >&2
+    error "${TEST}: state (${state}) is expected to be 'active'."
 fi
 
 if [ "${uuid}" != "${UUID}" ]; then
-    error "${TEST}: UUID ($uuid) is expected to be '${UUID}'." >&2
+    error "${TEST}: UUID ($uuid) is expected to be '${UUID}'."
+fi
+
+# Empty password (issue #494)
+DEV="${TMP}/luks1-device-empty-pw"
+new_device "luks1" "${DEV}"
+
+# Let's create an empty password.
+printf '%s\n\n' "${DEFAULT_PASS}" | cryptsetup luksChangeKey \
+    --force-password --batch-mode "${DEV}"
+
+if ! clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< ""; then
+    error "${TEST}: Binding is expected to succeed when the password is empty."
 fi

@@ -35,6 +35,11 @@ esac
 
 . @bindir@/clevis-luks-common-functions
 
+if [ -f @libexecdir@/clevis-luks-tpm1-functions ]; then
+    . @libexecdir@/clevis-luks-tpm1-functions
+    stop_tcsd
+fi
+
 pid=$(cat /run/clevis.pid)
 clevis_kill_pid $pid
 

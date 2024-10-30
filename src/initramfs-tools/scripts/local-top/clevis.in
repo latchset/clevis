@@ -28,87 +28,75 @@ prereqs) exit 0 ;;
 esac
 
 # Return fifo path or nothing if not found
-get_fifo_path() {
+get_pid_fifo_path() {
     local pid="$1"
     for fd in /proc/$pid/fd/*; do
         if [ -e "$fd" ]; then
             if [[ $(readlink -f "${fd}") == *"/cryptsetup/passfifo" ]]; then
                 readlink -f "${fd}"
+                return 0
             fi
         fi
     done
+    return 1
 }
 
-# Print the PID of the askpass process and fifo path with a file descriptor opened to
-get_askpass_pid() {
+# Gets the luks device to be unlocked and used pins
+get_pid_device_pins() {
+    local pid="$1"
+    local CRYPTTAB_SOURCE
+
+    CRYPTTAB_SOURCE=$(tr '\0' '\n' 2>/dev/null </proc/${pid}/environ | \
+        grep '^CRYPTTAB_SOURCE=' | cut -d= -f2)
+
+    # Wrong process, no CRYPTTAB_SOURCE, return error
+    [ -n "$CRYPTTAB_SOURCE" ] || return 1
+
+    [ -b "$CRYPTTAB_SOURCE" ] || return 0
+
+    local cache="/var/cache/clevis-disks/${CRYPTTAB_SOURCE//\//_}"
+    if [ ! -f "$cache" ]; then
+        local pins=$(clevis_luks_read_used_pins "$CRYPTTAB_SOURCE")
+        echo "${CRYPTTAB_SOURCE}:${pins}" > "$cache"
+    fi
+
+    cat "$cache"
+    return 0
+}
+
+# Print colon-separated password-asking info like device, pins and fifo
+# path for unlocking with password
+get_askpass_info() {
+    local cryptkeyscript=$1
+    local psinfo pf dev_pins
     psinfo=$(ps) # Doing this so I don't end up matching myself
-    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | while read -r pid; do
-        pf=$(get_fifo_path "${pid}")
-        if [[ $pf != "" ]]; then
-            echo "${pid} ${pf}"
-            break
-        fi
-    done
+    echo "$psinfo" | awk "/$cryptkeyscript/ { print \$1 }" | {
+        while read -r pid; do
+            if pf=$(get_pid_fifo_path "${pid}") && dev_pins=$(get_pid_device_pins "${pid}"); then
+                if [[ $pf != "" && $dev_pins != "" ]]; then
+                    # Output only in case of clevis device
+                    echo "${dev_pins}:${pf}"
+                fi
+                # Return that we found valid process
+                return 0
+            fi
+        done
+        return 1
+    }
 }
 
-luks1_decrypt() {
+# Try to decrypt the password to fifo file
+luks_decrypt() {
     local CRYPTTAB_SOURCE=$1
     local PASSFIFO=$2
-    UUID=cb6e8904-81ff-40da-a84a-07ab9ab5715e
-    luksmeta show -d "$CRYPTTAB_SOURCE" | while read -r slot state uuid; do
-        [ "$state" == "active" ] || continue
-        [ "$uuid" == "$UUID" ] || continue
+    local pt
 
-        lml=$(luksmeta load -d "${CRYPTTAB_SOURCE}" -s "${slot}" -u "${UUID}")
-        [ $? -eq 0 ] || continue
-
-        decrypted=$(echo -n "${lml}" | clevis decrypt 2>/dev/null)
-        [ $? -eq 0 ] || continue
-
-        # Fail safe
-        [ "$decrypted" != "" ] || continue
-
-        echo -n "${decrypted}" >"$PASSFIFO"
+    if pt=$(clevis_luks_unlock_device "${CRYPTTAB_SOURCE}"); then
+        echo -n "${pt}" >"${PASSFIFO}"
         return 0
-    done
-
-    return 1
-}
-
-luks2_decrypt() {
-    local CRYPTTAB_SOURCE=$1
-    local PASSFIFO=$2
-    cryptsetup luksDump "$CRYPTTAB_SOURCE" | sed -rn 's|^\s+([0-9]+): clevis|\1|p' | while read -r id; do
-        # jose jwe fmt -c outputs extra \n, so clean it up
-        cte=$(cryptsetup token export --token-id "$id" "$CRYPTTAB_SOURCE")
-        [ $? -eq 0 ] || continue
-
-        josefmt=$(echo "${cte}" | jose fmt -j- -Og jwe -o-)
-        [ $? -eq 0 ] || continue
-
-        josejwe=$(echo "${josefmt}" | jose jwe fmt -i- -c)
-        [ $? -eq 0 ] || continue
-
-        jwe=$(echo "${josejwe}" | tr -d '\n')
-        [ $? -eq 0 ] || continue
-
-        decrypted=$(echo -n "${jwe}" | clevis decrypt 2>/dev/null)
-        [ $? -eq 0 ] || continue
-
-        # Fail safe
-        [ "$decrypted" != "" ] || continue
-
-        echo -n "${decrypted}" >"$PASSFIFO"
-        return 0
-    done
-
-    return 1
-}
-
-has_tang_pin() {
-    local dev="$1"
-
-    clevis luks list -d "${dev}" | grep -q tang
+    else
+        return 1
+    fi
 }
 
 # Wait for askpass, and then try and decrypt immediately. Just in case
@@ -118,6 +106,13 @@ clevisloop() {
     # Set the path how we want it (Probably not all needed)
     PATH="/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 
+    local cryptkeyscript
+    local askpass_info
+    local sleep_time
+    local OLD_CRYPTTAB_SOURCE=""
+    local netcfg_attempted=0
+    local tpm1cfg_attempted=0
+
     if [ -x /bin/plymouth ] && plymouth --ping; then
         cryptkeyscript='plymouth ask-for-password'
     else
@@ -125,64 +120,55 @@ clevisloop() {
         cryptkeyscript='\/lib\/cryptsetup\/askpass'
     fi
 
-    OLD_CRYPTTAB_SOURCE=""
-    local netcfg_attempted=0
-
     while true; do
-
         # Re-get the askpass PID in case there are multiple encrypted devices
-        pid=""
-        until [ "$pid" ] && [ -p "$PASSFIFO" ]; do
-            sleep .1
-            pid_fifo=$(get_askpass_pid)
-            pid=$(echo "${pid_fifo}" | cut -d' ' -f1)
-            PASSFIFO=$(echo "${pid_fifo}" | cut -d' ' -f2-)
+        CRYPTTAB_SOURCE=""
+        sleep_time=.1
+        until [ -n "$CRYPTTAB_SOURCE" ] && [ -p "$PASSFIFO" ]; do
+            sleep $sleep_time
+            if askpass_info=$(get_askpass_info "$cryptkeyscript"); then
+                # Workaround for initramfs-tools checking the script as sh-compatible
+                IFS=':' read -r CRYPTTAB_SOURCE pins PASSFIFO <<EOM
+${askpass_info}
+EOM
+                # Ask process is running, variables might be empty for non-clevis device
+                sleep_time=.5
+            else
+                # No valid process found
+                sleep_time=.1
+            fi
         done
 
-        # Import CRYPTTAB_SOURCE from the askpass process.
-        local CRYPTTAB_SOURCE="$(cat /proc/${pid}/environ 2> /dev/null | \
-            tr '\0' '\n' | grep '^CRYPTTAB_SOURCE=' | cut -d= -f2)"
-        [ -n "$CRYPTTAB_SOURCE" ] || continue
-
-        # Make sure that CRYPTTAB_SOURCE is actually a block device
-        [ ! -b "$CRYPTTAB_SOURCE" ] && continue
-
-        sleep .1
         # Make the source has changed if needed
         [ "$CRYPTTAB_SOURCE" = "$OLD_CRYPTTAB_SOURCE" ] && continue
         OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
 
-        if [ $netcfg_attempted -eq 0 ] && has_tang_pin ${CRYPTTAB_SOURCE}; then
+        if [[ " $pins " == *" tang "* ]] && [ $netcfg_attempted -eq 0 ]; then
             netcfg_attempted=1
             do_configure_networking
         fi
-
-        if cryptsetup isLuks --type luks1 "$CRYPTTAB_SOURCE"; then
-            # If the device is not initialized, sliently skip it.
-            luksmeta test -d "$CRYPTTAB_SOURCE" || continue
-
-            if luks1_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"; then
-                echo "Unlocked ${CRYPTTAB_SOURCE} with clevis"
-            else
-                OLD_CRYPTTAB_SOURCE=""
-                sleep 5
-            fi
-        elif cryptsetup isLuks --type luks2 "$CRYPTTAB_SOURCE"; then
-            if luks2_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"; then
-                echo "Unlocked ${CRYPTTAB_SOURCE} with clevis"
-            else
-                OLD_CRYPTTAB_SOURCE=""
-                sleep 5
-            fi
+        if [[ " $pins " == *" tpm1 "* ]] && [ $tpm1cfg_attempted -eq 0 ]; then
+            tpm1cfg_attempted=1
+            do_configure_tpm1
         fi
-        # Now that the current device has its password, let's sleep a
-        # bit. This gives cryptsetup time to actually decrypt the
-        # device and prompt for the next password if needed.
-        sleep .5
+
+        if luks_decrypt "${CRYPTTAB_SOURCE}" "${PASSFIFO}"; then
+            echo "Unlocked ${CRYPTTAB_SOURCE} with clevis"
+
+            # Now that the current device has its password, let's sleep a
+            # bit. This gives cryptsetup time to actually decrypt the
+            # device and prompt for the next password if needed.
+            sleep .5
+        else
+            # Unable to unlock now, retry later
+            OLD_CRYPTTAB_SOURCE=""
+            sleep 5
+        fi
     done
 }
 
 . /scripts/functions
+. clevis-luks-common-functions
 
 # This is a copy  of 'all_netbootable_devices/all_non_enslaved_devices' for
 # platforms that might not provide it.
@@ -229,8 +215,10 @@ get_specified_device() {
 # to appear. This code can be removed once that has been fixed in all the
 # distro releases we care about.
 wait_for_device() {
-    local device="$(get_specified_device)"
+    local device
     local ret=0
+
+    device=$(get_specified_device)
 
     if [ -n "$device" ]; then
         log_begin_msg "clevis: Waiting for interface ${device} to become available"
@@ -282,6 +270,31 @@ do_configure_networking() {
         fi
     fi
 }
+
+do_configure_tpm1() {
+    local tcsd_output=
+
+    [ -x @bindir@/clevis-decrypt-tpm1 ] && [ -f @libexecdir@/clevis-luks-tpm1-functions ] || return
+
+    . @libexecdir@/clevis-luks-tpm1-functions
+
+    log_begin_msg "clevis: Starting TCSD daemon"
+
+    wait_for_udev 10
+
+    if ! tcsd_output=$(start_tcsd 2>&1); then
+        if [ -n "$tcsd_output" ]; then
+            log_failure_msg "failed to start TCSD: $tcsd_output"
+        else
+            log_failure_msg "failed to start TCSD"
+        fi
+    fi
+
+    log_end_msg
+}
+
+mkdir -p /var/cache/clevis-disks
+chmod 0700 /var/cache/clevis-disks
 
 clevisloop &
 echo $! >/run/clevis.pid

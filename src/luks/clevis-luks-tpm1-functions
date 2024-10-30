@@ -1,0 +1,97 @@
+#!/bin/sh
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+start_tcsd() {
+    [ -s /run/tcsd.pid ] && return 0
+
+    if ! ip link show up dev lo | grep -qw UP; then
+        ip link set dev lo up && echo "lo" > /tmp/tcsd.if || :
+        if ! ip link show up dev lo | grep -qw UP; then
+            echo "Unable to set-up loopback network device"
+            return 1
+        fi
+    fi
+
+    if ! temp_dir="$(mktemp -d)"; then
+        echo "Unable to create temporary directory"
+        return 1
+    fi
+
+    fifo_file="$temp_dir/fifo"
+    output_file="$temp_dir/output"
+
+    # If we have udev, let the initialization on udev
+    if ! [ -f /lib/udev/rules.d/60-tpm-udev.rules ]; then
+        chown tss: /dev/tpm0
+        chmod 660 /dev/tpm0
+    fi
+
+    mkfifo "$fifo_file"
+
+    # Start timeout to finish TCSD startup
+    sleep 10 &
+    sleep_pid=$!
+
+    # The following loop ends when output side of FIFO closes (i.e. TCSD ends)
+    { while IFS= read -r LINE; do
+        echo "$LINE"
+        case "$LINE" in
+            *"TCSD up and running"*)
+                kill $sleep_pid 2>/dev/null
+                ;;
+        esac
+    done < $fifo_file && kill $sleep_pid; } >> "$output_file" 2>&1 &
+
+    # TCSD in background mode logs into syslogd, so we would not have any logs
+    # available for debugging, so start TCSD in foreground mode, but as a
+    # background job. Unfortunatelly the redirected output to pipe is
+    # block-buffered (see `man 3 setbuf`), so in order to see any output we
+    # need to set it to line-buffered with stdbuf tool
+    stdbuf -oL tcsd -f >$fifo_file 2>&1 &
+    tcsd_pid=$!
+
+    wait $sleep_pid 2>/dev/null
+
+    if { ps -A 2>/dev/null || ps; } | awk -v pid="$tcsd_pid" '$1==pid {found=1} END {exit !found}'; then
+        ret=0
+        echo $tcsd_pid > /run/tcsd.pid
+    else
+        ret=1
+        [ -s "$output_file" ] && cat "$output_file"
+    fi
+
+    rm -rf "$temp_dir"
+
+    return $ret
+}
+
+stop_tcsd() {
+    [ -s /run/tcsd.pid ] && {
+        pid=$(cat /run/tcsd.pid)
+        kill $pid >/dev/null 2>&1 || :
+        rm -f /run/tcsd.pid
+    }
+
+    [ -s /tmp/tcsd.if ] && {
+        ip link set dev lo down || :
+        ip addr flush dev lo || :
+        rm -f /tmp/tcsd.if
+    }
+}

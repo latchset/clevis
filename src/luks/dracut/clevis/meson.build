@@ -11,13 +11,29 @@ if dracut.found()
   )
 
   configure_file(
-    input: 'clevis-hook.sh.in',
-    output: 'clevis-hook.sh',
+    input: 'clevis-cleanup.in',
+    output: 'clevis-cleanup',
     install_dir: dracutdir,
     configuration: data,
   )
 
-  install_data('clevis-luks-unlocker', install_dir: libexecdir)
+  configure_file(
+    input: 'clevis-password-unlocker.in',
+    output: 'clevis-password-unlocker',
+    install_dir: dracutdir,
+    configuration: data,
+  )
+
+  configure_file(
+    input: 'clevis-password-unlocker-prepare.in',
+    output: 'clevis-password-unlocker-prepare',
+    install_dir: dracutdir,
+    configuration: data,
+  )
+
+  install_data('clevis-cleanup-hook.sh', install_dir: dracutdir)
+  install_data('clevis-password-unlocker-hook.sh', install_dir: dracutdir)
+  install_data('clevis-online-hook.sh', install_dir: dracutdir)
 else
   warning('Will not install dracut module due to missing dependencies!')
 endif

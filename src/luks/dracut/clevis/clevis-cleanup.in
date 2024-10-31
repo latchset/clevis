@@ -1,8 +1,9 @@
 #!/bin/bash
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2024 Oldřich Jedlička
 #
-# Author: Shawn Rose <shawnandrewrose@gmail.com>
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,38 +17,14 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-
-PREREQ=""
-
-prereqs() {
-    echo "$PREREQ"
-}
-
-case "$1" in
-    prereqs)
-        prereqs
-        exit 0
-    ;;
-esac
 
 [ -s /run/clevis.pid ] || exit 0
 
-. @bindir@/clevis-luks-common-functions
+. clevis-luks-common-functions
 
 pid=$(cat /run/clevis.pid)
 clevis_kill_pid $pid
 
 rm -f /run/clevis.pid
-
-# Not really worried about downing extra interfaces: they will come up
-# during the actual boot. Might make this configurable later if needed.
-
-for iface in /sys/class/net/*; do
-    if [ -e "$iface" ]; then
-        iface=$(basename "$iface")
-        ip link  set   dev "$iface" down
-        ip addr  flush dev "$iface"
-        ip route flush dev "$iface"
-    fi
-done
+rm -f /run/clevis-online
+rm -rf /run/cryptroot-ask-pipes

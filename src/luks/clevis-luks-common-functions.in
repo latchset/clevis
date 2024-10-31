@@ -1183,3 +1183,26 @@ clevis_luks_type() {
     fi
     echo "${luks_type}"
 }
+
+# clevis_kill_pid() kills process and its children in a portable way
+# Works with both procps ps and Busybox ps.
+function clevis_kill_pid() {
+    local pid="$1"
+    local child_pids
+
+    [ -z "${pid}" ] && return 1
+
+    child_pids="$({ ps -Ao pid,ppid 2>/dev/null || ps -o pid,ppid 2>/dev/null || ps -Al 2>/dev/null || ps -l ||
+        { echo 'clevis: unable to get list of processes' >&2; exit 1; }; } |
+        awk -v pid="$pid" '
+            NR==1 {
+                for (i=1; i<=NF; i++) if ($i == "PID") pid_col = i; else if ($i == "PPID") ppid_col = i
+                if (!pid_col || !ppid_col) { print "clevis: unable to find PID and/or PPID columns in ps output" | "cat >&2"; exit 1 }
+                next
+            }
+            { if ($ppid_col == pid) print $pid_col }')"
+
+    for kill_pid in $pid $child_pids; do
+        kill "$kill_pid" 2>/dev/null
+    done
+}

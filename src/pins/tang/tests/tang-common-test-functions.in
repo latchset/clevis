@@ -20,7 +20,6 @@
 
 SOCAT="@SOCAT@"
 TANGD_KEYGEN="@TANGD_KEYGEN@"
-TANGD_UPDATE="@TANGD_UPDATE@"
 TANGD="@TANGD@"
 
 tang_error() {
@@ -70,8 +69,6 @@ tang_remove_rotated_keys() {
     pushd "${db}"
         find . -name ".*.jwk" -exec rm -f {} \;
     popd
-
-    [ -n "${TANGD_UPDATE}" ] && "${TANGD_UPDATE}" "${db}" "${basedir}/cache"
     return 0
 }
 
@@ -101,7 +98,6 @@ tang_new_keys() {
     fi
 
     "${TANGD_KEYGEN}" "${db}" ${sig_name} ${exc_name}
-    [ -n "${TANGD_UPDATE}" ] && "${TANGD_UPDATE}" "${db}" "${basedir}/cache"
 
     return 0
 }
@@ -152,8 +148,7 @@ tang_run() {
         tang_error "Error creating new keys for tang server"
     fi
 
-    local KEYS="${basedir}/cache"
-    [ -z "${TANGD_UPDATE}" ] && KEYS="${basedir}/db"
+    local KEYS="${basedir}/db"
 
     local pid pidfile portfile
     pidfile="${basedir}/tang.pid"

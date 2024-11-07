@@ -6,14 +6,6 @@ kgen = find_program(
   join_paths('/', 'usr', get_option('libexecdir'), 'tangd-keygen'),
   required: false
 )
-updt = find_program(
-  join_paths(libexecdir, 'tangd-update'),
-  join_paths(get_option('prefix'), get_option('libdir'), 'tangd-update'),
-  join_paths(get_option('prefix'), get_option('libexecdir'), 'tangd-update'),
-  join_paths('/', 'usr', get_option('libdir'), 'tangd-update'),
-  join_paths('/', 'usr', get_option('libexecdir'), 'tangd-update'),
-  required: false
-)
 tang = find_program(
   join_paths(libexecdir, 'tangd'),
   join_paths(get_option('prefix'), get_option('libdir'), 'tangd'),
@@ -28,7 +20,6 @@ socat = find_program('socat', required: false)
 tang_data = configuration_data()
 tang_data.set('SOCAT', '')
 tang_data.set('TANGD_KEYGEN', '')
-tang_data.set('TANGD_UPDATE', '')
 tang_data.set('TANGD', '')
 
 if socat.found()
@@ -41,10 +32,6 @@ endif
 
 if tang.found()
   tang_data.set('TANGD', tang.path())
-endif
-
-if updt.found()
-  tang_data.set('TANGD_UPDATE', updt.path())
 endif
 
 tang_tests_common = configure_file(

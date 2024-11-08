@@ -282,6 +282,10 @@ do_configure_tpm1() {
 
     wait_for_udev 10
 
+    # shellcheck disable=SC2034 # setting default value
+    TCSD_NO_PRIVILEGE_DROP=0
+    [ -f /conf/conf.d/clevis ] && . /conf/conf.d/clevis
+
     if ! tcsd_output=$(start_tcsd 2>&1); then
         if [ -n "$tcsd_output" ]; then
             log_failure_msg "failed to start TCSD: $tcsd_output"

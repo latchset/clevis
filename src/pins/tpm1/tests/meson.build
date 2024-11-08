@@ -32,6 +32,7 @@ tpm1_data.set('TCSD_BIN', tcsd.found() ? tcsd.path() : '')
 tpm1_data.set('SWTPM_BIN', swtpm.found() ? swtpm.path() : '')
 tpm1_data.set('SWTPM_SETUP_BIN', swtpm_setup.found() ? swtpm_setup.path() : '')
 tpm1_data.set('SWTPM_BIOS_BIN', swtpm_bios.found() ? swtpm_bios.path() : '')
+tpm1_data.set('LIBCLEVIS_TPM1_TCSD_PRELOAD', libclevis_tpm1_tcsd_preload.path())
 
 configure_file(
   input: 'tpm1-common-test-functions.in',

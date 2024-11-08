@@ -28,6 +28,7 @@ TPM_TAKEOWNERSHIP_BIN="@TPM_TAKEOWNERSHIP_BIN@"
 TCSD_BIN="@TCSD_BIN@"
 SWTPM_BIN="@SWTPM_BIN@"
 SWTPM_SETUP_BIN="@SWTPM_SETUP_BIN@"
+LIBCLEVIS_TPM1_TCSD_PRELOAD="@LIBCLEVIS_TPM1_TCSD_PRELOAD@"
 
 SWTPM_SOCKET_PID=
 TCSD_PID=
@@ -131,7 +132,10 @@ EOM
         chmod 0640 "$TESTDIR"/tcsd.conf
     fi
 
-    LD_PRELOAD="$TCSD_PATCH_LIB" TCSD_UN_SOCKET_DEVICE_PATH="$TESTDIR"/swtpm.sock "${TCSD_BIN}" -f -e -c "$TESTDIR"/tcsd.conf >&2 </dev/null &
+    TCSD_NO_PRIVILEGE_DROP=1 \
+        LD_PRELOAD="$LIBCLEVIS_TPM1_TCSD_PRELOAD $TCSD_PATCH_LIB" \
+        TCSD_UN_SOCKET_DEVICE_PATH="$TESTDIR"/swtpm.sock \
+        "${TCSD_BIN}" -f -e -c "$TESTDIR"/tcsd.conf >&2 </dev/null &
     TCSD_PID=$!
 
     process_wait_until_port_ready $TCSD_PID "tcsd"

@@ -6,11 +6,13 @@ project('clevis', 'c', license: 'GPL3+',
 libexecdir = join_paths(get_option('prefix'), get_option('libexecdir'))
 sysconfdir = join_paths(get_option('prefix'), get_option('sysconfdir'))
 bindir = join_paths(get_option('prefix'), get_option('bindir'))
+libdir = join_paths(get_option('prefix'), get_option('libdir'))
 
 data = configuration_data()
 data.set('libexecdir', libexecdir)
 data.set('sysconfdir', sysconfdir)
 data.set('bindir', bindir)
+data.set('libdir', libdir)
 
 add_project_arguments(
   '-Wall',

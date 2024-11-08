@@ -64,7 +64,7 @@ require_nonempty_dir() {
 check() {
     local _module_name="${moddir##*/[0-9][0-9]}"
 
-    require_binaries clevis-decrypt-tpm1 tpm_version tpm_unsealdata tcsd stdbuf || return 1
+    require_binaries clevis-decrypt-tpm1 tpm_version tpm_unsealdata tcsd || return 1
     if [[ $hostonly ]]; then
         require_nonempty_dir /var/lib/tpm || return 1
     else
@@ -96,13 +96,9 @@ install() {
         systemctl -q --root "$initdir" add-wants cryptsetup.target tcsd.service
     else
         inst_multiple \
-            awk chmod chown mkfifo mktemp ip ps stdbuf \
+            awk chmod chown mkfifo mktemp ip ps \
+            @libdir@/libclevis-tpm1-tcsd-preload.so \
             @libexecdir@/clevis-luks-tpm1-functions
-        if [ -f /usr/libexec/coreutils/libstdbuf.so ]; then
-            inst_multiple /usr/libexec/coreutils/libstdbuf.so*
-        else
-            inst_libdir_file 'coreutils/libstdbuf.so*'
-        fi
     fi
 
     inst_multiple \

@@ -74,18 +74,3 @@ int __xstat(int ver, const char *pathname, struct stat *statbuf) {
     return result;
 }
 #endif
-
-int setuid(uid_t uid) {
-    return 0;
-}
-
-int setgid(gid_t gid) {
-    return 0;
-}
-
-static void __attribute ((constructor))
-set_line_buffering (void)
-{
-    setvbuf(stdout, NULL, _IOLBF, 0);
-    fprintf(stderr, "set_line_buffering : done\n");
-}

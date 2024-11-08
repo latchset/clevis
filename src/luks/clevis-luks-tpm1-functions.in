@@ -63,8 +63,8 @@ start_tcsd() {
     # available for debugging, so start TCSD in foreground mode, but as a
     # background job. Unfortunatelly the redirected output to pipe is
     # block-buffered (see `man 3 setbuf`), so in order to see any output we
-    # need to set it to line-buffered with stdbuf tool
-    stdbuf -oL tcsd -f >$fifo_file 2>&1 &
+    # need to set it to line-buffered with LD_PRELOAD library
+    TCSD_NO_PRIVILEGE_DROP=${TCSD_NO_PRIVILEGE_DROP:-0} LD_PRELOAD="@libdir@/libclevis-tpm1-tcsd-preload.so" tcsd -f >$fifo_file 2>&1 &
     tcsd_pid=$!
 
     wait $sleep_pid 2>/dev/null

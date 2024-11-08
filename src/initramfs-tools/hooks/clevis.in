@@ -99,14 +99,13 @@ fi
 if [ -x @bindir@/clevis-decrypt-tpm1 ]; then
     copy_exec @bindir@/clevis-decrypt-tpm1 || die 1 "@bindir@/clevis-decrypt-tpm1 not found"
     copy_exec @libexecdir@/clevis-luks-tpm1-functions || die 1 "@libexecdir@/clevis-luks-tpm1-functions not found"
+    copy_exec @libdir@/libclevis-tpm1-tcsd-preload.so || die 1 "@libdir@/libclevis-tpm1-tcsd-preload.so not found"
 
     tcsd_bin=$(find_binary "tcsd")
     # libgcc_s.so.* is no longer installed for gcc 2.34+ (no link to libpthread)
     libgcc_s=$(find_library "libgcc_s.so.[1-9]")
     tpm_version_bin=$(find_binary "tpm_version")
     tpm_unsealdata_bin=$(find_binary "tpm_unsealdata")
-    stdbuf_bin=$(find_binary "stdbuf")
-    libstdbuf_bin=$(find_library "coreutils/libstdbuf.so*")
 
     copy_exec "${tpm_version_bin}" || die 1 "Unable to copy ${tpm_version_bin}"
     copy_exec "${tpm_unsealdata_bin}" || die 1 "Unable to copy ${tpm_unsealdata_bin}"
@@ -115,13 +114,18 @@ if [ -x @bindir@/clevis-decrypt-tpm1 ]; then
     copy_exec "${libgcc_s}" || die 1 "Unable to copy ${libgcc_s}"
     copy_file config /etc/tcsd.conf || dia 2 "Unable to copy /etc/tcsd.conf"
 
-    copy_exec "${stdbuf_bin}" || die 1 "Unable to copy ${stdbuf_bin}"
-    copy_exec "${libstdbuf_bin}" || die 1 "Unable to copy ${libstdbuf_bin}"
-
     mkdir -p "${DESTDIR}/var/lib/tpm" || die 2 "Unable to create /var/lib/tpm"
     cp /var/lib/tpm/* "${DESTDIR}/var/lib/tpm/" || die 2 "Unable to copy /var/lib/tpm"
     chown -R tss:tss "${DESTDIR}/var/lib/tpm" || die 2 "Unable to change owner of /var/lib/tpm"
     chmod -R u=rwX,go= "${DESTDIR}/var/lib/tpm" || die 2 "Unable to change permissions of /var/lib/tpm"
+
+    if (( $(umask) & 0004 )); then
+        # Root-only readable initrd filesystem, we need to run as root
+        # shellcheck disable=SC2154 # $verbose is a dracut variable
+        [ "${verbose}" = "y" ] && echo "Forcing tcsd to run as root"
+        sed -i 's/^\([ ]*remote_ops\)/#\1/' "${DESTDIR}/etc/tcsd.conf"
+        echo "TCSD_NO_PRIVILEGE_DROP=1" >> "${DESTDIR}/conf/conf.d/clevis"
+    fi
 
     mkdir -p "${DESTDIR}/lib/udev/rules.d" || die 2 "Unable to create /lib/udev/rules.d"
     # shellcheck disable=SC2043

@@ -28,14 +28,31 @@ clevis_luks_common_functions = configure_file(
   configuration: luksmeta_data
 )
 
+clevis_luks_tpm1_functions = configure_file(
+  input: 'clevis-luks-tpm1-functions.in',
+  output: 'clevis-luks-tpm1-functions',
+  configuration: data
+)
+
 clevis_luks_unbind = configure_file(input: 'clevis-luks-unbind.in',
                output: 'clevis-luks-unbind',
                configuration: luksmeta_data)
 
+# SystemD dependencies checked here, used both in systemd and dracut subdirs
+systemd = dependency('systemd', required: false)
+systemdutildir = systemd.found() ? systemd.get_pkgconfig_variable('systemdutildir', default: '') : ''
+
+sd_reply_pass = find_program(
+  (systemdutildir != '') ? join_paths(systemdutildir, 'systemd-reply-password') : '',
+  join_paths(get_option('prefix'), get_option('libdir'), 'systemd', 'systemd-reply-password'),
+  join_paths(get_option('prefix'), 'lib', 'systemd', 'systemd-reply-password'),
+  join_paths('/', 'usr', get_option('libdir'), 'systemd', 'systemd-reply-password'),
+  join_paths('/', 'usr', 'lib', 'systemd', 'systemd-reply-password'),
+  required: false
+)
+
 if libcryptsetup.found() and luksmeta.found()
   subdir('systemd')
-  # systemd should come before dracut in order to set up
-  # variables like SYSTEMD_REPLY_PASS.
   subdir('dracut')
   subdir('udisks2')
 
@@ -67,7 +84,7 @@ if libcryptsetup.found() and luksmeta.found()
   bins += join_paths(meson.current_source_dir(), 'clevis-luks-pass')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-pass.1')
 
-  install_data('clevis-luks-tpm1-functions', install_dir: libexecdir)
+  install_data(clevis_luks_tpm1_functions, install_dir: libexecdir)
 else
   warning('Will not install LUKS support due to missing dependencies!')
 endif

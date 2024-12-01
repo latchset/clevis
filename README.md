@@ -400,6 +400,34 @@ sudo update-initramfs -u -k 'all'
 
 Upon reboot, it will behave exactly as if using Dracut.
 
+### Unlocker: mkinitcpio
+
+When using Clevis with mkinitcpio, you will need to add the `clevis` hook
+before the `encrypt` hook in `/etc/mkinitcpio.conf`:
+
+```bash
+HOOKS=( ... clevis encrypt ... )
+```
+
+Then run
+
+```bash
+$ sudo mkinitcpio -P
+```
+
+in order to regenerate the initramfs. The device to be unlocked is configured
+on the kernel command line using the `cryptdevice` option in the same way as
+for the default `encrypt` hook:
+
+```bash
+cryptdevice=/dev/sda1:root
+```
+
+In order to use a Tang pin you will need to enable networking in the initramfs
+by adding and configuring the [`net`
+hook](https://wiki.archlinux.org/title/Mkinitcpio#Using_net) *before* the
+`clevis` hook.
+
 #### Unlocker: UDisks2
 
 Our UDisks2 unlocker runs in your desktop session. You should not need to

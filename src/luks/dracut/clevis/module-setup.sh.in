@@ -21,7 +21,13 @@
 depends() {
     local __depends=crypt
     if dracut_module_included "systemd"; then
-        __depends=$(printf '%s systemd-cryptsetup' "${__depends}")
+        # Dracut v103 introduced a separate systemd-cryptsetup module
+        systemd_cryptsetup_dir=$(dracut_module_path "systemd-cryptsetup")
+        if [ -d "$systemd_cryptsetup_dir" ]; then
+            __depends=$(printf '%s systemd-cryptsetup' "${__depends}")
+        else
+            __depends=$(printf '%s systemd' "${__depends}")
+        fi
     fi
     echo "${__depends}"
     return 255
@@ -32,7 +38,6 @@ install() {
         inst_multiple \
             $systemdsystemunitdir/clevis-luks-askpass.service \
             $systemdsystemunitdir/clevis-luks-askpass.path \
-            $systemdsystemunitdir/cryptsetup.target \
             @SYSTEMD_REPLY_PASS@ \
             @libexecdir@/clevis-luks-askpass
 

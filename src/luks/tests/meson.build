@@ -8,8 +8,14 @@ cryptsetup = find_program('cryptsetup', required: true)
 # Use keyctl to check an existing token id can be created from
 # kernel keyring password
 keyutils = find_program('keyctl', required: false)
+keyutils_usable = false
 if keyutils.found()
-    message('keyutils installed')
+    keyutils_usable = run_command(keyutils, 'session', '-', '/bin/true', capture: false, check: false).returncode() == 0
+    if keyutils_usable
+        message('keyutils installed')
+    else
+        warning('keyutils installed, but running fails (are you inside Docker?), unable to test existing token id binding')
+    endif
 else
     warning('keyutils not installed, unable to test existing token id binding')
 endif
@@ -82,7 +88,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('unbind-unbound-slot-luks2', find_program('unbind-unbound-slot-luks2'), env: env)
   test('unbind-luks2', find_program('unbind-luks2'), env: env, timeout: 60)
 
-  if keyutils.found() and luksmeta_data.get('OLD_CRYPTSETUP_EXISTING_TOKEN_ID') == '0'
+  if keyutils.found() and keyutils_usable and luksmeta_data.get('OLD_CRYPTSETUP_EXISTING_TOKEN_ID') == '0'
     test('bind-luks2-ext-token', find_program('bind-luks2-ext-token'), env: env, timeout: 60)
   endif
 

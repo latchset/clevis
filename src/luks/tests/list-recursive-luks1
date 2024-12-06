@@ -79,7 +79,7 @@ if [[ "${pin}" != "${PIN}" ]]; then
 fi
 
 to_remove_from_cfg=$(printf ',"adv": "%s"' "${ADV}")
-cfg_for_cmp=${cfg//"${to_remove_from_cfg}"/}
+cfg_for_cmp=${CFG//"${to_remove_from_cfg}"/} #"
 if ! pin_cfg_equal "${cfg}" "${cfg_for_cmp}"; then
     error "${TEST}: config obtained from clevis luks list (${cfg}) is expected to match the one used to bind the test (${cfg_for_cmp})"
 fi

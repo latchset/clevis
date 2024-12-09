@@ -60,7 +60,7 @@ do_test_with_adv() {
 validate_output() {
     local output="${1}"
     if grep -Fq jose "${output}"; then
-        tang_error "'jose' is not expected to appear in the error output"
+        error "'jose' is not expected to appear in the error output"
     fi
 }
 

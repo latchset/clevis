@@ -62,20 +62,257 @@ advertisement is stored, or the JSON contents of the advertisement itself. When
 the advertisement is specified manually like this, Clevis presumes that the
 advertisement is trusted.
 
-#### PIN: TPM2
+#### PIN: TPM1 and TPM2
 
-Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
-chip. The cryptographically-strong, random key used for encryption is encrypted
-using the TPM2 chip, and is decrypted using TPM2 at the time of decryption to allow clevis to decrypt the secret stored in the JWE.
+Clevis provides support to encrypt a key in a Trusted Platform Module 1.2 (TPM1)
+and 2.0 (TPM2) chips. The cryptographically-strong, random key used for
+encryption is encrypted using the TPM chip, and is decrypted using TPM at the
+time of decryption to allow clevis to decrypt the secret stored in the JWE.
 
-For example:
+For example for TPM1 pin:
+
+```bash
+$ echo hi | clevis encrypt tpm1 '{}' > hi.jwe
+```
+
+or TPM2 pin:
 
 ```bash
 $ echo hi | clevis encrypt tpm2 '{}' > hi.jwe
 ```
 
 Clevis store the public and private keys of the encrypted key in the JWE object,
-so those can be fetched on decryption to unseal the key encrypted using the TPM2.
+so those can be fetched on decryption to unseal the key encrypted using the TPM
+chip.
+
+Check manual pages for `clevis-encrypt-tpm1` and `clevis-encrypt-tpm2` tools for
+more options, like binding to a particular PCR registry states and/or values.
+
+##### TPM1 PIN Limitations
+
+To avoid prompting for a password during unlocking, the encryption and
+decryption processes require that the well-known Storage Root Key (SRK) be
+configured when taking ownership of the TPM 1.2 chip. This means you must have
+either run the `tpm_takeownership` command
+
+```bash
+$ tpm_takeownership --srk-well-known
+```
+
+during setup or executed `tpm_changeownerauth` command
+
+```bash
+$ tpm_changeownerauth --srk --set-well-known
+```
+
+to configure it. Note that a _well-known_ key is not the same as an empty key.
+
+> [!IMPORTANT]
+> If you have changed the SRK to a _well-known_ key, remember to run
+> `update-initramfs` command (on Debian-like systems)
+>
+> ```bash
+> $ update-initramfs -u
+> ```
+>
+> or `dracut` command (on Fedora-like systems)
+>
+> ```bash
+> $ dracut -f
+> ```
+>
+> afterward to recreate initramfs image, because `/var/lib/tpm` is
+> included in the image. This applies to `initramfs-tools` and Dracut in
+> _host-only_ mode. In Dracut's _default_ mode, `/var/lib/tpm` is already
+> configured to allow access to the TPM 1.2 chip using a _well-known_ SRK.
+
+##### Unlocking with a Separately-Encrypted `/var` Volume with TPM1 PIN
+
+Because TPM1 PIN relies on the `tcsd` daemon from the Trousers project to
+access the TPM 1.2 chip, the daemon must start early in the boot process to
+unlock the root filesystem automatically. The `/var/lib/tpm` directory
+contains runtime data for `tcsd` and must be available before the daemon
+starts.
+
+A minimal copy of the required `/var` files is included in the initramfs
+image prepared by Clevis, so the daemon _should_ be able to start during the
+_initrd bootup_ phase if everything is configured correctly. After switching
+to the real root (`/`) filesystem, the _System Manager bootup_ phase starts
+and `/var` is mounted from the actual target. At this point, Clevis cannot
+unlock it (`tcsd` would need `/var` to unlock `/var`), so it must already be
+unlocked. Refer to the instructions below for `initramfs-tools` and Dracut.
+
+If the `/var` volume is part of the main LVM volume group (the same as the
+root `/` filesystem) and is protected by the same LUKS volume, no special
+configuration is needed. However, if the `/var` volume is encrypted separately
+(i.e., it uses a different LUKS volume, regardless of whether it has the same
+password), follow the instructions below to enable automatic unlocking with
+Clevis.
+
+###### `initramfs-tools` Initrd Bootup
+
+`initramfs-tools` unlocks the root and swap filesystems by copying the
+corresponding option lines from `/etc/crypttab` into the initramfs. To ensure
+that `/var` volume options are also included, add the `initramfs` option on
+Debian-like system to the relevant line in `/etc/crypttab` as shown in the
+following example:
+
+> `/etc/crypttab`
+> ```bash
+> …
+> luks-aa0ce19c-cde9-44a2-adbd-4afb1845a959 UUID=aa0ce19c-cde9-44a2-adbd-4afb1845a959 none discard,initramfs
+> …
+> ```
+
+This line corresponds to the `crypto_LUKS` volume used by the `/var` volume,
+as shown by the `lsblk -fp` command:
+
+> LVM on LUKS
+> ```bash
+> …
+> └─/dev/vda3                                               crypto_LUKS 2              aa0ce19c-cde9-44a2-adbd-4afb1845a959
+>   └─/dev/mapper/luks-aa0ce19c-cde9-44a2-adbd-4afb1845a959 LVM2_member LVM2 001       lgk4ap-Fo39-PemI-eqKn-fxW2-e3Zt-CPGIv2
+>     └─/dev/mapper/separate-var                            xfs                        767b750e-bba7-4ea7-b2b8-b1e6a2e22e43    753,3M    22% /var
+> ```
+
+The above example uses an LVM-on-LUKS encryption scheme, but the same applies to
+LUKS-on-LVM — just check the `crypto_LUKS` volume UUID.
+
+> LUKS on LVM
+> ```bash
+> …
+> └─/dev/vda3                                                 LVM2_member LVM2 001       lgk4ap-Fo39-PemI-eqKn-fxW2-e3Zt-CPGIv2
+>   └─/dev/mapper/separate-var                                crypto_LUKS 2              aa0ce19c-cde9-44a2-adbd-4afb1845a959
+>     └─/dev/mapper/luks-aa0ce19c-cde9-44a2-adbd-4afb1845a959 xfs                        767b750e-bba7-4ea7-b2b8-b1e6a2e22e43    781,5M    19% /var
+> ````
+
+> [!IMPORTANT]
+> After modifying `/etc/crypttab`, you must run `update-initramfs -u` (on
+> Debian-like systems).
+
+###### Dracut Initrd Bootup
+
+Dracut automatically unlocks the root and swap filesystems. The operating
+system installer ensures that the kernel command line (in `/etc/default/grub`)
+contains the necessary parameters for Dracut and Systemd. Dracut considers
+both the kernel command line and the lines copied from `/etc/crypttab` for
+unlocking.
+
+By default, the root and swap lines from `/etc/crypttab` are copied into the
+initramfs. To ensure the `/var` volume is also unlocked, you must ensure that
+its options are included and referenced by the kernel command line (as
+described below).
+
+> [!CAUTION]
+> Changing the following options can render the system unbootable, potentially
+> requiring a rescue DVD and expert knowledge to recover. Make a full backup
+> before proceeding!
+>
+> For recovery, you may find these commands helpful:
+>
+> * `cryptsetup open /dev/<device> <mapped-device>`
+> * `mount /dev/mapper/<mapped-device> /<target>`
+> * `lvm vgscan`
+> * `lvm lvdisplay -o lv_full_name,lv_dm_path`
+
+To ensure that the `/var` options are included, add either the `x-initrd.attach`
+option to the corresponding line in /etc/crypttab (to unlock the `/var` volume)
+or the `x-initrd.mount` option to the corresponding line in `/etc/fstab` (to
+unlock _and_ mount the `/var` volume). Using both is equivalent to
+`x-initrd.mount`.
+
+> `/etc/crypttab`
+> ```bash
+> …
+> luks-aa0ce19c-cde9-44a2-adbd-4afb1845a959 UUID=aa0ce19c-cde9-44a2-adbd-4afb1845a959 none discard,x-initrd.attach
+> …
+> ```
+
+> `/etc/fstab`
+> ```bash
+> …
+> UUID=767b750e-bba7-4ea7-b2b8-b1e6a2e22e43  /var  xfs  defaults,x-systemd.device-timeout=0,x-initrd.mount 0 0
+> …
+> ```
+
+Refer to the `initramfs-tools` section for instructions on finding the correct
+`/etc/crypttab` line with `lsblk -fp`. The `/etc/fstab` entry is matched by the
+UUID of the filesystem (see the line with `/var` in the `lsblk -fp` output).
+
+> [!IMPORTANT]
+> After changing `/etc/crypttab` and/or `/etc/fstab`, run `dracut -f`.
+
+> [!NOTE]
+> If you use `x-initrd.mount`, the volume is mounted during the _initrd bootup_
+> phase. However, this is not strictly necessary. Systemd's startup order
+> ensures that `/var` is mounted before `tcsd` starts in the _System Manager
+> bootup_ phase, so using `x-initrd.attach` alone is sufficient.
+
+Next, ensure that the volumes are found and unlocked. Two kernel command line
+parameters in `/etc/default/grub` affect this:
+
+* `rd.luks.uuid` – Either remove all values or add the UUID of the
+  `crypto_LUKS` volume (optionally prefixed by `luks-`). If this option is
+  present (it can appear multiple times), only the specified volumes are
+  initialized from `/etc/crypttab`. If it is missing, all lines from
+  `/etc/crypttab` are considered.
+* `rd.lvm.lv` – Either remove all values or add the full LVM volume name for
+  `/var`. If this option is present (it can appear multiple times), only the
+  listed logical volumes are initialized. If it is missing, Dracut
+  automatically detects LVM volumes during boot.
+
+> [!NOTE]
+> The `rd.lvm.lv` option matters only in the LUKS-on-LVM case, because the
+> `crypto_LUKS` volume is accessible only after the LVM logical volume is
+> activated. If `rd.lvm.lv` is missing, Dracut will detect LVM volumes
+> automatically. If it is present, make sure to include the `/var` full volume
+> name.
+
+For more information, see `man dracut.cmdline` and
+`man systemd-cryptsetup-generator`.
+
+> [!NOTE]
+> Dracut internally uses the same Systemd options, so the same logic applies
+> even if Systemd is not present in the Dracut initrd environment.
+
+To find the correct `rd.lvm.lv` value, run:
+
+```bash
+lvs -o lv_full_name,lv_dm_path
+```
+
+This shows the logical volume's full name and Device Mapper path, which also
+appears in the `lsblk -fp` output. For example, if it shows `separate/var`
+(see example below), the `rd.lvm.lv` value would be `rd.lvm.lv=separate/var`:
+
+> ```bash
+> LV                   DMPath
+> …
+> separate/var         /dev/mapper/separate-var
+> …
+> ```
+
+Example of a kernel command line in `/etc/default/grub` with all options
+present:
+
+> `/etc/default/grub`
+> ```bash
+> GRUB_CMDLINE_LINUX="rd.lvm.lv=fedora/root rd.luks.uuid=luks-21a9c1b8-c202-4985-809a-aba2d6fdab01 rd.lvm.lv=separate/var rd.luks.uuid=luks-aa0ce19c-cde9-44a2-adbd-4afb1845a959 quiet"
+> ```
+
+Example of a kernel command line in `/etc/default/grub` when relying on the
+configuration copied from `/etc/crypttab` and Dracut’s automatic LVM
+detection:
+
+> `/etc/default/grub`
+> ```bash
+> GRUB_CMDLINE_LINUX="quiet"
+> ```
+
+> [!IMPORTANT]
+> After changing the kernel command line, update the Grub configuration with
+> `update-grub2` (on Debian-like systems) or
+> `grub2-mkconfig -o /etc/grub2.cfg` (on Fedora-like systems).
 
 #### PIN: PKCS#11
 

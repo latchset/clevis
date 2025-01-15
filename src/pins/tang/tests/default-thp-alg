@@ -70,11 +70,11 @@ for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
               | jose jwe enc --input="${jwe}" --key=- --detached=- --compact)
 
     if ! decoded="$(printf '%s' "${encoded}" | clevis decrypt)"; then
-        tang_error "${TEST}: decoding is expected to work (alg = ${alg})"
+        error "${TEST}: decoding is expected to work (alg = ${alg})"
     fi
 
     if  [ "${decoded}" != "${data}" ]; then
-        tang_error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
+        error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
     fi
 done
 
@@ -86,15 +86,15 @@ for alg in ${CLEVIS_SUPPORTED_THP_ALGS}; do
            | jose jwk thp -i- -a "${alg}")"
     cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
     if ! encoded=$(printf '%s' "${data}" | clevis encrypt tang "${cfg}"); then
-        tang_error "${TEST}: tang encryption should have succeeded when providing the thp (${thp}) with any supported algorithm (${alg})"
+        error "${TEST}: tang encryption should have succeeded when providing the thp (${thp}) with any supported algorithm (${alg})"
     fi
 
     if ! decoded="$(printf '%s' "${encoded}" | clevis decrypt)"; then
-        tang_error "${TEST}: decoding is expected to work (thp alg = ${alg})"
+        error "${TEST}: decoding is expected to work (thp alg = ${alg})"
     fi
 
     if  [ "${decoded}" != "${data}" ]; then
-        tang_error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
+        error "${TEST}: tang decrypt should have succeeded decoded[${decoded}] data[${data}] (alg = ${alg})"
     fi
 
 done
@@ -107,7 +107,7 @@ for alg in ${UNSUPPORTED}; do
            | jose jwk thp -i- -a "${alg}")"
     cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
     if echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
-        tang_error "${TEST}: tang encryption should have failed when providing the thp (${thp}) with an unsupported algorithm (${alg})"
+        error "${TEST}: tang encryption should have failed when providing the thp (${thp}) with an unsupported algorithm (${alg})"
     fi
 done
 
@@ -115,6 +115,6 @@ done
 for thp in "" "foo" "invalid"; do
     cfg="$(printf '{"url":"%s", "thp":"%s"}' "${url}" "${thp}")"
     if echo foo | clevis encrypt tang "${cfg}" >/dev/null; then
-        tang_error "${TEST}: tang encryption expected to fail when providing a bad thp"
+        error "${TEST}: tang encryption expected to fail when providing a bad thp"
     fi
 done

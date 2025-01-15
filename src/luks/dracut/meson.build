@@ -1,5 +1,6 @@
 subdir('clevis')
 subdir('clevis-pin-tang')
+subdir('clevis-pin-tpm1')
 subdir('clevis-pin-tpm2')
 subdir('clevis-pin-sss')
 subdir('clevis-pin-null')

@@ -177,6 +177,9 @@ clevis_luks_print_pin_config() {
 
     local pin=
     case "${P}" in
+    null)
+        printf "null '{}'"
+        ;;
     pkcs11)
         local uri
         uri="$(jose fmt -j- -g uri -u- <<< "${content}")"
@@ -198,6 +201,11 @@ clevis_luks_print_pin_config() {
         url="$(jose fmt -j- -g url -u- <<< "${content}")"
         pin=$(printf '{"url":"%s"}' "${url}")
         printf "tang '%s'" "${pin}"
+        ;;
+    tpm1)
+        pcr_ids="$(jose fmt -j- -g pcr_ids -u- <<< "${content}")"
+        pin=$(printf '"pcr_ids":"%s"' "${pcr_ids}")
+        printf "tpm1 '{%s}'" "${pin}"
         ;;
     tpm2)
         # Valid properties for tpm2 pin are the following:
@@ -252,8 +260,10 @@ clevis_luks_process_sss_pin() {
     local jwe="${1}"
     local threshold="${2}"
 
+    local sss_null
     local sss_pkcs11
     local sss_tang
+    local sss_tpm1
     local sss_tpm2
     local sss
     local pin_cfg
@@ -267,11 +277,17 @@ clevis_luks_process_sss_pin() {
         fi
         read -r pin cfg <<< "${pin_cfg}"
         case "${pin}" in
+        null)
+            sss_null="${sss_null},${cfg}"
+            ;;
         pkcs11)
             sss_pkcs11="${sss_pkcs11},${cfg}"
             ;;
         tang)
             sss_tang="${sss_tang},${cfg}"
+            ;;
+        tpm1)
+            sss_tpm1="${sss_tpm1},${cfg}"
             ;;
         tpm2)
             sss_tpm2="${sss_tpm2},${cfg}"
@@ -283,8 +299,16 @@ clevis_luks_process_sss_pin() {
     done
 
     cfg=
+    if [ -n "${sss_null}" ]; then
+        cfg=$(clevis_luks_join_sss_cfg "null" "${sss_null}")
+    fi
+
     if [ -n "${sss_tang}" ]; then
         cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tpm1}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tpm1" "${sss_tpm1}")
     fi
 
     if [ -n "${sss_tpm2}" ]; then
@@ -321,6 +345,92 @@ clevis_luks_read_pins_from_slot() {
         return 1
     fi
     printf "%s: %s\n" "${SLOT}" "${cfg}"
+}
+
+# clevis_luks_decode_used_pins() will receive a JWE and extract used pins
+# (line-separated, unsorted, not deduped) from it.
+clevis_luks_decode_used_pins() {
+    local jwe="${1}"
+    local pins=
+
+    local decoded
+    if ! decoded=$(clevis_luks_decode_jwe "${jwe}"); then
+        return 1
+    fi
+
+    local P
+    if ! P=$(jose fmt -j- -Og clevis -g pin -u- <<< "${decoded}"); then
+        return 1
+    fi
+
+    pins=$(printf "%s\n%s" "${pins}" "${P}")
+    if [ "${P}" = "sss" ]; then
+        local sss_jwe
+        if ! sss_jwe="$(jose fmt -j- -g clevis -g "${P}" -o- <<< "${decoded}")" \
+                        || [ -z "${sss_jwe}" ]; then
+            return 1
+        fi
+
+        local coded sss_pins
+        for coded in $(jose fmt -j- -Og jwe -Af- <<< "${sss_jwe}"| tr -d '"'); do
+            if ! sss_pins="$(clevis_luks_decode_used_pins "${coded}")"; then
+                continue
+            fi
+            pins=$(printf "%s\n%s" "${pins}" "${sss_pins}")
+        done
+    fi
+
+    echo "${pins}"
+}
+
+# clevis_luks_read_used_pins_from_slot() will receive a given device and slot
+# and will then output space-separated sorted slot-prefixed list of used pins.
+clevis_luks_read_used_pins_from_slot() {
+    local DEV="${1}"
+    local SLOT="${2}"
+
+    local jwe
+    if ! jwe=$(clevis_luks_read_slot "${DEV}" "${SLOT}" 2>/dev/null); then
+        return 1
+    fi
+
+    local pins
+    if ! pins=$(clevis_luks_decode_used_pins "${jwe}"); then
+        return 1
+    fi
+
+    pins=$(echo -n "${pins}" | sed -e '/^$/d' | sort -u | tr '\n' ' ' | sed -e 's/ $//')
+    printf "%s: %s\n" "${SLOT}" "${pins}"
+}
+
+# clevis_luks_read_used_pins() will receive a given device and will then output
+# space-separated sorted list of all used pins in all slots.
+clevis_luks_read_used_pins() {
+    local DEV="${1}"
+
+    [ -z "${DEV}" ] && return 1
+
+    local used_slots
+    if ! used_slots=$(clevis_luks_used_slots "${DEV}") \
+                      || [ -z "${used_slots}" ]; then
+        return 1
+    fi
+
+    local pins=
+    local slot slot_pins used_pins
+    for slot in ${used_slots}; do
+        if ! slot_pins=$(clevis_luks_read_used_pins_from_slot "${DEV}" "${slot}"); then
+            continue
+        fi
+
+        read -r _ used_pins <<< "${slot_pins}"
+        pins=$(printf "%s\n%s" "${pins}" "${used_pins}")
+    done
+
+    pins=$(echo -n "${pins}" | tr ' ' '\n' | sed -e '/^$/d' | sort -u | tr '\n' ' ' | sed -e 's/ $//')
+    [ -z "${pins}" ] && return 1
+
+    echo "${pins}"
 }
 
 # clevis_luks_check_valid_key_or_keyfile() receives a devices and either a
@@ -1096,4 +1206,27 @@ clevis_luks_type() {
         return 1
     fi
     echo "${luks_type}"
+}
+
+# clevis_kill_pid() kills process and its children in a portable way
+# Works with both procps ps and Busybox ps.
+function clevis_kill_pid() {
+    local pid="$1"
+    local child_pids
+
+    [ -z "${pid}" ] && return 1
+
+    child_pids="$({ ps -Ao pid,ppid 2>/dev/null || ps -o pid,ppid 2>/dev/null || ps -Al 2>/dev/null || ps -l ||
+        { echo 'clevis: unable to get list of processes' >&2; exit 1; }; } |
+        awk -v pid="$pid" '
+            NR==1 {
+                for (i=1; i<=NF; i++) if ($i == "PID") pid_col = i; else if ($i == "PPID") ppid_col = i
+                if (!pid_col || !ppid_col) { print "clevis: unable to find PID and/or PPID columns in ps output" | "cat >&2"; exit 1 }
+                next
+            }
+            { if ($ppid_col == pid) print $pid_col }')"
+
+    for kill_pid in $pid $child_pids; do
+        kill "$kill_pid" 2>/dev/null
+    done
 }

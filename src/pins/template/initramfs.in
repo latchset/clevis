@@ -1,0 +1,47 @@
+#!/bin/sh
+#
+# Copyright (c) @year@ @name@
+# Author: @name@ <@email@>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+case $1 in
+prereqs)
+     exit 0
+     ;;
+esac
+
+. @initramfstoolsdir@/hook-functions
+
+die() {
+    code="$1"
+    msg="$2"
+    echo "    (ERROR): $msg" >&2
+    exit $1
+}
+
+copy_exec @bindir@/clevis-decrypt-@pin@ || die 1 "@bindir@/clevis-decrypt-@pin@ not found"
+
+#%# Possibly you to need to install additional binaries:
+#%#
+#%# find_binary() {
+#%#     bin_name="$1"
+#%#     resolved=$(which ${bin_name})
+#%#     [ -z "$resolved" ] && die 1 "Unable to find ${bin_name}"
+#%#     echo "$resolved"
+#%# }
+#%#
+#%# curl_bin=$(find_binary "curl")
+#%# copy_exec "${curl_bin}" || die 2 "Unable to copy ${curl_bin} to initrd image"

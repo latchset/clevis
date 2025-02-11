@@ -19,9 +19,16 @@
 #
 
 check() {
-    require_binaries clevis-decrypt-tpm2 tpm2_createprimary tpm2_flushcontext \
-        tpm2_load tpm2_unseal tpm2_getcap || return 1
-    require_any_binary tpm2_pcrread tpm2_pcrlist || return 1
+    require_binaries clevis-decrypt-tpm2 || return 1
+
+    if command -v clevis-pin-tpm2 >/dev/null;
+    then
+        require_binaries clevis-pin-tpm2 || return 1
+    else
+        require_binaries tpm2_createprimary tpm2_flushcontext \
+                           tpm2_load tpm2_unseal tpm2_getcap || return 1
+        require_any_binary tpm2_pcrread tpm2_pcrlist || return 1
+    fi
     return 0
 }
 
@@ -30,11 +37,21 @@ depends() {
     return 0
 }
 
-install() {
-    inst_multiple clevis-decrypt-tpm2 tpm2_createprimary tpm2_flushcontext \
+install_tpm2_tools() {
+    inst_multiple tpm2_createprimary tpm2_flushcontext \
         tpm2_load tpm2_unseal tpm2_getcap
     inst_multiple -o tpm2_pcrread tpm2_pcrlist
+}
+
+install() {
+    inst_multiple clevis-decrypt-tpm2
     inst_libdir_file "libtss2-tcti-device.so*"
+    if command -v clevis-pin-tpm2 >/dev/null;
+    then
+        inst_multiple clevis-pin-tpm2
+    else
+        install_tpm2_tools
+    fi
 }
 
 installkernel() {

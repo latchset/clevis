@@ -101,7 +101,18 @@ xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
 rec_url="$url/rec/$kid"
 ct="Content-Type: application/jwk+json"
-if ! rep="$(curl -sfg -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
+
+# Check if netrc-file option exists
+curl_net_rc_option="--netrc-file"
+curl_net_rc_file="/etc/clevis/clevis_netrc.conf"
+netrc="$(curl --help all | grep netrc-file)" || true
+if [ -z "${netrc}" ];
+then
+  curl_net_rc_option=""
+  curl_net_rc_file=""
+fi
+
+if ! rep="$(curl "${curl_net_rc_option}" "${curl_net_rc_file}" -sfg -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
     echo "Error communicating with server $url" >&2
     exit 1
 fi

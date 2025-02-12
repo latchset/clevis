@@ -31,6 +31,8 @@ debian:*|ubuntu:*)
 *fedora:*)
     printf 'max_parallel_downloads=10\nfastestmirror=1\n' >> /etc/dnf/dnf.conf
     dnf -y clean all
+    # Fix Fedora 43 (rawhide) build - install systemd and awk
+    dnf -y install --allowerasing systemd awk
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
         opensc pcsc-lite softhsm

@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+SUMMARY="List ZFS datasets that are bound with Clevis [in dataset]"
+
+function usage() {
+	cat >&2 <<-USAGE_END
+		Usage: clevis zfs list -d DATASET
+
+		$SUMMARY:
+
+		  -d DATASET  The ZFS dataset on which to perform unbinding
+
+	USAGE_END
+}
+
+main() {
+	if [ $# -eq 1 ] && [ "${1:-}" == "--summary" ]; then
+		echo "$SUMMARY"
+		exit 0
+	fi
+
+	local dataset
+	while getopts "hd:" o; do
+		case "$o" in
+		h) usage; exit 0;;
+		d) dataset="$OPTARG";;
+		*) error "unrecognized argument: -${OPTARG}";;
+		esac
+	done
+
+	local output='name,value'
+	if [ -n "${dataset:-}" ]; then
+		output='value'
+	fi
+
+	echo >&2 "The following ZFS datasets have been bound with Clevis:"
+	# we should not quote ${dataset:-} in case it is empty
+	# shellcheck disable=SC2086
+	zfs get -H -o "${output}" -slocal "${zfs_labels_prop}" ${dataset:-}
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+	. @libexecdir@/clevis-zfs-common
+	main "${@}"
+fi

@@ -1,0 +1,65 @@
+#!/bin/bash -ex
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+error() {
+    echo "$@" >&2
+    exit 1
+}
+
+skip_test() {
+    local message="$*"
+    [ -n "$message" ] && echo "$message" >&2
+    exit 77
+}
+
+# Find listening port of a process
+process_find_port() {
+    local pid="${1}"
+
+    [ -z "${pid}" ] && \
+        error "process_find_port: please specify 'pid'"
+
+    local port
+    port=$(lsof -Pan -p "${pid}" -iTCP -sTCP:LISTEN -Fn | grep '^n.*:' | head -n1 | cut -d: -f2)
+    [ -n "${port}" ] && echo "${port}"
+}
+
+# Wait for the server to be operational.
+process_wait_until_port_ready() {
+    local pid="${1}"
+    local name="${2}"
+
+    [ -z "${pid}" ] && \
+        error "process_wait_until_port_ready: please specify 'pid'"
+
+    local max_timeout_in_s=5
+    local start elapsed
+    start="${SECONDS}"
+    while ! process_find_port "${pid}" >/dev/null; do
+        elapsed=$((SECONDS - start))
+        if ! ps -A -o pid | awk -v pid="${pid}" '$1==pid {found=1} END {exit !found}'; then
+            error "Failed waiting, ${name:process} terminated"
+        elif [ "${elapsed}" -gt "${max_timeout_in_s}" ]; then
+            error "Timeout (${max_timeout_in_s}s) waiting for ${name:process}"
+        fi
+        sleep 0.1
+        echo -n . >&2
+    done
+}

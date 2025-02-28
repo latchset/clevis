@@ -19,7 +19,7 @@
 #
 
 depends() {
-    local __depends=crypt
+    local __depends="crypt bash"
     if dracut_module_included "systemd"; then
         # Dracut v103 introduced a separate systemd-cryptsetup module
         systemd_cryptsetup_dir=$(dracut_module_path "systemd-cryptsetup")
@@ -36,17 +36,20 @@ depends() {
 install() {
     if dracut_module_included "systemd"; then
         inst_multiple \
-            $systemdsystemunitdir/clevis-luks-askpass.service \
-            $systemdsystemunitdir/clevis-luks-askpass.path \
+            "$systemdsystemunitdir"/clevis-luks-askpass.service \
+            "$systemdsystemunitdir"/clevis-luks-askpass.path \
             @SYSTEMD_REPLY_PASS@ \
             @libexecdir@/clevis-luks-askpass
 
         systemctl -q --root "$initdir" add-wants cryptsetup.target clevis-luks-askpass.path
     else
-        inst_hook initqueue/online 60 "$moddir/clevis-hook.sh"
-        inst_hook initqueue/settled 60 "$moddir/clevis-hook.sh"
+        inst_hook initqueue/settled 60 "$moddir"/clevis-password-unlocker-hook.sh
+        inst_hook initqueue/online 60 "$moddir"/clevis-online-hook.sh
+        inst_hook cleanup 60 "$moddir"/clevis-cleanup-hook.sh
+        inst_script "$moddir"/clevis-cleanup /bin/clevis-cleanup
+        inst_script "$moddir"/clevis-password-unlocker /bin/clevis-password-unlocker
+        inst_script "$moddir"/clevis-password-unlocker-prepare /bin/clevis-password-unlocker-prepare
         inst_multiple \
-            @libexecdir@/clevis-luks-unlocker \
             clevis-luks-unlock \
             blkid
     fi
@@ -54,6 +57,7 @@ install() {
     inst_multiple \
         /etc/services \
         clevis-luks-common-functions \
+        awk date ps sort touch tr \
         grep sed cut \
         clevis-decrypt \
         clevis-luks-list \

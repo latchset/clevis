@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 TEST=$(basename "${0}")
-. tests-common-functions
+. luks-common-test-functions
 
 . clevis-luks-common-functions
 

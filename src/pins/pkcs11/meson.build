@@ -26,7 +26,10 @@ if pcscd.found() and pkcs11tool.found()
   mans += join_paths(meson.current_source_dir(), 'clevis-encrypt-pkcs11.1')
   ### TODO: Include man pages
   # mans += join_paths(meson.current_source_dir(), 'clevis-decrypt-pkcs11.1')
-  subdir('tests')
+  if not meson.is_cross_build()
+    subdir('tests')
+  endif
+
   threads_dep = dependency('threads', required: true)
   executable('clevis-pkcs11-afunix-socket-unlock', ['clevis-pkcs11-afunix-socket-unlock.c'],
     dependencies: threads_dep,

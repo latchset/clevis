@@ -71,4 +71,7 @@ else
 endif
 
 # Tests.
-subdir('tests')
+
+if not meson.is_cross_build()
+  subdir('tests')
+endif

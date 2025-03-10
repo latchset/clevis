@@ -1,0 +1,133 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2019 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tests-common-functions
+
+SOCAT_BIN="@SOCAT_BIN@"
+SWTPM_BIN="@SWTPM_BIN@"
+SWTPM_SETUP_BIN="@SWTPM_SETUP_BIN@"
+
+SWTPM_SOCKET_PID=
+
+function on_exit() {
+    popd || error "Unable to change directory"
+    if [ ! -d "$TESTDIR" ] || ! rm -rf "$TESTDIR"; then
+        echo "Delete temporary files failed!" >&2
+        echo "You need to clean up: $TESTDIR" >&2
+        exit 1
+    fi
+
+    # Cleanup sw emulation
+    if [ -n "$SWTPM_SOCKET_PID" ]; then
+        kill $SWTPM_SOCKET_PID >/dev/null 2>&1
+        sleep .5
+        # swtpm does not always terminate gracefully, so kill it
+        kill -9 $SWTPM_SOCKET_PID >/dev/null 2>&1
+    fi
+}
+if ! TESTDIR="$(mktemp -d)"; then
+    echo "Creating a temporary dir for TPM files failed!" >&2
+    exit 1
+fi
+trap 'on_exit' EXIT
+pushd "$TESTDIR" || error "Unable to change directory"
+
+
+tpm2_hw_available() {
+    # Old environment variables for tpm2-tools 3.0
+    export TPM2TOOLS_TCTI_NAME=device
+    export TPM2TOOLS_DEVICE_FILE=
+    for dev in /dev/tpmrm?; do
+        [ -e "${dev}" ] || continue
+        TPM2TOOLS_DEVICE_FILE="${dev}"
+        break
+    done
+
+    # New environment variable for tpm2-tools >= 3.1
+    export TPM2TOOLS_TCTI="${TPM2TOOLS_TCTI_NAME}:${TPM2TOOLS_DEVICE_FILE}"
+
+    if [ -z "${TPM2TOOLS_DEVICE_FILE}" ]; then
+        echo "A TPM2 device with the in-kernel resource manager is needed!" >&2
+        return 1
+    fi
+
+    if ! [[ -r "${TPM2TOOLS_DEVICE_FILE}" \
+            && -w "${TPM2TOOLS_DEVICE_FILE}" ]]; then
+        echo "The ${TPM2TOOLS_DEVICE_FILE} device must be readable and writable!" >&2
+        return 1
+    fi
+    return 0
+}
+
+tpm2_version() {
+    local _tpm2tools_info
+    local _match='version="(.)\.'
+    _tpm2tools_info="$(tpm2_createprimary -v)"
+    [[ ${_tpm2tools_info} =~ ${_match} ]] && TPM2TOOLS_VERSION="${BASH_REMATCH[1]}"
+    if [[ $TPM2TOOLS_VERSION -lt 3 ]] || [[ $TPM2TOOLS_VERSION -gt 5 ]]; then
+        echo "The tpm2 pin requires a tpm2-tools version between 3 and 5" >&2
+        return 1
+    fi
+    export TPM2TOOLS_VERSION
+}
+
+tpm2_sw_check_preconditions() {
+    [ -x "${SOCAT_BIN}" ] || skip_test "Skipping TPM2 test with software emulation, socat not found"
+    [ -x "${SWTPM_BIN}" ] || skip_test "Skipping TPM2 test with software emulation, swtpm not found"
+    [ -x "${SWTPM_SETUP_BIN}" ] || skip_test "Skipping TPM2 test with software emulation, swtpm_setup not found"
+
+    if ! "${SWTPM_BIN}" socket --print-capabilities | jq -e '(.version | test("^0\\.[0-6](\\..*)?$")) or (.features | index("tpm-2.0"))' >/dev/null 2>&1; then
+        skip_test "Skipping TPM2 test with software emulation, no support for TPM 2.0 in swtpm"
+    fi
+}
+
+tpm2_start_emulation() {
+    local socket_wait
+    local server_sock
+    local control_sock
+
+    echo "Starting TPM 2 emulation" >&2
+
+    # Setup TPM 2 data
+    "${SWTPM_SETUP_BIN}" --tpm-state "$TESTDIR" --tpm2 --create-platform-cert --lock-nvram --display >&2 || error "Unable to setup TPM 2 emulation"
+
+    # Start emulation over socket
+    server_sock="$TESTDIR"/swtpm.sock
+    control_sock="$TESTDIR"/swtpm.sock.ctrl
+    "${SWTPM_BIN}" socket --tpmstate dir="$TESTDIR" --tpm2 --ctrl type=unixio,path="$control_sock" --server type=unixio,path="$server_sock" --flags startup-clear >&2 &
+    SWTPM_SOCKET_PID=$!
+
+    socket_wait=1
+    while [ $socket_wait -le 100 ]; do
+        [ -S "$server_sock" ] && break
+        socket_wait=$((socket_wait + 1))
+        sleep 0.1
+    done
+    [ "$socket_wait" -gt 100 ] && error "Unable to start TPM 2 emulation"
+
+    # Use swtpm in tpm2-tools
+    export TPM2TOOLS_TCTI="swtpm:path=$server_sock"
+
+    # Test if socket communication is supported
+    if ! tpm2_getcap pcrs >/dev/null 2>&1; then
+        # Old libtss2 compatibility - use socat
+        export TPM2TOOLS_TCTI="cmd:\"$SOCAT_BIN\" - \"UNIX-CONNECT:$server_sock\""
+    fi
+}

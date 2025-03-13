@@ -445,11 +445,11 @@ distribution's packages.
 
 ### Fedora 24+
 
-This command installs the core Clevis commands, the Dracut unlocker and the
-UDisks2 unlocker, respectively.
+This command installs the core Clevis commands, the Dracut, Systemd and LUKs unlockers,
+and the UDisks2 unlocker, respectively.
 
 ```bash
-$ sudo dnf install clevis clevis-dracut clevis-udisks2
+$ sudo dnf install clevis clevis-dracut clevis-udisks2 clevis-systemd clevis-luks
 ```
 
 ## Manual compilation

@@ -75,6 +75,16 @@ if ! url="$(jose fmt -j- -Og url -u- <<< "$cfg")"; then
     exit 1
 fi
 
+# Check if netrc-file option exists
+curl_net_rc_option="--netrc-file"
+curl_net_rc_file="/etc/clevis/clevis_netrc.conf"
+netrc="$(curl --help all | grep netrc-file)" || true
+if [ -z "${netrc}" ];
+then
+  curl_net_rc_option=""
+  curl_net_rc_file=""
+fi
+
 thp="$(jose fmt -j- -Og thp -Su- <<< "$cfg")" || true
 
 ### Get the advertisement
@@ -92,7 +102,7 @@ elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
     fi
 
     thp="${thp:-any}"
-elif ! jws="$(curl -sfg "$url/adv/$thp")"; then
+elif ! jws="$(curl "${curl_net_rc_option}" "${curl_net_rc_file}" -sfg "$url/adv/$thp")"; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1
 fi

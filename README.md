@@ -248,7 +248,7 @@ For installation and configuration of the clevis PKCS#11 feature, next steps mus
 1 - Install Clevis required dependencies, including PKCS#11 dependencies:
 
 ```
-$ sudo dnf install -y openssl socat clevis-pin-pkcs11
+$ sudo dnf install clevis-pin-pkcs11
 ```
 
 2 - The PKCS11 device must be accessible by “pkcs11-tool”:

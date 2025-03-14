@@ -1,0 +1,121 @@
+#!/bin/sh
+
+set -eu
+
+# Copyright (c) 2020 Christoph Biedl
+# Author: Christoph Biedl <debian.axhn@manchmal.in-ulm.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+
+on_exit() {
+    [ "${TMP:-}" ] || return 0
+    [ -e "$TMP" ] || return 0
+    if mountpoint -q "$TMP" ; then
+        if ! umount "$TMP" ; then
+            echo "Failed to umount $device" >&2
+            echo "You need to clean up: $TMP" >&2
+            return 1
+        fi
+    fi
+    rm --one-file-system -rf "$TMP"
+}
+
+SUMMARY='Encrypts using a key file on a medium policy'
+
+if [ "${1:-}" = '--summary' ] ; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ] ; then
+    exec >&2
+    echo
+    echo 'Usage: clevis encrypt medium CONFIG < PLAINTEXT > JWE'
+    echo
+    echo "$SUMMARY"
+    echo
+    echo 'This command uses the following configuration properties:'
+    echo
+    echo '  device: <string>  The block device that holds the key file (REQUIRED)'
+    echo
+    echo '  file: <string>    The file name of the key file (REQUIRED)'
+    echo
+    echo '  fstype: <string>  The type of the file system (default: "auto")'
+    echo
+    echo '  options: <string> Additional mount options (default: none)'
+    echo
+    echo '  reuse: <string>   Re-use an existing key (default: This is an error)'
+    echo
+    exit 2
+fi
+
+if ! cfg="$(jose fmt --json="${1:-}" --object --output=- 2>/dev/null)" ; then
+    echo 'Configuration is malformed!' >&2
+    exit 1
+fi
+
+if ! device="$(jose fmt --json="$cfg" --object --get device --unquote=-)" ; then
+    echo 'Missing the required device property!' >&2
+    exit 1
+fi
+if ! file="$(jose fmt --json="$cfg" --object --get file --unquote=-)" ; then
+    echo 'Missing the required file property!' >&2
+    exit 1
+fi
+
+fstype="$(jose fmt --json="$cfg" --object --get fstype --unquote=-)" || fstype='auto'
+options="$(jose fmt --json="$cfg" --object --get options --unquote=-)" || options=''
+reuse="$(jose fmt --json="$cfg" --object --get reuse --unquote=-)" || reuse=''
+
+jwk="$(jose jwk gen --input='{"alg":"A256GCM"}')"
+
+if [ "$options" ] ; then
+    mopts="rw,noatime,$options"
+else
+    mopts='rw,noatime'
+fi
+
+TMP="$(mktemp -d)"
+trap 'on_exit' EXIT
+
+if ! mount -t "$fstype" -o "$mopts" "$device" "$TMP" ; then
+    echo "Failed to mount $device" >&2
+    exit 1
+fi
+if [ "$reuse" ] ; then
+    if [ ! -f "$TMP/$file" ] ; then
+        echo "The key file $file does not exist on $device" >&2
+        exit 1
+    fi
+elif [ -e "$TMP/$file" ] ; then
+    echo "The key file $file already exists on $device" >&2
+    exit 1
+fi
+( umask 0377 ; printf '%s' "$jwk" >"$TMP/$file" )
+if ! umount "$TMP" ; then
+    echo "Failed to umount $device" >&2
+    exit 1
+fi
+
+# clean up tempdir
+on_exit
+
+jwe='{"protected":{"clevis":{"pin":"medium","medium":{}}}}'
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get medium --quote "$device" --set device -UUUU --output=-)"
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get medium --quote "$file" --set file -UUUU --output=-)"
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get medium --quote "$fstype" --set fstype -UUUU --output=-)"
+jwe="$(jose fmt --json="$jwe" --get protected --get clevis --get medium --quote "$options" --set options -UUUU --output=-)"
+
+( printf '%s' "$jwe$jwk" ; cat ) | exec jose jwe enc --input=- --key=- --detached=- --compact

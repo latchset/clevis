@@ -1,0 +1,150 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tests-common-functions
+
+TPM_VERSION_BIN="@TPM_VERSION_BIN@"
+TPM_SEALDATA_BIN="@TPM_SEALDATA_BIN@"
+TPM_UNSEALDATA_BIN="@TPM_UNSEALDATA_BIN@"
+TPM_TAKEOWNERSHIP_BIN="@TPM_TAKEOWNERSHIP_BIN@"
+TCSD_BIN="@TCSD_BIN@"
+SWTPM_BIN="@SWTPM_BIN@"
+SWTPM_SETUP_BIN="@SWTPM_SETUP_BIN@"
+LIBCLEVIS_TPM1_TCSD_PRELOAD="@LIBCLEVIS_TPM1_TCSD_PRELOAD@"
+
+SWTPM_SOCKET_PID=
+TCSD_PID=
+
+export -n TCSD_UN_SOCKET_DEVICE_PATH
+export -n TSS_TCSD_PORT
+export -n TSS_TCSD_HOST
+
+function on_exit() {
+    popd || error "Unable to change directory"
+    if [ ! -d "$TESTDIR" ] || ! rm -rf "$TESTDIR"; then
+        echo "Delete temporary files failed!" >&2
+        echo "You need to clean up: $TESTDIR" >&2
+        exit 1
+    fi
+
+    # Cleanup sw emulation
+    [ -n "$TCSD_PID" ] && kill $TCSD_PID >/dev/null 2>&1
+    if [ -n "$SWTPM_SOCKET_PID" ]; then
+        kill $SWTPM_SOCKET_PID >/dev/null 2>&1
+        sleep .5
+        # swtpm does not always terminate gracefully, so kill it
+        kill -9 $SWTPM_SOCKET_PID >/dev/null 2>&1
+    fi
+}
+if ! TESTDIR="$(mktemp -d)"; then
+    echo "Creating a temporary dir for TPM files failed!" >&2
+    exit 1
+fi
+trap 'on_exit' EXIT
+pushd "$TESTDIR" || error "Unable to change directory"
+
+tpm1_hw_check_preconditions() {
+    [ -x "${TPM_VERSION_BIN}" ] || skip_test "Skipping TPM1 test, tpm_version from tpm-tools not found"
+    [ -x "${TPM_SEALDATA_BIN}" ] || skip_test "Skipping TPM1 test, tpm_sealdata from tpm-tools not found"
+    [ -x "${TPM_UNSEALDATA_BIN}" ] || skip_test "Skipping TPM1 test, tpm_unsealdata from tpm-tools not found"
+    getent group "tss" >/dev/null 2>&1 || skip_test "Skipping TPM1 test, group tss not found"
+}
+
+tpm1_sw_check_preconditions() {
+    tpm1_hw_check_preconditions
+
+    [ -x "${TCSD_BIN}" ] || skip_test "Skipping TPM1 test with software emulation, tcsd not found"
+    [ -x "${SWTPM_BIN}" ] || skip_test "Skipping TPM1 test with software emulation, swtpm not found"
+    [ -x "${SWTPM_SETUP_BIN}" ] || skip_test "Skipping TPM1 test with software emulation, swtpm_setup not found"
+    [ -f "${TCSD_PATCH_LIB}" ] || skip_test "Skipping TPM1 test with software emulation, libtcsd_patch.so not found"
+
+    if ! "${SWTPM_BIN}" socket --print-capabilities | jq -e '(.version | test("^0\\.[0-6](\\..*)?$")) or (.features | index("tpm-1.2"))' >/dev/null 2>&1; then
+        skip_test "Skipping TPM1 test with software emulation, no support for TPM 1.2 in swtpm"
+    fi
+}
+
+tpm1_working() {
+    if ! "$TPM_VERSION_BIN" >/dev/null 2>&1; then
+        # The tpm_version outputs garbage to stdout on success, so let the
+        # tpm_version output the error again cleanly now
+        ( "$TPM_VERSION_BIN" 2>&1 | tr '\0' ' ' ) 2>&1 | sed -e 's/^/tpm_version: /' >&2
+        return 1
+    fi
+
+    echo test | "$TPM_SEALDATA_BIN" -z | "$TPM_UNSEALDATA_BIN" -z -i /dev/stdin >/dev/null 2>&1 \
+        && return 0
+
+    if [ ${PIPESTATUS[0]} -gt 0 ]; then
+        "$TPM_SEALDATA_BIN" -z < /dev/null >/dev/null 2>&1 | sed -e 's/^/tpm_sealdata: /' >&2
+    else
+        "$TPM_SEALDATA_BIN" -z < /dev/null | "$TPM_UNSEALDATA_BIN" -z -i /dev/stdin 2>&1 >/dev/null | sed -e 's/^/tpm_unsealdata: /' >&2
+    fi
+    return 1
+}
+
+tpm1_start_emulation() {
+    local socket_wait
+    echo "Starting TPM 1 emulation" >&2
+
+    # Setup TPM 1 data
+    "${SWTPM_SETUP_BIN}" --tpm-state "$TESTDIR" --createek --display >&2 || error "Unable to setup TPM 1 emulation"
+
+    # Start emulation over socket
+    "${SWTPM_BIN}" socket --tpmstate dir="$TESTDIR" --ctrl type=unixio,path="$TESTDIR"/swtpm.sock.ctrl --server type=unixio,path="$TESTDIR"/swtpm.sock --flags startup-clear >&2 &
+    SWTPM_SOCKET_PID=$!
+
+    socket_wait=1
+    while [ $socket_wait -le 100 ]; do
+        [ -S "$TESTDIR"/swtpm.sock ] && break
+        socket_wait=$((socket_wait + 1))
+        sleep 0.1
+    done
+    [ "$socket_wait" -gt 100 ] && error "Unable to start TPM 1 emulation"
+
+    # Run tcds
+    cat <<EOM > "$TESTDIR"/tcsd.conf
+port = 0
+system_ps_file = $TESTDIR/system.data
+EOM
+
+    # Deduce correct permissions, or fallback to latest tcsd expectations
+    if [ -f "@sysconfdir@/tcsd.conf" ]; then
+        chmod "$(stat -c "0%a" "@sysconfdir@/tcsd.conf")" "$TESTDIR"/tcsd.conf
+    else
+        chmod 0640 "$TESTDIR"/tcsd.conf
+    fi
+
+    TCSD_NO_PRIVILEGE_DROP=1 \
+        LD_PRELOAD="$LIBCLEVIS_TPM1_TCSD_PRELOAD $TCSD_PATCH_LIB" \
+        TCSD_UN_SOCKET_DEVICE_PATH="$TESTDIR"/swtpm.sock \
+        "${TCSD_BIN}" -f -e -c "$TESTDIR"/tcsd.conf >&2 </dev/null &
+    TCSD_PID=$!
+
+    process_wait_until_port_ready $TCSD_PID "tcsd"
+    TSS_TCSD_PORT=$(process_find_port $TCSD_PID)
+    export TSS_TCSD_PORT
+
+    "${TPM_TAKEOWNERSHIP_BIN}" -y -z || error "Unable to finalize TPM 1 emulation"
+}
+
+if [ "$(id -u)" != 0 ]; then
+    skip_test "WARNING: You must be root to run this test; test skipped."
+fi

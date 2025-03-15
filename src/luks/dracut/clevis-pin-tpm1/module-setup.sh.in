@@ -1,0 +1,167 @@
+#!/bin/bash
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+require_file() {
+    local path="$1"
+    if ! [ -f "$path" ]; then
+        # shellcheck disable=SC2154 # $moddir is a dracut variable
+        local _module_name="${moddir##*/[0-9][0-9]}"
+        dinfo "dracut module '${_module_name}' will not be installed, because file '$path' could not be found!"
+        return 1
+    fi
+    return 0
+}
+
+require_files() {
+    local _ret=0
+    for path in "$@"; do
+        require_file "$path" || ((_ret++))
+    done
+    return "$_ret"
+}
+
+require_dir() {
+    local path="$1"
+    if ! [ -d "$path" ]; then
+        local _module_name="${moddir##*/[0-9][0-9]}"
+        dinfo "dracut module '${_module_name}' will not be installed, because directory '$path' could not be found!"
+        return 1
+    fi
+    return 0
+}
+
+require_nonempty_dir() {
+    local path="$1"
+    require_dir "$path" || return 1
+    # See https://superuser.com/a/667095 how to test empty dir
+    files=$(shopt -s nullglob; shopt -u dotglob; echo "$path/"*)
+    if ! [[ "$files" ]]; then
+        local _module_name="${moddir##*/[0-9][0-9]}"
+        dinfo "dracut module '${_module_name}' will not be installed, because directory '$path' is empty!"
+        return 1
+    fi
+    return 0
+}
+
+check() {
+    local _module_name="${moddir##*/[0-9][0-9]}"
+
+    require_binaries clevis-decrypt-tpm1 tpm_version tpm_unsealdata tcsd || return 1
+    if [[ $hostonly ]]; then
+        require_nonempty_dir /var/lib/tpm || return 1
+    else
+        [ -f /usr/share/trousers/system.data.auth ] || \
+        [ -f /var/lib/tpm/system.data.auth ] || \
+            ddebug "  ${_module_name}: no usable system.data.auth in /usr/share/trousers nor /var/lib/tpm found, using built-in one"
+    fi
+    if dracut_module_included "systemd"; then
+        # shellcheck disable=SC2154 # $systemdsystemunitdir is a dracut variable
+        require_files \
+            "$systemdsystemunitdir"/tcsd.service \
+            "$systemdsystemunitdir"/tcsd.service.d/clevis-tcsd.conf \
+            || return 1
+    fi
+    return 0
+}
+
+depends() {
+    echo clevis network
+    return 0
+}
+
+install() {
+    if dracut_module_included "systemd"; then
+        inst_multiple \
+            "$systemdsystemunitdir/tcsd.service" \
+            "$systemdsystemunitdir/tcsd.service.d/clevis-tcsd.conf"
+        # shellcheck disable=SC2154 # $initdir is a dracut variable
+        systemctl -q --root "$initdir" add-wants cryptsetup.target tcsd.service
+    else
+        inst_multiple \
+            awk chmod chown mkfifo mktemp ip ps \
+            @libdir@/libclevis-tpm1-tcsd-preload.so \
+            @libexecdir@/clevis-luks-tpm1-functions
+    fi
+
+    inst_multiple \
+        clevis-decrypt-tpm1 \
+        tcsd \
+        tpm_version \
+        tpm_unsealdata
+
+    inst_rules 60-tpm-udev.rules
+
+    if ! [[ $hostonly ]] || ! dracut_module_included "systemd"; then
+        # /etc/hosts is installed only in host-only mode with systemd, so
+        # we need to create our own in order to get tpm tools working.
+        # The localhost entry is required by tpm tools.
+        if [ ! -f "$initdir/etc/hosts" ]; then
+            echo "127.0.0.1 localhost" >> "$initdir/etc/hosts"
+            echo "::1 localhost ip6-localhost ip6-loopback" >> "$initdir/etc/hosts"
+            echo "ff02::1 ip6-allnodes" >> "$initdir/etc/hosts"
+            echo "ff02::2 ip6-allrouters" >> "$initdir/etc/hosts"
+        fi
+    fi
+
+    if [[ $hostonly ]]; then
+        inst /etc/tcsd.conf
+        inst_multiple /var/lib/tpm/*
+    else
+        inst_dir /etc
+        touch "$initdir/etc/tcsd.conf"
+        if [ -f "/etc/tcsd.conf" ] && [[ $(stat -c "0%a" "/etc/tcsd.conf") = "0600" ]]; then
+            # Compatibility with tcsd version 0.3.14
+            chmod 0600 "$initdir/etc/tcsd.conf"
+            chown tss:tss "$initdir/etc/tcsd.conf"
+        else
+            chmod 0640 "$initdir/etc/tcsd.conf"
+            chown root:tss "$initdir/etc/tcsd.conf"
+        fi
+
+        inst_dir /var/lib/tpm
+        if [ -f /usr/share/trousers/system.data.auth ]; then
+            inst /usr/share/trousers/system.data.auth /var/lib/tpm/system.data
+        elif [ -f /var/lib/tpm/system.data.auth ]; then
+            inst /var/lib/tpm/system.data.auth /var/lib/tpm/system.data
+        else
+            jose b64 dec -i- >"$initdir/var/lib/tpm/system.data" <<EOM
+AQEAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAABLwEAAAAAAwAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAQEABgARAAAAAAEAAAABAAMAAQAAAAwAAAgAAAAAAgAAAAAAAAAA
+AAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+EOM
+        fi
+    fi
+
+    chown -R tss:tss "$initdir/var/lib/tpm"
+    chmod -R u=rwX,go= "$initdir/var/lib/tpm"
+}
+
+installkernel() {
+    hostonly='' instmods '=drivers/char/tpm'
+}

@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-/usr/libexec/clevis-luks-pkcs11-askpin -r &
+@libexecdir@/clevis-luks-pkcs11-askpin -r &
 # Wait 60 seconds to attend key requests from systemd
 # If control socket starts receiving information, this time is cancelled
 clevis-pkcs11-afunix-socket-unlock -l /run/systemd/clevis-pkcs11-systemd.log -f /run/systemd/clevis-pkcs11.sock -s 60

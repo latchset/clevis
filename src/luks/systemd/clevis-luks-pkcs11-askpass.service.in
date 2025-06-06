@@ -5,4 +5,4 @@ PartOf=clevis-luks-pkcs11-askpass.socket
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/clevis-luks-pkcs11-askpass
+ExecStart=@libexecdir@/clevis-luks-pkcs11-askpass

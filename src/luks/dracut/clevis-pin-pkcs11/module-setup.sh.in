@@ -51,8 +51,8 @@ install() {
         /etc/opensc.conf \
         /usr/lib64/ossl-modules/legacy.so \
         /lib64/libpcsclite.so.1 \
-        /usr/libexec/clevis-luks-pkcs11-askpass \
-        /usr/libexec/clevis-luks-pkcs11-askpin \
+        @libexecdir@/clevis-luks-pkcs11-askpass \
+        @libexecdir@/clevis-luks-pkcs11-askpin \
         clevis-luks-common-functions \
         clevis-pkcs11-afunix-socket-unlock \
         clevis-pkcs11-common \

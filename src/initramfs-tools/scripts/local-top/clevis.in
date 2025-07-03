@@ -221,7 +221,7 @@ clevis_all_netbootable_devices() {
 }
 
 get_specified_device() {
-    local dev="$(echo $IP | cut -d: -f6)"
+    local dev="$(echo $IP | awk -F: '{ print $6 }')"
     [ -z "$dev" ] || echo $dev
 }
 

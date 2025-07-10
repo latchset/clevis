@@ -21,6 +21,6 @@
 if [ ! -f /run/systemd/clevis-pkcs11.run ] && [ -d /run/systemd ];
 then
     clevis_start_pcscd_server
-    echo "" > /run/systemd/clevis-pkcs11.run
-    /usr/libexec/clevis-luks-pkcs11-askpin -d -r
+    echo "" >/run/systemd/clevis-pkcs11.run
+    @libexecdir@/clevis-luks-pkcs11-askpin -d -r
 fi

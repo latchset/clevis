@@ -10,7 +10,12 @@ if dracut.found()
     configuration: data,
   )
 
-  install_data('clevis-pkcs11-hook.sh', install_dir: dracutdir)
+  configure_file(
+    input: 'clevis-pkcs11-hook.sh.in',
+    output: 'clevis-pkcs11-hook.sh',
+    install_dir: dracutdir,
+    configuration: data,
+    )
   install_data('clevis-pkcs11-prehook.sh', install_dir: dracutdir)
 
 else

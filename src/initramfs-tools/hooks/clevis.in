@@ -47,13 +47,29 @@ find_binary() {
     echo "$resolved"
 }
 
+find_library() {
+    lib_name="$1"
+    for lib_path in \
+        {/usr,}/libexec/${lib_name} \
+        {/usr,}/lib64/${lib_name} \
+        {/usr,}/lib/${lib_name} \
+        /usr/lib/`uname -m`-linux-gnu*/${lib_name} \
+    ; do
+        if [ -e "$lib_path" ]; then
+            echo "$lib_path"
+            return
+        fi
+    done
+    die 1 "Unable to find library ${lib_name}"
+}
+
 if [ -n "${FORCE_CLEVIS}" ] && [ "${FORCE_CLEVIS}" != "n" ]; then
     for f in /sbin/cryptsetup /sbin/dmsetup /lib/cryptsetup/askpass; do
         if [ ! -e "${DESTDIR}${f}" ]; then
             die 2 "cryptsetup utility '$f' wasn't found in the generated ramdisk image. "
         fi
     done
-fi    
+fi
 
 
 copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
@@ -78,6 +94,62 @@ if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
         fi
     done
     manual_add_modules tpm_crb
+    manual_add_modules tpm_tis
+fi
+if [ -x @bindir@/clevis-decrypt-tpm1 ]; then
+    copy_exec @bindir@/clevis-decrypt-tpm1 || die 1 "@bindir@/clevis-decrypt-tpm1 not found"
+    copy_exec @libexecdir@/clevis-luks-tpm1-functions || die 1 "@libexecdir@/clevis-luks-tpm1-functions not found"
+    copy_exec @libdir@/libclevis-tpm1-tcsd-preload.so || die 1 "@libdir@/libclevis-tpm1-tcsd-preload.so not found"
+
+    tcsd_bin=$(find_binary "tcsd")
+    # libgcc_s.so.* is no longer installed for gcc 2.34+ (no link to libpthread)
+    libgcc_s=$(find_library "libgcc_s.so.[1-9]")
+    tpm_version_bin=$(find_binary "tpm_version")
+    tpm_unsealdata_bin=$(find_binary "tpm_unsealdata")
+
+    copy_exec "${tpm_version_bin}" || die 1 "Unable to copy ${tpm_version_bin}"
+    copy_exec "${tpm_unsealdata_bin}" || die 1 "Unable to copy ${tpm_unsealdata_bin}"
+
+    copy_exec "${tcsd_bin}" || die 1 "Unable to copy ${tcsd_bin}"
+    copy_exec "${libgcc_s}" || die 1 "Unable to copy ${libgcc_s}"
+    copy_file config /etc/tcsd.conf || dia 2 "Unable to copy /etc/tcsd.conf"
+
+    mkdir -p "${DESTDIR}/var/lib/tpm" || die 2 "Unable to create /var/lib/tpm"
+    cp /var/lib/tpm/* "${DESTDIR}/var/lib/tpm/" || die 2 "Unable to copy /var/lib/tpm"
+    chown -R tss:tss "${DESTDIR}/var/lib/tpm" || die 2 "Unable to change owner of /var/lib/tpm"
+    chmod -R u=rwX,go= "${DESTDIR}/var/lib/tpm" || die 2 "Unable to change permissions of /var/lib/tpm"
+
+    if (( $(umask) & 0004 )); then
+        # Root-only readable initrd filesystem, we need to run as root
+        # shellcheck disable=SC2154 # $verbose is a dracut variable
+        [ "${verbose}" = "y" ] && echo "Forcing tcsd to run as root"
+        sed -i 's/^\([ ]*remote_ops\)/#\1/' "${DESTDIR}/etc/tcsd.conf"
+        echo "TCSD_NO_PRIVILEGE_DROP=1" >> "${DESTDIR}/conf/conf.d/clevis"
+    fi
+
+    mkdir -p "${DESTDIR}/lib/udev/rules.d" || die 2 "Unable to create /lib/udev/rules.d"
+    # shellcheck disable=SC2043
+    for rule in 60-tpm-udev.rules; do
+      if   [ -e /etc/udev/rules.d/$rule ]; then
+        copy_file udev_rule /etc/udev/rules.d/$rule "/lib/udev/rules.d" || die 2 "Unable to copy $rule"
+      elif [ -e /lib/udev/rules.d/$rule ]; then
+        copy_file udev_rule /lib/udev/rules.d/$rule "/lib/udev/rules.d" || die 2 "Unable to copy $rule"
+      fi
+    done
+
+    echo "root:x:0:0:root:/root:/bin/bash" >> "${DESTDIR}/etc/passwd"
+    echo "root:x:0:" >> "${DESTDIR}/etc/group"
+
+    group_id=`id -G tss` || die 2 "Unable to get tss group ID"
+    user_id=`id -u tss` || die 2 "Unable to get tss user ID"
+    echo "tss:x:$user_id:$group_id::/var/lib/tpm:/bin/false" >> "${DESTDIR}/etc/passwd"
+    echo "tss:x:$group_id:" >>  "${DESTDIR}/etc/group"
+
+    echo "127.0.0.1 localhost" >> "${DESTDIR}/etc/hosts"
+    echo "::1 localhost ip6-localhost ip6-loopback" >> "${DESTDIR}/etc/hosts"
+    echo "ff02::1 ip6-allnodes" >> "${DESTDIR}/etc/hosts"
+    echo "ff02::2 ip6-allrouters" >> "${DESTDIR}/etc/hosts"
+
     manual_add_modules tpm_tis
 fi
 

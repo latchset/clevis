@@ -1,0 +1,69 @@
+CLEVIS-ENCRYPT-MEDIUM(1)
+========================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-medium - Encrypts using a key fle on a medium policy
+
+== SYNOPSIS
+
+*clevis encrypt medium* CONFIG < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt medium* command encrypts using a key file on a
+medium policy. Its only argument is the JSON configuration object.
+
+Encrypting data using the medium pin works like this:
+
+    $ clevis encrypt medium '{"device":"LABEL=keydisk","file":"secret.key"}' < PT > JWE
+
+To decrypt the data, just pass it to the *clevis decrypt* command:
+
+    $ clevis decrypt < JWE > PT
+
+== SETTING UP
+
+The medium must have been formatted before. There is no limitation to
+a particular file system as long as it can be mounted with a single
+mount command. Also, when unlocking in early userland, support must
+already be available.
+
+Device name like `/dev/sda1` are volatile, it is safer to use
+`UUID=...` or `LABEL=...` to specify the device. The blkid(8) program
+will show usable values.
+
+When setting up, the `file` on that medium must not exist yet. See the
+reuse option below to override that.
+
+When used unlocking in early userland, it's recommended to set the
+fstype to the actual file system type.
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *device* (string) :
+  The block device that holds the key file, in a form understood by mount(1) (REQUIRED)
+
+* *file* (string) :
+  The file name of the key file, relative to the mount point (REQUIRED)
+
+* *fstype* (string) :
+  The type of the filesystem in the mount invocation (default: "auto")
+
+* *options* (string) :
+  Additional mount options (default: none)
+  Note that the mount for writing in `clevis-encrypt-medium` is always
+  mounted "rw,noatime", while the mount for reading in
+  `clevis-decrypt-medium` is "ro".
+
+* *reuse* (string) :
+  If an non-empty string, re-use an existing key file. By default, an
+  already existing key is considered an error.
+
+== SEE ALSO
+
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

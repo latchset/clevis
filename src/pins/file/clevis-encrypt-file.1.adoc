@@ -1,0 +1,44 @@
+CLEVIS-ENCRYPT-FILE(1)
+======================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-file - Encrypts using a file policy
+
+== SYNOPSIS
+
+*clevis encrypt file* CONFIG < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt file* command encrypts using a file policy.
+Its only argument is the JSON configuration object.
+
+Encrypting data using the file pin works like this:
+
+    $ clevis encrypt file '{"name":"/path/to/file"}' < PT > JWE
+
+The given file must not exist yet.
+
+To decrypt the data, just pass it to the *clevis decrypt* command:
+
+    $ clevis decrypt < JWE > PT
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *name* (string) :
+  The name to the file where the jwk is stored (REQUIRED)
+
+== BUGS
+
+Requires that directories for that file already exist.
+
+Rather for educational purposes.
+
+== SEE ALSO
+
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

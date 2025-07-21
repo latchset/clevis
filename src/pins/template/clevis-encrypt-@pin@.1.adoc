@@ -1,0 +1,51 @@
+#%# Align the equal signs after substitution
+CLEVIS-ENCRYPT-@PIN@(1)
+=======================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-@pin@ - Encrypts using a @@ policy
+
+== SYNOPSIS
+
+*clevis encrypt @pin@* CONFIG < PT > JWE
+
+== OVERVIEW
+
+The *clevis encrypt @pin@* command encrypts using a @@ policy.
+Its only argument is the JSON configuration object.
+
+#%# And so on ...
+
+Encrypting data using the @pin@ pin works like this:
+
+    $ clevis encrypt @pin@ '{"@mand1@":"@@","@mand2":"@@"}' < PT > JWE
+
+To decrypt the data, just pass it to the *clevis decrypt* command:
+
+    $ clevis decrypt < JWE > PT
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+#%# Keep this in sync with the short help in clevis-encrypt-@pin@
+
+* *@mand1@* (string) :
+  @@ (REQUIRED)
+
+* *@mand2@* (string) :
+  @@ (REQUIRED)
+
+* *@opt1@* (string) :
+  @@ (default: @@)
+
+== BUGS
+
+#%# List any flaws and gotchas here.
+
+== SEE ALSO
+
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

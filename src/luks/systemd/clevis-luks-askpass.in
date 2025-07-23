@@ -50,7 +50,7 @@ while true; do
             esac
         done < "$question"
 
-        [ -b "${d}" ] || continue
+        [ -e "${d}" ] || continue
         [ -S "${s}" ] || continue
 
         if ! pt="$(clevis_luks_unlock_device "${d}")" || [ -z "${pt}" ]; then

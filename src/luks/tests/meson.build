@@ -8,14 +8,20 @@ cryptsetup = find_program('cryptsetup', required: true)
 # Use keyctl to check an existing token id can be created from
 # kernel keyring password
 keyutils = find_program('keyctl', required: false)
+keyutils_usable = false
 if keyutils.found()
-    message('keyutils installed')
+    keyutils_usable = run_command(keyutils, 'session', '-', '/bin/true', capture: false, check: false).returncode() == 0
+    if keyutils_usable
+        message('keyutils installed')
+    else
+        warning('keyutils installed, but running fails (are you inside Docker?), unable to test existing token id binding')
+    endif
 else
     warning('keyutils not installed, unable to test existing token id binding')
 endif
 
-common_functions = configure_file(input: 'tests-common-functions.in',
-  output: 'tests-common-functions',
+common_functions = configure_file(input: 'luks-common-test-functions.in',
+  output: 'luks-common-test-functions',
   configuration: luksmeta_data,
   install: false
 )
@@ -26,6 +32,7 @@ env.prepend('PATH',
   join_paths(meson.source_root(), 'src', 'luks'),
   join_paths(meson.source_root(), 'src', 'pins', 'sss'),
   join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.source_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.source_root(), 'src', 'pins', 'tpm2'),
   meson.current_source_dir(),
   meson.current_build_dir(),
@@ -34,6 +41,7 @@ env.prepend('PATH',
   join_paths(meson.build_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
+  join_paths(meson.build_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
   separator: ':'
 )
@@ -54,6 +62,7 @@ if jq.found()
   test('list-recursive-luks1', find_program('list-recursive-luks1'), env: env)
   test('list-tang-luks1', find_program('list-tang-luks1'), env: env)
   test('list-sss-tang-luks1', find_program('list-sss-tang-luks1'), env: env)
+  test('list-multiple-slots-luks1', find_program('list-multiple-slots-luks1'), env: env)
 else
   warning('Will not run "clevis luks list" tests due to missing jq dependency')
 endif
@@ -79,7 +88,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('unbind-unbound-slot-luks2', find_program('unbind-unbound-slot-luks2'), env: env)
   test('unbind-luks2', find_program('unbind-luks2'), env: env, timeout: 60)
 
-  if keyutils.found() and luksmeta_data.get('OLD_CRYPTSETUP_EXISTING_TOKEN_ID') == '0'
+  if keyutils.found() and keyutils_usable and luksmeta_data.get('OLD_CRYPTSETUP_EXISTING_TOKEN_ID') == '0'
     test('bind-luks2-ext-token', find_program('bind-luks2-ext-token'), env: env, timeout: 60)
   endif
 
@@ -87,6 +96,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
     test('list-recursive-luks2', find_program('list-recursive-luks2'), env: env, timeout: 60)
     test('list-tang-luks2', find_program('list-tang-luks2'), env: env, timeout: 60)
     test('list-sss-tang-luks2', find_program('list-sss-tang-luks2'), env: env, timeout: 60)
+    test('list-multiple-slots-luks2', find_program('list-multiple-slots-luks2'), env: env, timeout: 60)
   endif
 
   test('unlock-tang-luks2', find_program('unlock-tang-luks2'), env: env, timeout: 120)

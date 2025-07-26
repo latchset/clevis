@@ -1,0 +1,72 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+[ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
+
+if [ -t 0 ]; then
+    exec >&2
+    echo
+    echo "Usage: clevis decrypt tpm1 < JWE > PLAINTEXT"
+    echo
+    exit 2
+fi
+
+tpm_version_bin="$(command -v tpm_version || echo /usr/sbin/tpm_version)"
+if ! "$tpm_version_bin" >/dev/null 2>&1; then
+    # The tpm_version outputs garbage to stdout on success, so let the
+    # tpm_version output the error again cleanly now
+    echo "The tpm1 pin requires tcsd daemon (trousers) running:" >&2
+    if [ -x "$tpm_version_bin" ]; then
+        ( "$tpm_version_bin" 2>&1 | tr '\0' ' ' ) >&2
+    else
+        echo Cannot check, tpm_version from tpm-tools not found >&2
+    fi
+    exit 1
+fi
+
+read -r -d . hdr
+
+if ! jhd="$(jose b64 dec -i- <<< "$hdr")"; then
+    echo "Error decoding JWE protected header!" >&2
+    exit 1
+fi
+
+if [ "$(jose fmt -j- -Og clevis -g pin -u- <<< "$jhd")" != "tpm1" ]; then
+    echo "JWE pin mismatch!" >&2
+    exit 1
+fi
+
+if ! jwk_b64="$(jose fmt -j- -Og clevis -g tpm1 -g jwk -Su- <<< "$jhd")"; then
+    echo "JWE missing required 'jwk' header parameter!" >&2
+    exit 1
+fi
+
+if ! jwk_sealed="$(jose b64 dec -i- <<< "$jwk_b64")"; then
+    echo "Decoding jwk from Base64 failed!" >&2
+    exit 1
+fi
+
+if ! jwk="$(tpm_unsealdata -i /dev/stdin -z <<< "$jwk_sealed")"; then
+    echo "Unable to unseal jwk!" >&2
+    exit 1
+fi
+
+exec jose jwe dec -k- -i- < <(echo -n "$jwk$hdr."; /bin/cat)

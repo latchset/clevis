@@ -18,27 +18,20 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+. tests-common-functions
 . tang-common-test-functions
-
-error() {
-    echo "${1}" >&2
-    exit 1
-}
-
-skip_test() {
-    echo "${1}" >&2
-    exit 77
-}
 
 # We require cryptsetup >= 2.0.4 to fully support LUKSv2.
 # Support is determined at build time.
 luks2_supported() {
+    # shellcheck disable=SC2152
     return @OLD_CRYPTSETUP@
 }
 
 # We require cryptsetup >= 2.6.0 to fully support LUKSv2 addkey/open by token ID
 # Support is determined at build time.
 luks2_existing_token_id_supported() {
+    # shellcheck disable=SC2152
     return @OLD_CRYPTSETUP_EXISTING_TOKEN_ID@
 }
 

@@ -18,7 +18,7 @@
 #
 # shellcheck disable=SC1091
 . pkcs11-common-tests
-. tests-common-functions
+. luks-common-test-functions
 . clevis-luks-common-functions
 . clevis-pkcs11-common
 
@@ -29,8 +29,7 @@ on_exit() {
 }
 
 if [[ ! -f "${P11LIB}" ]]; then
-    echo "WARNING: The SoftHSM is not installed. Can not run this test"
-    exit 77;
+    skip_test "WARNING: The SoftHSM is not installed. Can not run this test"
 fi
 
 trap 'on_exit' EXIT

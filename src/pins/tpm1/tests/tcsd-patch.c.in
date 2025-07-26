@@ -1,0 +1,76 @@
+#define _GNU_SOURCE
+#undef _FILE_OFFSET_BITS
+
+#include <stdio.h>
+#include <dlfcn.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <pwd.h>
+#include <grp.h>
+#include <string.h>
+#include <limits.h>
+
+#define TCSD_CONF "tcsd.conf"
+
+#mesondefine HAS___XSTAT
+
+static void stat_process(const char *statfunc, const char *pathname, struct stat *statbuf) {
+    size_t path_len = strlen(pathname);
+    size_t tcsd_len = strlen(TCSD_CONF);
+    if ((path_len >= tcsd_len)
+            && (strcmp(pathname + path_len - tcsd_len, TCSD_CONF) == 0)
+            && ((path_len == tcsd_len)
+                || (pathname[path_len - tcsd_len - 1] == '/'))) {
+
+
+        if ((statbuf->st_mode & (S_IRWXU | S_IRWXG | S_IRWXO)) == (S_IRUSR | S_IWUSR)) {
+            // Compatibility with old tcsd
+            // Get the UID for the user 'tss'
+            struct passwd *pw = getpwnam("tss");
+            if (pw != NULL) {
+                statbuf->st_uid = pw->pw_uid;
+                fprintf(stderr, "%s(%s) : simulate uid\n", statfunc, pathname);
+            }
+        } else {
+            statbuf->st_uid = 0;
+        }
+
+        // Get the GID for the group 'tss'
+        struct group *grp = getgrnam("tss");
+        if (grp != NULL) {
+            statbuf->st_gid = grp->gr_gid;
+            fprintf(stderr, "%s(%s) : simulate gid\n", statfunc, pathname);
+        }
+    } else {
+        fprintf(stderr, "%s(%s) : passthrough\n", statfunc, pathname);
+    }
+}
+
+int stat(const char *pathname, struct stat *statbuf) {
+    static int (*real_stat)(const char *, struct stat *) = NULL;
+    if (!real_stat) {
+        real_stat = dlsym(RTLD_NEXT, "stat");
+    }
+
+    // Call the original stat function
+    int result = real_stat(pathname, statbuf);
+    if (result == 0) {
+        stat_process("stat", pathname, statbuf);
+    }
+    return result;
+}
+
+#ifdef HAS___XSTAT
+int __xstat(int ver, const char *pathname, struct stat *statbuf) {
+    static int (*real___xstat)(int, const char *, struct stat *) = NULL;
+    if (!real___xstat) {
+        real___xstat = dlsym(RTLD_NEXT, "__xstat");
+    }
+    int result = real___xstat(ver, pathname, statbuf);
+    if (result == 0) {
+        stat_process("__xstat", pathname, statbuf);
+    }
+    return result;
+}
+#endif

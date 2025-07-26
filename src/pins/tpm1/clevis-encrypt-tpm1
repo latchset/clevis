@@ -1,0 +1,137 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+SUMMARY="Encrypts using a TPM1.2 chip binding policy"
+
+if [ "$1" == "--summary" ]; then
+    echo "$SUMMARY"
+    exit 0
+fi
+
+if [ -t 0 ]; then
+    exec >&2
+    echo
+    echo "Usage: clevis encrypt tpm1 CONFIG < PLAINTEXT > JWE"
+    echo
+    echo "$SUMMARY"
+    echo
+    echo "This command uses the following configuration properties:"
+    echo
+    echo "  pcr_ids: <string>   PCR list used for policy. If not present, no policy is used"
+    echo
+    exit 2
+fi
+
+validate_pcrs() {
+    local _pcr_bank="${1}"
+    local _pcrs="${2}"
+    local _pcr
+    [ -z "${_pcr_bank}" ] && return 1
+    [ -z "${_pcrs}" ] && return 0
+
+    if [ -z "$TSS_TCSD_PORT" ]; then
+        for _pcr in ${_pcrs//,/ }; do
+            [ -f "/sys/class/tpm/tpm0/pcr-${_pcr_bank}/${_pcr}" ] || return 1
+        done
+    else
+        [ "${_pcr_bank}" = "sha1" ] && { : | tpm_sealdata -z${_pcrs//,/ -p } >/dev/null 2>/dev/null; }
+    fi
+
+    return 0
+}
+
+tpm_version_bin="$(command -v tpm_version || echo /usr/sbin/tpm_version)"
+if ! "$tpm_version_bin" >/dev/null 2>&1; then
+    # The tpm_version outputs garbage to stdout on success, so let the
+    # tpm_version output the error again cleanly now
+    echo "The tpm1 pin requires tcsd daemon (trousers) running:" >&2
+    if [ -x "$tpm_version_bin" ]; then
+        ( "$tpm_version_bin" 2>&1 | tr '\0' ' ' ) >&2
+    else
+        echo Cannot check, tpm_version from tpm-tools not found >&2
+    fi
+    exit 1
+fi
+
+if ! cfg="$(jose fmt -j "$1" -Oo- 2>/dev/null)"; then
+    echo "Configuration is malformed!" >&2
+    exit 1
+fi
+
+# TPM1.1 and TPM1.2 has only sha1
+pcr_bank="sha1"
+
+# Trim the spaces from the config, so that we will not have issues parsing
+# the PCR IDs.
+pcr_cfg=${cfg//[[:space:]]/}
+# Issue #103: We support passing pcr_ids using both a single string, as in
+# "1,3", as well as an actual JSON array, such as ["1","3"]. Let's handle both
+# cases here.
+if jose fmt -j- -Og pcr_ids 2>/dev/null <<< "${pcr_cfg}" \
+    && ! pcr_ids="$(jose fmt -j- -Og pcr_ids -u- 2>/dev/null \
+                    <<< "${pcr_cfg}")"; then
+
+    # We failed to parse a string, so let's try to parse a JSON array instead.
+    if jose fmt -j- -Og pcr_ids -A 2>/dev/null <<< "${pcr_cfg}"; then
+        # OK, it is an array, so let's get the items and form a string.
+        pcr_ids=
+        for pcr in $(jose fmt -j- -Og pcr_ids -Af- <<< "${pcr_cfg}" \
+                     | tr -d '"'); do
+            pcr_ids=$(printf '%s,%s' "${pcr_ids}" "${pcr}")
+        done
+        # Now let's remove the leading comma.
+        pcr_ids=${pcr_ids/#,/}
+    else
+        # Not to add a policy that was not intended, in this case, no policy
+        # at all, let's report the issue and exit.
+        echo "Parsing the requested PCRs failed!" >&2
+        exit 1
+    fi
+fi
+
+if ! validate_pcrs "${pcr_bank}" "${pcr_ids}"; then
+    echo "Unable to validate combination of PCR bank '${pcr_bank}' and PCR IDs '${pcr_ids}'." >&2
+    exit 1
+fi
+
+if ! jwk="$(jose jwk gen -i '{"alg":"A256GCM"}')"; then
+    echo "Generating a jwk failed!" >&2
+    exit 1
+fi
+
+pcr_args="${pcr_ids:+-p}${pcr_ids//,/ -p}"
+if ! jwk_sealed=$(tpm_sealdata -i /dev/stdin -o /dev/stdout ${pcr_args} -z <<< "$jwk"); then
+    echo "Unable to seal jwk" >&2
+    exit 1
+fi
+
+if ! jwk_b64="$(jose b64 enc -I- <<< "$jwk_sealed")"; then
+    echo "Encoding sealed jwk in Base64 failed!" >&2
+    exit 1
+fi
+
+jwe='{"protected":{"clevis":{"pin":"tpm1","tpm1":{}}}}'
+if [ -n "$pcr_ids" ]; then
+    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm1 -q "$pcr_ids" -s pcr_ids -UUUUo-)"
+fi
+jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tpm1 -q "$jwk_b64" -s jwk -UUUUo-)"
+
+exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

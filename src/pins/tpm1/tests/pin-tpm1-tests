@@ -1,0 +1,102 @@
+#!/bin/bash -x
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2024 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+
+validate_pcrs() {
+    local _pcrs=",${1}"
+    [ "${_pcrs}" = "," ] && return 0
+
+    : | tpm_sealdata -z${_pcrs//,/ -p } >/dev/null 2>/dev/null
+}
+
+decode_jwe() {
+    local jwe="${1}"
+
+    local coded
+    if ! coded=$(jose jwe fmt -i- <<< "${jwe}"); then
+        return 1
+    fi
+
+    coded=$(jose fmt -j- -g protected -u- <<< "${coded}" | tr -d '"')
+    jose b64 dec -i- <<< "${coded}"
+}
+
+test_pcr_ids() {
+    local orig="${1}"
+    local cfg="${2}"
+    local expected_pcr_ids="${3}"
+
+    local enc
+    if ! enc=$(echo "${orig}" | clevis encrypt tpm1 "${cfg}"); then
+        echo "${TEST}: encrypt failed for cfg: ${cfg}" >&1
+        return 1
+    fi
+
+    local pcr_ids
+    pcr_ids=$(decode_jwe "${enc}" \
+              | jose fmt -j- -Og clevis -Og tpm1 -Og pcr_ids -u- 2>/dev/null)
+
+    local dec
+    dec=$(echo "${enc}" | clevis decrypt)
+
+    if [ "${orig}" != "${dec}" ]; then
+        echo "${TEST}: decoded text (${dec}) does not match original one (${orig})" >&2
+        return 1
+    fi
+
+    if [ "${pcr_ids}" != "${expected_pcr_ids}" ]; then
+        echo "${TEST}: pcr_ids (${pcr_ids}) do not match the expected (${expected_pcr_ids}) result." >&2
+        return 1
+    fi
+}
+
+test_enc_dec() {
+    local cfg="${1}"
+    output=$(echo Working | clevis encrypt tpm1 "${cfg}" | clevis decrypt)
+
+    if [ "$output" != "Working" ]; then
+        echo "Output after decrypting doesn't match: ${output} != 'Working'"
+        return 1
+    fi
+}
+
+test_enc_dec '{}' || exit 1
+test_pcr_ids "${orig}" '{}' "" || exit 1
+test_pcr_ids "${orig}" '{                   }' "" || exit 1
+
+# Issue #103: now let's try a few different configs with both strings and
+# arrays and check if we get the expected pcr_ids.
+
+# Let's first make sure this would be a valid configuration.
+if validate_pcrs "4,16"; then
+    test_pcr_ids "${orig}" '{"pcr_ids": "16"}' "16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["16"]}' "16"  || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": "4,  16"}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": "4,16"}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["4,16"]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": [4,16]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": [4,  16]}' "4,16" || exit 1
+    test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "4,16" || exit 1
+    ! test_pcr_ids "${orig}" '{"pcr_ids": ["4","16"]}' "foo bar" || exit 1
+else
+    echo "Skipping tests related to issue#103 because the combination of pcr_bank and PCRs is invalid" >&2
+fi

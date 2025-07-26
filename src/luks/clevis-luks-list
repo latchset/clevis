@@ -25,13 +25,15 @@ SUMMARY="Lists pins bound to a LUKSv1 or LUKSv2 device"
 
 function usage() {
     echo >&2
-    echo "Usage: clevis luks list -d DEV [-s SLT]" >&2
+    echo "Usage: clevis luks list -d DEV [-s SLT] [-p]" >&2
     echo >&2
     echo "$SUMMARY": >&2
     echo >&2
     echo "  -d DEV  The LUKS device to list bound pins" >&2
     echo >&2
     echo "  -s SLOT The slot number to list" >&2
+    echo >&2
+    echo "  -p      Print only a sorted space-separated list of bound pins" >&2
     echo >&2
     exit 1
 }
@@ -41,10 +43,12 @@ if [ ${#} -eq 1 ] && [ "${1}" = "--summary" ]; then
     exit 0
 fi
 
-while getopts ":d:s:" o; do
+luks_function=clevis_luks_read_pins_from_slot
+while getopts ":d:s:p" o; do
     case "$o" in
     d) DEV=${OPTARG};;
     s) SLT=${OPTARG};;
+    p) luks_function=clevis_luks_read_used_pins_from_slot;;
     *) usage;;
     esac
 done
@@ -62,7 +66,7 @@ if cryptsetup isLuks --type luks1 "${DEV}"; then
 fi
 
 if [ -n "${SLT}" ]; then
-    clevis_luks_read_pins_from_slot "${DEV}" "${SLT}"
+    $luks_function "${DEV}" "${SLT}"
 else
     if ! used_slots=$(clevis_luks_used_slots "${DEV}"); then
         echo "No used slots detected for device ${DEV}!" >&2
@@ -70,7 +74,7 @@ else
     fi
 
     for s in ${used_slots}; do
-        if ! clevis_luks_read_pins_from_slot "${DEV}" "${s}"; then
+        if ! $luks_function "${DEV}" "${s}"; then
             continue
         fi
     done

@@ -18,7 +18,7 @@
 #
 
 TEST=$(basename "${0}")
-. tests-common-functions
+. luks-common-test-functions
 
 on_exit() {
     [ ! -d "${TMP}" ] && return 0

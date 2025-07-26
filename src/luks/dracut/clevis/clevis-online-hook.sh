@@ -1,10 +1,8 @@
 #!/bin/sh
-set -eu
-# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2020-2024 Red Hat, Inc.
-# Author: Sergio Correia <scorreia@redhat.com>
+# Copyright (c) 2024 Oldřich Jedlička
 #
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,5 +16,6 @@ set -eu
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-@libexecdir@/clevis-luks-unlocker -l
+touch /run/clevis-online

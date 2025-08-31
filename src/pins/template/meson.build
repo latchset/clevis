@@ -35,7 +35,7 @@ endif
 
 #%# dracut support
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/60' + meson.project_name() + '-pin-@pin@'
+  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name() + '-pin-@pin@'
 #?# In general, substituation is not needed but it's better to
 #?# stay flexible.
   configure_file(

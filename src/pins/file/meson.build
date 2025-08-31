@@ -18,7 +18,7 @@ env.append('PATH',
 test('pin-file', find_program('./pin-file'), env: env)
 
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/60' + meson.project_name() + '-pin-file'
+  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name() + '-pin-file'
   configure_file(
     input: 'dracut.module-setup.sh.in',
     output: 'module-setup.sh',

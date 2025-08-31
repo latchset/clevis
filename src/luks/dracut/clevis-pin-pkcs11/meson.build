@@ -1,7 +1,7 @@
 dracut = dependency('dracut', required: false)
 
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/60' + meson.project_name() + '-pin-pkcs11'
+  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name() + '-pin-pkcs11'
 
   configure_file(
     input: 'module-setup.sh.in',

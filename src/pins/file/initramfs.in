@@ -32,4 +32,6 @@ die() {
     exit "$code"
 }
 
-copy_exec @bindir@/clevis-decrypt-file || die 1 "@bindir@/clevis-decrypt-file not found"
+if [ -x @bindir@/clevis-decrypt-file ]; then
+    copy_exec @bindir@/clevis-decrypt-file || die 1 "Unable to copy @bindir@/clevis-decrypt-file to initrd image"
+fi

@@ -17,6 +17,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+check() {
+    require_binaries clevis-decrypt-file || return 1
+}
+
 depends() {
     echo clevis
     return 0

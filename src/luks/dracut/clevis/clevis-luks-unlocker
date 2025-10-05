@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 # vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #

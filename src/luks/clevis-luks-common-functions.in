@@ -795,6 +795,23 @@ clevis_luks_luksmeta_sync_fix() {
     luksmeta wipe -f -d "${DEV}" -s "${first_free_slot}"
 }
 
+# clevis_luks_get_hash() returns the hash algorithm used by a LUKS device.
+clevis_luks_get_hash() {
+    local DEV="${1}"
+    [ -z "${DEV}" ] && return 1
+
+    local luks_type hash
+    luks_type=$(clevis_luks_type "${DEV}") || return 1
+
+    case "${luks_type}" in
+        luks1) hash=$(cryptsetup luksDump "${DEV}" \
+                      | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p');;
+        luks2) hash=$(cryptsetup luksDump "${DEV}" \
+                      | sed -rn 's|^\s+Hash:\s+(\S+)$|\1|p' | head -1);;
+    esac
+    echo "${hash}"
+}
+
 # clevis_luks_add_key() adds a new key to a key slot.
 clevis_luks_add_key() {
     local DEV="${1}"
@@ -818,6 +835,12 @@ clevis_luks_add_key() {
         input="$(printf '%s' "${NEWKEY}")"
     fi
     local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
+
+    local hash
+    hash=$(clevis_luks_get_hash "${DEV}")
+    if [ -n "${hash}" ]; then
+        pbkdf_args="${pbkdf_args} --hash ${hash}"
+    fi
 
     printf '%s' "${input}" | cryptsetup luksAddKey --force-password --batch-mode \
                                          --key-slot "${SLT}" \
@@ -858,6 +881,12 @@ clevis_luks_update_key() {
     fi
 
     local pbkdf_args="--pbkdf pbkdf2 --pbkdf-force-iterations 1000"
+
+    local hash
+    hash=$(clevis_luks_get_hash "${DEV}")
+    if [ -n "${hash}" ]; then
+        pbkdf_args="${pbkdf_args} --hash ${hash}"
+    fi
 
     if [ -n "${in_place}" ]; then
         printf '%s' "${input}" | cryptsetup luksChangeKey "${DEV}" \

@@ -1,0 +1,106 @@
+#!/bin/bash -x
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST="${0}"
+. tests-common-functions
+. clevis-luks-common-functions
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+# LUKS2.
+if ! luks2_supported; then
+    skip_test "LUKS2 is not supported."
+fi
+
+tang_run "${TMP}"
+port=$(tang_get_port "${TMP}")
+
+url="http://localhost:${port}"
+adv="${TMP}/adv"
+tang_get_adv "${port}" "${adv}"
+
+cfg=$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")
+
+# LUKS2 with sha512.
+DEV="${TMP}/luks2-device-sha512"
+new_device_hash "luks2" "${DEV}" "sha512"
+
+# Verify the device was created with sha512.
+hash_before=$(cryptsetup luksDump "${DEV}" \
+              | sed -rn 's|^\s+Hash:\s+(\S+)$|\1|p' | head -1)
+if [ "${hash_before}" != "sha512" ]; then
+    error "${TEST}: Device should have been formatted with sha512, got ${hash_before}."
+fi
+
+if ! clevis luks bind -f -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+
+# Verify the clevis slot (slot 1) also uses sha512 after binding.
+hash_after_bind=$(cryptsetup luksDump "${DEV}" \
+                  | awk '/^[[:space:]]+1: luks/{found=1} found && /Hash:/{print $2; exit}')
+if [ "${hash_after_bind}" != "sha512" ]; then
+    error "${TEST}: After binding, clevis slot hash should be sha512, got ${hash_after_bind}."
+fi
+
+# Now let's remove the initial passphrase.
+if ! cryptsetup luksRemoveKey --batch-mode "${DEV}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: error removing the default password from ${DEV}."
+fi
+
+# Making sure we have a single slot enabled.
+enabled=$(clevis_luks_used_slots "${DEV}" | wc -l)
+if [ "${enabled}" -ne 1 ]; then
+    error "${TEST}: we should have only one slot enabled (${enabled})."
+fi
+
+old_key=$(clevis_luks_unlock_device_by_slot "${DEV}" "${SLT}")
+
+# Now let's try regen.
+SLT=1
+if ! clevis luks regen -q -d "${DEV}" -s "${SLT}"; then
+    error "${TEST}: clevis luks regen failed"
+fi
+
+new_key=$(clevis_luks_unlock_device_by_slot "${DEV}" "${SLT}")
+
+if [ "${old_key}" = "${new_key}" ]; then
+    error "${TEST}: the passphrases should be different"
+fi
+
+# Verify the clevis slot (slot 1) still uses sha512 after regen.
+hash_after_regen=$(cryptsetup luksDump "${DEV}" \
+                   | awk '/^[[:space:]]+1: luks/{found=1} found && /Hash:/{print $2; exit}')
+if [ "${hash_after_regen}" != "sha512" ]; then
+    error "${TEST}: After regen, clevis slot hash should be sha512, got ${hash_after_regen}."
+fi
+
+# Also check via clevis_luks_get_hash.
+hash_fn=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash_fn}" != "sha512" ]; then
+    error "${TEST}: clevis_luks_get_hash should return sha512, got ${hash_fn}."
+fi

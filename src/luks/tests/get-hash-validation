@@ -1,0 +1,77 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# Test the hash validation used in clevis_luks_get_hash().
+# This test does not require root or LUKS devices — it exercises the
+# validation logic directly.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+# is_valid_hash() mirrors the validation logic in clevis_luks_get_hash():
+#   case "${hash}" in *[!a-zA-Z0-9_-]*|"") return 1;; esac
+is_valid_hash() {
+    local hash="${1}"
+    case "${hash}" in
+        *[!a-zA-Z0-9_-]*|"") return 1;;
+    esac
+    return 0
+}
+
+# Test valid hashes — these must pass validation.
+for h in sha256 sha512 sha384 sha1 sha224 ripemd160 \
+         SHA256 SHA512 whirlpool blake2b-256 sha3_256; do
+    if ! is_valid_hash "${h}"; then
+        error "${TEST}: valid hash '${h}' was rejected."
+    fi
+done
+
+# Test invalid hashes — injection attempts and malformed values.
+# Each is tested individually to handle special characters safely.
+
+if is_valid_hash 'sha256; rm -rf /'; then
+    error "${TEST}: 'sha256; rm -rf /' should be rejected (semicolon)."
+fi
+
+if is_valid_hash 'sha256$(reboot)'; then
+    error "${TEST}: 'sha256\$(reboot)' should be rejected (command substitution)."
+fi
+
+if is_valid_hash 'sha256`reboot`'; then
+    error "${TEST}: 'sha256\`reboot\`' should be rejected (backticks)."
+fi
+
+if is_valid_hash 'sha256 --force'; then
+    error "${TEST}: 'sha256 --force' should be rejected (space)."
+fi
+
+if is_valid_hash 'sha256|cat /etc/shadow'; then
+    error "${TEST}: 'sha256|cat /etc/shadow' should be rejected (pipe)."
+fi
+
+if is_valid_hash 'sha256&bg_cmd'; then
+    error "${TEST}: 'sha256&bg_cmd' should be rejected (ampersand)."
+fi
+
+if is_valid_hash '--hash sha256'; then
+    error "${TEST}: '--hash sha256' should be rejected (space)."
+fi
+
+if is_valid_hash ''; then
+    error "${TEST}: empty string should be rejected."
+fi

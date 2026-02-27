@@ -1,0 +1,92 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+if ! luks2_supported; then
+    skip_test "LUKS2 is not supported."
+fi
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+# Test 1: LUKS2 device with default hash (sha256) — verify correct extraction.
+DEV="${TMP}/luks2-device-sha256"
+new_device_hash "luks2" "${DEV}" "sha256"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha256" ]; then
+    error "${TEST}: expected sha256, got '${hash}'."
+fi
+
+# Test 2: LUKS2 device with sha512 — verify correct extraction.
+DEV="${TMP}/luks2-device-sha512"
+new_device_hash "luks2" "${DEV}" "sha512"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha512" ]; then
+    error "${TEST}: expected sha512, got '${hash}'."
+fi
+
+# Test 3: LUKS2 device with sha384 — verify correct extraction.
+DEV="${TMP}/luks2-device-sha384"
+new_device_hash "luks2" "${DEV}" "sha384"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha384" ]; then
+    error "${TEST}: expected sha384, got '${hash}'."
+fi
+
+# Test 4: LUKS2 — verify we get keyslot hash, not digest hash.
+# Create device with sha512. The digest section uses sha256 by default.
+# Our function must return the keyslot hash (sha512), not the digest hash.
+DEV="${TMP}/luks2-device-keyslot-check"
+new_device_hash "luks2" "${DEV}" "sha512"
+
+# Verify that the digest section does contain a different hash.
+digest_hash=$(cryptsetup luksDump "${DEV}" \
+              | awk '/^Digests:/{in_digest=1} in_digest && /Hash:/{print $2; exit}')
+
+keyslot_hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${keyslot_hash}" != "sha512" ]; then
+    error "${TEST}: keyslot hash should be sha512, got '${keyslot_hash}'."
+fi
+
+# If the digest hash differs, this confirms we are targeting the right section.
+if [ -n "${digest_hash}" ] && [ "${digest_hash}" != "sha512" ]; then
+    echo "${TEST}: confirmed digest hash (${digest_hash}) differs from" \
+         "keyslot hash (${keyslot_hash}) — extraction targets correct section."
+fi
+
+# Test 5: LUKS2 with sha1 — verify correct extraction.
+DEV="${TMP}/luks2-device-sha1"
+new_device_hash "luks2" "${DEV}" "sha1"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha1" ]; then
+    error "${TEST}: expected sha1, got '${hash}'."
+fi

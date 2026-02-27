@@ -1,0 +1,94 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+# Test 1: clevis_luks_get_hash with empty argument should fail.
+if clevis_luks_get_hash ""; then
+    error "${TEST}: clevis_luks_get_hash should fail with empty argument."
+fi
+
+# Test 2: clevis_luks_get_hash with non-existent device should fail.
+if clevis_luks_get_hash "/dev/nonexistent-device-XYZ"; then
+    error "${TEST}: clevis_luks_get_hash should fail with non-existent device."
+fi
+
+# Test 3: LUKS1 device with default hash (sha256) — verify correct extraction.
+DEV="${TMP}/luks1-device-sha256"
+new_device_hash "luks1" "${DEV}" "sha256"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha256" ]; then
+    error "${TEST}: expected sha256, got '${hash}'."
+fi
+
+# Test 4: LUKS1 device with sha512 — verify correct extraction.
+DEV="${TMP}/luks1-device-sha512"
+new_device_hash "luks1" "${DEV}" "sha512"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha512" ]; then
+    error "${TEST}: expected sha512, got '${hash}'."
+fi
+
+# Test 5: LUKS1 device with sha384 — verify correct extraction.
+DEV="${TMP}/luks1-device-sha384"
+new_device_hash "luks1" "${DEV}" "sha384"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha384" ]; then
+    error "${TEST}: expected sha384, got '${hash}'."
+fi
+
+# Test 6: LUKS1 device with sha1 — verify correct extraction.
+DEV="${TMP}/luks1-device-sha1"
+new_device_hash "luks1" "${DEV}" "sha1"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "sha1" ]; then
+    error "${TEST}: expected sha1, got '${hash}'."
+fi
+
+# Test 7: LUKS1 device with ripemd160 — verify correct extraction.
+DEV="${TMP}/luks1-device-ripemd160"
+new_device_hash "luks1" "${DEV}" "ripemd160"
+
+hash=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash}" != "ripemd160" ]; then
+    error "${TEST}: expected ripemd160, got '${hash}'."
+fi
+
+# Test 8: clevis_luks_get_hash with a non-LUKS file should fail.
+DEV="${TMP}/not-a-luks-device"
+fallocate -l64M "${DEV}" 2>/dev/null \
+    || dd if=/dev/zero of="${DEV}" bs=1M count=64 status=none
+if clevis_luks_get_hash "${DEV}"; then
+    error "${TEST}: clevis_luks_get_hash should fail on a non-LUKS file."
+fi

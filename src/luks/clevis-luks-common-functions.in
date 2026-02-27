@@ -804,12 +804,20 @@ clevis_luks_get_hash() {
     luks_type=$(clevis_luks_type "${DEV}") || return 1
 
     case "${luks_type}" in
-        luks1) hash=$(cryptsetup luksDump "${DEV}" \
-                      | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p');;
-        luks2) hash=$(cryptsetup luksDump "${DEV}" \
-                      | sed -rn 's|^\s+Hash:\s+(\S+)$|\1|p' | head -1);;
+        luks1) hash=$(cryptsetup luksDump "${DEV}" 2>/dev/null \
+                      | awk '/^Hash spec:[ \t]+/{print $3; exit}');;
+        luks2) hash=$(cryptsetup luksDump "${DEV}" 2>/dev/null \
+                      | awk '/^[[:space:]]+[0-9]+: luks/{in_slot=1}
+                             in_slot && /Hash:/{print $2; exit}');;
+        *) return 1;;
     esac
-    echo "${hash}"
+
+    # Validate: only allow alphanumeric characters, hyphens and underscores.
+    case "${hash}" in
+        *[!a-zA-Z0-9_-]*|"") return 1;;
+    esac
+
+    printf '%s\n' "${hash}"
 }
 
 # clevis_luks_add_key() adds a new key to a key slot.

@@ -94,7 +94,8 @@ new_device_hash() {
         PASS="${DEFAULT_PASS}"
     fi
 
-    fallocate -l64M "${DEV}"
+    fallocate -l64M "${DEV}" 2>/dev/null \
+        || dd if=/dev/zero of="${DEV}" bs=1M count=64 status=none
     cryptsetup luksFormat --type "${LUKS}" --hash "${HASH}" --pbkdf pbkdf2 \
         --pbkdf-force-iterations 1000 --key-size 512 --batch-mode \
         --force-password "${DEV}" <<< "${PASS}"

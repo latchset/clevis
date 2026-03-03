@@ -73,10 +73,10 @@ if [ "${enabled}" -ne 1 ]; then
     error "${TEST}: we should have only one slot enabled (${enabled})."
 fi
 
+SLT=1
 old_key=$(clevis_luks_unlock_device_by_slot "${DEV}" "${SLT}")
 
 # Now let's try regen.
-SLT=1
 if ! clevis luks regen -q -d "${DEV}" -s "${SLT}"; then
     error "${TEST}: clevis luks regen failed"
 fi

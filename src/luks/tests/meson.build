@@ -69,6 +69,11 @@ test('edit-tang-luks1', find_program('edit-tang-luks1'), env: env, timeout: 150)
 test('backup-restore-luks1', find_program('backup-restore-luks1'), env: env, timeout: 60)
 test('pass-tang-luks1', find_program('pass-tang-luks1'), env: env, timeout: 60)
 test('bind-luks1-avoid-luksmeta-corruption', find_program('bind-luks1-avoid-luksmeta-corruption'), env: env, timeout: 60)
+test('bind-hash-luks1', find_program('bind-hash-luks1'), env: env)
+test('regen-hash-luks1', find_program('regen-hash-luks1'), env: env, timeout: 60)
+test('edit-hash-luks1', find_program('edit-hash-luks1'), env: env, timeout: 60)
+test('get-hash-luks1', find_program('get-hash-luks1'), env: env, timeout: 60)
+test('get-hash-validation', find_program('get-hash-validation'), env: env)
 
 # LUKS2 tests go here, and they get included if we get support for it, based
 # on the cryptsetup version.
@@ -99,6 +104,10 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
 
   test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
   test('pass-tang-luks2', find_program('pass-tang-luks2'), env: env, timeout: 60)
+  test('bind-hash-luks2', find_program('bind-hash-luks2'), env: env, timeout: 60)
+  test('regen-hash-luks2', find_program('regen-hash-luks2'), env: env, timeout: 60)
+  test('edit-hash-luks2', find_program('edit-hash-luks2'), env: env, timeout: 60)
+  test('get-hash-luks2', find_program('get-hash-luks2'), env: env, timeout: 60)
 endif
 
 test('unlock-arbitrary-parameter', find_program('unlock-arbitrary-parameter'), env: env)

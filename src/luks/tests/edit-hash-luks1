@@ -1,0 +1,95 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+on_exit() {
+    local d
+    for d in "${TMP}" "${TMP2}"; do
+        [ ! -d "${d}" ] && continue
+        tang_stop "${d}"
+        rm -rf "${d}"
+    done
+}
+
+trap 'on_exit' EXIT
+trap 'on_exit' ERR
+
+TMP="$(mktemp -d)"
+
+tang_run "${TMP}"
+port=$(tang_get_port "${TMP}")
+
+url="http://localhost:${port}"
+
+cfg=$(printf '{"url":"%s"}' "${url}")
+
+# LUKS1 with sha512.
+DEV="${TMP}/luks1-device-sha512"
+new_device_hash "luks1" "${DEV}" "sha512"
+
+# Verify the device was created with sha512.
+hash_before=$(cryptsetup luksDump "${DEV}" \
+              | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_before}" != "sha512" ]; then
+    error "${TEST}: Device should have been formatted with sha512, got ${hash_before}."
+fi
+
+if ! clevis luks bind -y -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Bind should have succeeded."
+fi
+
+# Verify hash is still sha512 after binding.
+hash_after_bind=$(cryptsetup luksDump "${DEV}" \
+                  | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_after_bind}" != "sha512" ]; then
+    error "${TEST}: After binding, hash should be sha512, got ${hash_after_bind}."
+fi
+
+# Now let's have another tang instance running and change the config to use
+# the new one.
+TMP2="$(mktemp -d)"
+tang_run "${TMP2}"
+port2=$(tang_get_port "${TMP2}")
+new_url="http://localhost:${port2}"
+new_cfg=$(printf '{"url":"%s"}' "${new_url}")
+
+if ! clevis luks edit -d "${DEV}" -s 1 -c "${new_cfg}"; then
+    error "${TEST}: edit should have succeeded."
+fi
+
+# Verify hash is still sha512 after edit.
+hash_after_edit=$(cryptsetup luksDump "${DEV}" \
+                  | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_after_edit}" != "sha512" ]; then
+    error "${TEST}: After edit, hash should be sha512, got ${hash_after_edit}."
+fi
+
+# Also check via clevis_luks_get_hash.
+hash_fn=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash_fn}" != "sha512" ]; then
+    error "${TEST}: clevis_luks_get_hash should return sha512, got ${hash_fn}."
+fi
+
+# Make sure we can still unlock the device.
+if ! clevis_luks_unlock_device "${DEV}" >/dev/null; then
+    error "${TEST}: we should have been able to unlock the device"
+fi

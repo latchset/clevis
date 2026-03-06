@@ -1,0 +1,70 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. tests-common-functions
+
+. clevis-luks-common-functions
+
+on_exit() {
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+trap 'exit' ERR
+
+TMP="$(mktemp -d)"
+
+ADV="${TMP}/adv.jws"
+tang_create_adv "${TMP}" "${ADV}"
+CFG="$(printf '{"url":"foobar","adv":"%s"}' "$ADV")"
+
+# LUKS2 with sha512.
+DEV="${TMP}/luks2-device-sha512"
+if ! luks2_supported; then
+    skip_test "LUKS2 is not supported."
+fi
+
+new_device_hash "luks2" "${DEV}" "sha512"
+
+# Verify the device was created with sha512.
+hash_before=$(cryptsetup luksDump "${DEV}" \
+              | sed -rn 's|^\s+Hash:\s+(\S+)$|\1|p' | head -1)
+if [ "${hash_before}" != "sha512" ]; then
+    error "${TEST}: Device should have been formatted with sha512, got ${hash_before}."
+fi
+
+if ! clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+    error "${TEST}: Binding is expected to succeed."
+fi
+
+# After binding, check that the new clevis slot also uses sha512.
+# For LUKS2, we check the hash of the clevis key slot (slot 1).
+# LUKS2 luksDump format lists slots as "  1: luks2", not "Key Slot 1".
+hash_slot1=$(cryptsetup luksDump "${DEV}" \
+             | awk '/^[[:space:]]+1: luks/{found=1} found && /Hash:/{print $2; exit}')
+if [ "${hash_slot1}" != "sha512" ]; then
+    error "${TEST}: Clevis slot hash should be sha512, got ${hash_slot1}."
+fi
+
+# Also check via clevis_luks_get_hash.
+hash_fn=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash_fn}" != "sha512" ]; then
+    error "${TEST}: clevis_luks_get_hash should return sha512, got ${hash_fn}."
+fi

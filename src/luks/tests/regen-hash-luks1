@@ -1,8 +1,7 @@
 #!/bin/bash -x
-# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2020 Red Hat, Inc.
-# Author: Sergio Correia <scorreia@redhat.com>
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,12 +40,26 @@ tang_get_adv "${port}" "${adv}"
 
 cfg=$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")
 
-# LUKS1.
-DEV="${TMP}/luks1-device"
-new_device "luks1" "${DEV}"
+# LUKS1 with sha512.
+DEV="${TMP}/luks1-device-sha512"
+new_device_hash "luks1" "${DEV}" "sha512"
+
+# Verify the device was created with sha512.
+hash_before=$(cryptsetup luksDump "${DEV}" \
+              | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_before}" != "sha512" ]; then
+    error "${TEST}: Device should have been formatted with sha512, got ${hash_before}."
+fi
 
 if ! clevis luks bind -f -d "${DEV}" tang "${cfg}" <<< "${DEFAULT_PASS}"; then
     error "${TEST}: Bind should have succeeded."
+fi
+
+# Verify hash is still sha512 after binding.
+hash_after_bind=$(cryptsetup luksDump "${DEV}" \
+                  | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_after_bind}" != "sha512" ]; then
+    error "${TEST}: After binding, hash should be sha512, got ${hash_after_bind}."
 fi
 
 # Now let's remove the initial passphrase.
@@ -72,4 +85,17 @@ new_key=$(clevis_luks_unlock_device_by_slot "${DEV}" "${SLT}")
 
 if [ "${old_key}" = "${new_key}" ]; then
     error "${TEST}: the passphrases should be different"
+fi
+
+# Verify hash is still sha512 after regen.
+hash_after_regen=$(cryptsetup luksDump "${DEV}" \
+                   | sed -rn 's|^Hash spec:\s+(\S+)$|\1|p')
+if [ "${hash_after_regen}" != "sha512" ]; then
+    error "${TEST}: After regen, hash should be sha512, got ${hash_after_regen}."
+fi
+
+# Also check via clevis_luks_get_hash.
+hash_fn=$(clevis_luks_get_hash "${DEV}")
+if [ "${hash_fn}" != "sha512" ]; then
+    error "${TEST}: clevis_luks_get_hash should return sha512, got ${hash_fn}."
 fi

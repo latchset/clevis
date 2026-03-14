@@ -42,7 +42,6 @@
 #include <jose/b64.h>
 #include <jose/jwe.h>
 
-#include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 

@@ -349,11 +349,15 @@ call(char *const argv[], const void *buf, size_t len, pid_t *pid)
 
     *pid = 0;
 
-    if (pipe2(dump, O_CLOEXEC) < 0)
+    if (pipe(dump) < 0)
         goto error;
+    fcntl(dump[0], F_SETFD, FD_CLOEXEC);
+    fcntl(dump[1], F_SETFD, FD_CLOEXEC);
 
-    if (pipe2(load, O_CLOEXEC) < 0)
+    if (pipe(load) < 0)
         goto error;
+    fcntl(load[0], F_SETFD, FD_CLOEXEC);
+    fcntl(load[1], F_SETFD, FD_CLOEXEC);
 
     *pid = fork();
     if (*pid < 0)

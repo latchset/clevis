@@ -227,8 +227,22 @@ main(int argc, char *argv[])
             }
             if (pi >= nfds)
                 continue;
-            if (!(pollfds[pi].revents & (POLLIN | POLLPRI)))
+
+            /* If no data available but pipe closed/errored, mark as failed */
+            if (!(pollfds[pi].revents & (POLLIN | POLLPRI))) {
+                if (pollfds[pi].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    fclose(pin->file);
+                    pin->file = NULL;
+                    pollfds[pi].fd = -1;
+                    waitpid(pin->pid, NULL, 0);
+                    pin->pid = 0;
+                    pin->next->prev = pin->prev;
+                    pin->prev->next = pin->next;
+                    free(pin);
+                    break;
+                }
                 continue;
+            }
 
             {
                 const size_t ptl = pl * 2;
@@ -260,6 +274,8 @@ main(int argc, char *argv[])
 
             fclose(pin->file);
             pin->file = NULL;
+            /* Remove closed fd from poll set (poll ignores negative fds) */
+            pollfds[pi].fd = -1;
 
             waitpid(pin->pid, NULL, 0);
             pin->pid = 0;

@@ -41,7 +41,7 @@
 #include <jose/b64.h>
 #include <jose/jwe.h>
 
-#include <sys/epoll.h>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -141,7 +141,8 @@ main(int argc, char *argv[])
     int ret = EXIT_FAILURE;
     json_t *p = NULL;
     json_int_t t = 1;
-    int epoll = -1;
+    struct pollfd *pollfds = NULL;
+    nfds_t nfds = 0;
     size_t pl = 0;
 
     if (argc == 2 && strcmp(argv[1], "--summary") == 0)
@@ -149,10 +150,6 @@ main(int argc, char *argv[])
 
     if (isatty(STDIN_FILENO) || argc != 1)
         goto usage;
-
-    epoll = epoll_create1(EPOLL_CLOEXEC);
-    if (epoll < 0)
-        return ret;
 
     jwe = compact_jwe(stdin);
     if (!jwe)
@@ -195,12 +192,17 @@ main(int argc, char *argv[])
         if (!pin->file)
             goto egress;
 
-        if (epoll_ctl(epoll, EPOLL_CTL_ADD, fileno(pin->file),
-                      &(struct epoll_event) {
-                          .events = EPOLLIN | EPOLLPRI,
-                          .data.fd = fileno(pin->file)
-                      }) < 0)
-            goto egress;
+        {
+            struct pollfd *tmp = realloc(pollfds,
+                                        (nfds + 1) * sizeof(*pollfds));
+            if (!tmp)
+                goto egress;
+            pollfds = tmp;
+            pollfds[nfds].fd = fileno(pin->file);
+            pollfds[nfds].events = POLLIN | POLLPRI;
+            pollfds[nfds].revents = 0;
+            nfds++;
+        }
     }
 
     json_decref(pins);
@@ -208,18 +210,41 @@ main(int argc, char *argv[])
     if (!pins)
         goto egress;
 
-    for (struct epoll_event e; true; ) {
-        int r = 0;
-
-        r = epoll_wait(epoll, &e, 1, -1);
-        if (r != 1)
+    while (true) {
+        int r = poll(pollfds, nfds, -1);
+        if (r <= 0)
             break;
 
         for (struct pin *pin = chldrn.next; pin != &chldrn; pin = pin->next) {
-            if (!pin->file || e.data.fd != fileno(pin->file))
+            nfds_t pi;
+
+            if (!pin->file)
                 continue;
 
-            if (e.events & (EPOLLIN | EPOLLPRI)) {
+            for (pi = 0; pi < nfds; pi++) {
+                if (pollfds[pi].fd == fileno(pin->file))
+                    break;
+            }
+            if (pi >= nfds)
+                continue;
+
+            /* If no data available but pipe closed/errored, mark as failed */
+            if (!(pollfds[pi].revents & (POLLIN | POLLPRI))) {
+                if (pollfds[pi].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    fclose(pin->file);
+                    pin->file = NULL;
+                    pollfds[pi].fd = -1;
+                    waitpid(pin->pid, NULL, 0);
+                    pin->pid = 0;
+                    pin->next->prev = pin->prev;
+                    pin->prev->next = pin->next;
+                    free(pin);
+                    break;
+                }
+                continue;
+            }
+
+            {
                 const size_t ptl = pl * 2;
 
                 pin->pt = malloc(ptl);
@@ -249,6 +274,8 @@ main(int argc, char *argv[])
 
             fclose(pin->file);
             pin->file = NULL;
+            /* Remove closed fd from poll set (poll ignores negative fds) */
+            pollfds[pi].fd = -1;
 
             waitpid(pin->pid, NULL, 0);
             pin->pid = 0;
@@ -324,7 +351,7 @@ egress:
         free(pin);
     }
 
-    close(epoll);
+    free(pollfds);
     return ret;
 
 usage:

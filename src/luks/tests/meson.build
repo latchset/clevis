@@ -1,9 +1,14 @@
 # We use jq for comparing the pin config in the clevis luks list tests.
 jq = find_program('jq', required: false)
 
-# We use cryptsetup for testing LUKS2 binding and saving the token in a
-# given token slot.
-cryptsetup = find_program('cryptsetup', required: true)
+# All LUKS tests require cryptsetup. The test directory is included
+# unconditionally by the parent meson.build, so we must handle the case
+# where cryptsetup is not available (e.g., on macOS/Darwin).
+cryptsetup = find_program('cryptsetup', required: false)
+if not cryptsetup.found()
+  warning('Will not run LUKS tests due to missing cryptsetup')
+  subdir_done()
+endif
 
 # Use keyctl to check an existing token id can be created from
 # kernel keyring password
@@ -13,6 +18,9 @@ if keyutils.found()
 else
     warning('keyutils not installed, unable to test existing token id binding')
 endif
+
+# We use jq for comparing the pin config in the clevis luks list tests.
+jq = find_program('jq', required: false)
 
 common_functions = configure_file(input: 'tests-common-functions.in',
   output: 'tests-common-functions',

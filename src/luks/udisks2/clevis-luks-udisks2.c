@@ -481,10 +481,9 @@ token_to_jwe(const char *json, pkt_t *pkt)
 
     pkt->used = snprintf(pkt->data, sizeof(pkt->data),
                          "%s.%s.%s.%s.%s", prt, key, iv, ct, tag);
-    if (pkt->used < 0 || (size_t) pkt->used > sizeof(pkt->data))
+    if (pkt->used < 0 || (size_t) pkt->used >= sizeof(pkt->data))
         return false;
 
-    pkt->used--; /* Remove null terminator. */
     return true;
 }
 

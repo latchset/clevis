@@ -12,11 +12,20 @@ if udisks2.found() and audit.found() and gio.found()
     configuration: data,
   )
 
-  executable('clevis-luks-udisks2', 'clevis-luks-udisks2.c',
+  executable('clevis-luks-udisks2',
+    ['clevis-luks-udisks2.c', 'token-to-jwe.c'],
     dependencies: [udisks2, luksmeta, audit, jansson],
     install_dir: libexecdir,
     install: true,
   )
 else
   warning('Will not build udisks2 support due to missing dependencies!')
+endif
+
+if jansson.found()
+  test_token_to_jwe = executable('test-token-to-jwe',
+    ['test-token-to-jwe.c', 'token-to-jwe.c'],
+    dependencies: [jansson],
+  )
+  test('token-to-jwe', test_token_to_jwe)
 endif

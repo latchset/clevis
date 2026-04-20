@@ -17,18 +17,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "token-to-jwe.h"
+
 #include <udisks/udisks.h>
 #include <glib-unix.h>
 #include <luksmeta.h>
 #include <jansson.h>
 
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 
 #include <string.h>
 
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -37,7 +37,6 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define MAX_UDP 65507
 #define UERR ((uid_t) -1)
 #define GERR ((gid_t) -1)
 
@@ -49,11 +48,6 @@
 #define UUID_ARGS(u) \
     u[0x0], u[0x1], u[0x2], u[0x3], u[0x4], u[0x5], u[0x6], u[0x7], \
     u[0x8], u[0x9], u[0xa], u[0xb], u[0xc], u[0xd], u[0xe], u[0xf]
-
-typedef struct {
-    ssize_t used;
-    char data[MAX_UDP];
-} pkt_t;
 
 enum {
     PIPE_RD = 0,
@@ -453,38 +447,6 @@ grp2gid(const char *grp)
 {
     const struct group *tmp = getgrnam(grp);
     return tmp ? tmp->gr_gid : GERR;
-}
-
-static bool
-token_to_jwe(const char *json, pkt_t *pkt)
-{
-    json_auto_t *tokn = NULL;
-    const json_t *jwe = NULL;
-    const char *prt = NULL;
-    const char *key = NULL;
-    const char *tag = NULL;
-    const char *iv = NULL;
-    const char *ct = NULL;
-
-    tokn = json_loads(json, 0, NULL);
-    if (!tokn)
-        return false;
-
-    jwe = json_object_get(tokn, "jwe");
-    if (!jwe)
-        return false;
-
-    if (json_unpack((json_t *) jwe, "{s:s,s:s,s:s,s:s,s:s}",
-                    "protected", &prt, "encrypted_key", &key, "iv", &iv,
-                    "ciphertext", &ct, "tag", &tag) < 0)
-        return false;
-
-    pkt->used = snprintf(pkt->data, sizeof(pkt->data),
-                         "%s.%s.%s.%s.%s", prt, key, iv, ct, tag);
-    if (pkt->used < 0 || (size_t) pkt->used >= sizeof(pkt->data))
-        return false;
-
-    return true;
 }
 
 int

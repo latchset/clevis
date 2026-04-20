@@ -420,7 +420,7 @@ log_attempt(int log, struct crypt_device *cd, bool success)
                  "op=recovered-key-for uuid=%s %s",
                  uuid, dev);
     free(dev);
-    if (r < 0 || r == sizeof(msg))
+    if (r < 0 || (size_t) r >= sizeof(msg))
         return false;
 
     return audit_log_user_message(log, AUDIT_USER_DEVICE, msg,

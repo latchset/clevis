@@ -19,6 +19,7 @@
 
 #pragma once
 #include <jansson.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -32,4 +33,5 @@ json_t *
 sss_recover(const json_t *p, size_t npnts, const uint8_t *pnts[]);
 
 FILE *
-call(char *const argv[], const void *buf, size_t len, pid_t *pid);
+call(char *const argv[], const void *buf, size_t len, pid_t *pid,
+     bool use_pgrp);

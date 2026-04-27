@@ -21,3 +21,4 @@ env.prepend('PATH',
 )
 
 test('pin-pkcs11', find_program('pin-pkcs11'), env: env)
+test('pkcs11-id-parsing', find_program('pkcs11-id-parsing'), env: env)

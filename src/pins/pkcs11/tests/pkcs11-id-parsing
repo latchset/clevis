@@ -1,0 +1,81 @@
+#!/bin/bash -xe
+#
+# Copyright (c) 2024 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Unit test for pkcs11 public key ID parsing from pkcs11-tool -O output.
+# Verifies the ID extraction pipeline handles both old and new output
+# formats of pkcs11-tool.
+#
+. tests-common-functions
+
+parse_pkcs11_id() {
+    echo "$1" | grep -i 'Public' -A10 | grep 'ID:' \
+        | head -1 | awk -F 'ID:' '{print $2}' | awk '{print $1}'
+}
+
+# New pkcs11-tool format: ID with parenthetical hex annotation
+PKCS11_OUTPUT_NEW_FORMAT="Public Key Object; RSA  2048 bits
+  label:      KEY MAN pubkey
+  ID:         3 (0x03)
+  Usage:      encrypt, wrap
+  Access:     none"
+
+id=$(parse_pkcs11_id "${PKCS11_OUTPUT_NEW_FORMAT}")
+test "${id}" == "3" || error "New format: expected '3', got '${id}'"
+
+# Old pkcs11-tool format: ID as plain hex without annotation
+PKCS11_OUTPUT_OLD_FORMAT="Public Key Object; RSA  2048 bits
+  label:      KEY MAN pubkey
+  ID:         03
+  Usage:      encrypt, wrap
+  Access:     none"
+
+id=$(parse_pkcs11_id "${PKCS11_OUTPUT_OLD_FORMAT}")
+test "${id}" == "03" || error "Old format: expected '03', got '${id}'"
+
+# Multi-digit ID with hex annotation
+PKCS11_OUTPUT_MULTI_DIGIT="Public Key Object; RSA  2048 bits
+  label:      KEY MAN pubkey
+  ID:         10 (0x0a)
+  Usage:      encrypt, wrap
+  Access:     none"
+
+id=$(parse_pkcs11_id "${PKCS11_OUTPUT_MULTI_DIGIT}")
+test "${id}" == "10" || error "Multi-digit: expected '10', got '${id}'"
+
+# Two-byte hex ID
+PKCS11_OUTPUT_TWO_BYTE="Public Key Object; RSA  4096 bits
+  label:      KEY MAN pubkey
+  ID:         ff01 (0xff01)
+  Usage:      encrypt, wrap
+  Access:     none"
+
+id=$(parse_pkcs11_id "${PKCS11_OUTPUT_TWO_BYTE}")
+test "${id}" == "ff01" || error "Two-byte hex: expected 'ff01', got '${id}'"
+
+# Multiple objects: should pick the first Public Key ID
+PKCS11_OUTPUT_MULTIPLE="Certificate Object; type = X.509 cert
+  label:      Certificate for Key Management
+  ID:         99
+Public Key Object; RSA  2048 bits
+  label:      KEY MAN pubkey
+  ID:         42 (0x2a)
+  Usage:      encrypt, wrap
+  Access:     none"
+
+id=$(parse_pkcs11_id "${PKCS11_OUTPUT_MULTIPLE}")
+test "${id}" == "42" || error "Multiple objects: expected '42', got '${id}'"

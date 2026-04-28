@@ -1,38 +1,28 @@
 jobs:
-  - &tests-ci
+  - &tests-ci-base
     job: tests
     trigger: pull_request
     branch: master
-    targets:
-      - fedora-stable
-      - centos-stream-10-x86_64
     skip_build: true
-    identifier: "sanity"
+    fmf_url: "https://github.com/RedHat-SP-Security/clevis-tests"
+    fmf_ref: "master"
     tf_extra_params:
-      test:
-        tmt:
-          url: "https://github.com/RedHat-SP-Security/clevis-tests"
-          ref: "master"
-          name: "/Plans/upstream/sanity"
       environment:
         tmt:
           context:
             target_PR_branch: master
 
-  - &tests-ci-pkcs11
-    <<: *tests-ci
-    identifier: "pkcs11"
+  - <<: *tests-ci-base
+    targets:
+      - fedora-stable
+      - centos-stream-10-x86_64
+    identifier: "sanity"
+    tmt_plan: "/Plans/upstream/sanity"
+
+  - <<: *tests-ci-base
     targets:
       - fedora-stable
       - centos-stream-9-x86_64
       - centos-stream-10-x86_64
-    tf_extra_params:
-      test:
-        tmt:
-          url: "https://github.com/RedHat-SP-Security/clevis-tests"
-          ref: "master"
-          name: "/Plans/upstream/pkcs11-.*"
-      environment:
-        tmt:
-          context:
-            target_PR_branch: master
+    identifier: "pkcs11"
+    tmt_plan: "/Plans/upstream/pkcs11-.*"

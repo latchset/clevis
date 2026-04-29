@@ -101,8 +101,9 @@ if ! id=$(pkcs11-tool ${slot_opt} -O 2>${ERR} ${module_opt} \
           | grep -i 'Public' -A10 2>${ERR} | grep 'ID:' \
 	  | head -1 | awk -F 'ID:' '{
 	    val = $2
-	    if (match(val, /\(0x([^)]+)\)/, m)) {
-	        print m[1]
+	    if (match(val, /\(0x[^)]+\)/)) {
+	        val = substr(val, RSTART+3, RLENGTH-4)
+	        print val
 	    } else {
 	        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
 	        print val

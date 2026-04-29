@@ -6,6 +6,11 @@ jobs:
     skip_build: true
     fmf_url: "https://github.com/RedHat-SP-Security/clevis-tests"
     fmf_ref: "master"
+    targets:
+      - fedora-stable
+      - centos-stream-10-x86_64
+    identifier: "sanity"
+    tmt_plan: "/Plans/upstream/sanity"
     tf_extra_params:
       environment:
         tmt:
@@ -14,14 +19,6 @@ jobs:
 
   - <<: *tests-ci-base
     targets:
-      - fedora-stable
-      - centos-stream-10-x86_64
-    identifier: "sanity"
-    tmt_plan: "/Plans/upstream/sanity"
-
-  - <<: *tests-ci-base
-    targets:
-      - fedora-stable
       - centos-stream-9-x86_64
       - centos-stream-10-x86_64
     identifier: "pkcs11"

@@ -9,6 +9,7 @@ jobs:
     targets:
       - fedora-stable
       - centos-stream-10-x86_64
+      - centos-stream-9-x86_64
     identifier: "sanity"
     tmt_plan: "/Plans/upstream/sanity"
     tf_extra_params:

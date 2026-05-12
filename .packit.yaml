@@ -20,7 +20,6 @@ jobs:
 
   - <<: *tests-ci-base
     targets:
-      - centos-stream-9-x86_64
       - centos-stream-10-x86_64
     identifier: "pkcs11"
     tmt_plan: "/Plans/upstream/pkcs11-.*"

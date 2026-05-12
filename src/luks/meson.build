@@ -28,11 +28,13 @@ clevis_luks_common_functions = configure_file(
   configuration: luksmeta_data
 )
 
-clevis_luks_tpm1_functions = configure_file(
-  input: 'clevis-luks-tpm1-functions.in',
-  output: 'clevis-luks-tpm1-functions',
-  configuration: data
-)
+if not get_option('tpm1').disabled()
+  clevis_luks_tpm1_functions = configure_file(
+    input: 'clevis-luks-tpm1-functions.in',
+    output: 'clevis-luks-tpm1-functions',
+    configuration: data
+  )
+endif
 
 clevis_luks_unbind = configure_file(input: 'clevis-luks-unbind.in',
                output: 'clevis-luks-unbind',
@@ -84,7 +86,9 @@ if libcryptsetup.found() and luksmeta.found()
   bins += join_paths(meson.current_source_dir(), 'clevis-luks-pass')
   mans += join_paths(meson.current_source_dir(), 'clevis-luks-pass.1')
 
-  install_data(clevis_luks_tpm1_functions, install_dir: libexecdir)
+  if not get_option('tpm1').disabled()
+    install_data(clevis_luks_tpm1_functions, install_dir: libexecdir)
+  endif
 else
   warning('Will not install LUKS support due to missing dependencies!')
 endif

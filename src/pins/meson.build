@@ -1,6 +1,8 @@
 subdir('file')
 subdir('sss')
 subdir('tang')
-subdir('tpm1')
+if not get_option('tpm1').disabled()
+  subdir('tpm1')
+endif
 subdir('tpm2')
 subdir('pkcs11')

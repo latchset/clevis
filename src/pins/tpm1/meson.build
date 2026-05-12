@@ -2,7 +2,7 @@ cmds = ['tpm_sealdata', 'tpm_unsealdata']
 
 all = true
 foreach cmd : cmds
-  all = all and find_program(cmd, required: false).found()
+  all = all and find_program(cmd, required: get_option('tpm1').enabled()).found()
 endforeach
 
 if all

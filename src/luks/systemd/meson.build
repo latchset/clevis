@@ -4,7 +4,6 @@ if systemd.found() and sd_reply_pass.found()
   systemd_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.path())
 
   unitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
-  tcsdoverridedir = join_paths(unitdir, 'tcsd.service.d')
 
   configure_file(
     input: 'clevis-luks-askpass.service.in',
@@ -39,7 +38,11 @@ if systemd.found() and sd_reply_pass.found()
 
   install_data('clevis-luks-askpass.path', install_dir: unitdir)
   install_data('clevis-luks-pkcs11-askpass.socket', install_dir: unitdir)
-  install_data('clevis-tcsd.conf', install_dir: tcsdoverridedir)
+
+  if not get_option('tpm1').disabled()
+    tcsdoverridedir = join_paths(unitdir, 'tcsd.service.d')
+    install_data('clevis-tcsd.conf', install_dir: tcsdoverridedir)
+  endif
 else
   warning('Will not install systemd support due to missing dependencies!')
 endif

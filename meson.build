@@ -63,3 +63,5 @@ if a2x.found()
 else
   warning('Will not build man pages due to missing dependencies!')
 endif
+
+summary('TPM 1.2 pin', get_option('tpm1'), section: 'Features')

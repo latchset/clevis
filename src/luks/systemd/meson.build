@@ -3,6 +3,14 @@ if systemd.found() and sd_reply_pass.found()
   systemd_data.merge_from(data)
   systemd_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.path())
 
+  if not get_option('tpm1').disabled()
+    systemd_data.set('TCSD_AFTER', 'After=tcsd.service')
+    systemd_data.set('TCSD_WANTS', 'Wants=tcsd.service')
+  else
+    systemd_data.set('TCSD_AFTER', '')
+    systemd_data.set('TCSD_WANTS', '')
+  endif
+
   unitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
 
   configure_file(

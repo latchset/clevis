@@ -60,6 +60,7 @@ install() {
         clevis-luks-common-functions \
         awk date ps sort touch tr \
         grep sed cut \
+        chmod \
         clevis-decrypt \
         clevis-luks-list \
         cryptsetup \

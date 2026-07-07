@@ -45,6 +45,16 @@ if [ -t 0 ]; then
     echo "  adv: <string>   A filename containing a trusted advertisement"
     echo "  adv: <object>   A trusted advertisement (raw JSON)"
     echo
+    echo "  cacert: <string>  Path to a CA bundle used to verify the Tang"
+    echo "                    server's TLS certificate (curl --cacert)"
+    echo
+    echo "  cert: <string>    Path to the client TLS certificate for mutual"
+    echo "                    TLS authentication (curl --cert)"
+    echo
+    echo "  key: <string>     Path to the private key for the client TLS"
+    echo "                    certificate (curl --key). May be omitted if the"
+    echo "                    key is bundled in the 'cert' file"
+    echo
     echo "Obtaining the thumbprint of a trusted signing key is easy. If you"
     echo "have access to the Tang server's database directory, simply do:"
     echo
@@ -77,6 +87,37 @@ fi
 
 thp="$(jose fmt -j- -Og thp -Su- <<< "$cfg")" || true
 
+# Optional (m)TLS parameters. If none are set, curl behaves exactly as before
+# (plain HTTP/TLS, no client certificate and default CA verification).
+cacert="$(jose fmt -j- -Og cacert -Su- <<< "$cfg")" || true
+cert="$(jose fmt -j- -Og cert -Su- <<< "$cfg")" || true
+key="$(jose fmt -j- -Og key -Su- <<< "$cfg")" || true
+
+# Validate the (m)TLS file paths up front, matching the 'adv' check below.
+# Otherwise a typo'd path either surfaces as a misleading "Unable to fetch
+# advertisement" error, or (when 'adv' is inline and curl is never called)
+# gets baked into the JWE header and only fails later at decrypt time.
+[ -n "$cacert" ] && [ ! -f "$cacert" ] && { echo "CA cert file '$cacert' not found!" >&2; exit 1; }
+[ -n "$cert" ]   && [ ! -f "$cert" ]   && { echo "Client cert file '$cert' not found!" >&2; exit 1; }
+[ -n "$key" ]    && [ ! -f "$key" ]    && { echo "Client key file '$key' not found!" >&2; exit 1; }
+
+# 'key' on its own is a no-op: curl ignores --key unless --cert is also given.
+[ -n "$key" ] && [ -z "$cert" ] && { echo "'key' requires 'cert' to also be set!" >&2; exit 1; }
+
+# Reject http:// when cacert or cert is set: curl would silently ignore them.
+if [ -n "$cacert" ] || [ -n "$cert" ]; then
+    case "$url" in
+        https://*) ;;
+        *) echo "TLS options (cacert/cert/key) require an https:// URL!" >&2
+           exit 1 ;;
+    esac
+fi
+
+curl_opts=()
+[ -n "$cacert" ] && curl_opts+=(--cacert "$cacert")
+[ -n "$cert" ]   && curl_opts+=(--cert "$cert")
+[ -n "$key" ]    && curl_opts+=(--key "$key")
+
 ### Get the advertisement
 if jws="$(jose fmt -j- -g adv -Oo- <<< "$cfg")"; then
     thp="${thp:-any}"
@@ -92,7 +133,7 @@ elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
     fi
 
     thp="${thp:-any}"
-elif ! jws="$(curl -sfg "$url/adv/$thp")"; then
+elif ! jws="$(curl -sfg "${curl_opts[@]}" "$url/adv/$thp")"; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1
 fi
@@ -156,5 +197,10 @@ kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}"  <<< "$jwk")"
 jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
 jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"
+# Persist any (m)TLS parameters so decryption can reuse them. These are file
+# paths (not secrets); the JWE header is stored in plaintext.
+[ -n "$cacert" ] && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cacert" -s cacert -UUUUo-)"
+[ -n "$cert" ]   && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cert" -s cert -UUUUo-)"
+[ -n "$key" ]    && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$key" -s key -UUUUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks")"
 exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

@@ -76,6 +76,52 @@ This command uses the following configuration properties:
 * *adv* (object) :
   A trusted advertisement (raw JSON)
 
+* *cacert* (string) :
+  Path to a CA bundle used to verify the Tang server's TLS certificate
+  (passed to curl as --cacert). Only needed when the server certificate is
+  signed by a CA that is not in the system trust store.
+
+* *cert* (string) :
+  Path to the client TLS certificate used for mutual TLS (mTLS)
+  authentication (passed to curl as --cert).
+
+* *key* (string) :
+  Path to the private key for the client TLS certificate (passed to curl as
+  --key). May be omitted if the private key is bundled in the *cert* file.
+
+The *cacert*, *cert* and *key* properties are optional. When none are set,
+Clevis talks to the Tang server exactly as before (plain HTTP/HTTPS with
+default CA verification). These properties are file paths, not secrets, and
+are stored in the JWE header so that decryption reuses them automatically.
+
+NOTE: When used for automatic unlocking at boot (for example with LUKS), the
+referenced certificate and key files must also be present at the same paths
+inside the initramfs, since decryption happens there.
+
+== mTLS EXAMPLE
+
+    $ cfg='{"url":"https://tang.srv","cacert":"/etc/clevis/ca.crt",
+            "cert":"/etc/clevis/client.crt","key":"/etc/clevis/client.key"}'
+    $ clevis encrypt tang "$cfg" < PT > JWE
+
+== mTLS SECURITY MODEL
+
+The *cacert*, *cert* and *key* properties are stored in the JWE *protected*
+header, which is integrity-protected by the AES-256-GCM authentication tag.
+Modifying any of these values will cause decryption to fail. However, the
+integrity check is only performed *after* the values have been used to contact
+the Tang server (the decryption key is needed to verify the tag, and the Tang
+server must be contacted to derive that key). This means a tampered JWE will
+cause the system to fail to unlock, but one curl request will have been sent
+using the tampered parameters.
+
+To limit the exposure of that single request, store the JWE and any *cacert*,
+*cert* and *key* files it references in root-owned locations that are not
+writable by untrusted users, so the parameters cannot be tampered with in the
+first place. You may also prefer installing the Tang server's CA into the
+system trust store (for example with *update-ca-trust* or
+*update-ca-certificates*) and omitting *cacert*.
+
 == OPTIONS
 
 * *-y* :

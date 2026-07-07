@@ -179,3 +179,89 @@ run_test_server() {
     process_wait_until_port_ready "${pid}"
     process_find_port "${pid}" "tang" > "${portfile}"
 }
+
+# Extra sanity check for the mutual-TLS (mTLS) tests: on top of the regular
+# tang requirements, we need the 'openssl' command and a socat built with
+# OpenSSL support (for the OPENSSL-LISTEN address type).
+tang_mtls_sanity_check() {
+    tang_sanity_check
+    command -v openssl >/dev/null 2>&1 \
+        || skip_test "mTLS test needs the 'openssl' command"
+    "${SOCAT}" -V 2>/dev/null | grep -q -i 'openssl' \
+        || skip_test "mTLS test needs socat built with OpenSSL support"
+    return 0
+}
+
+# Generate a CA plus server and client certificates for the mTLS tests.
+# Creates, under ${basedir}:
+#   ca.crt      - CA certificate     (curl --cacert / socat cafile=)
+#   server.pem  - server cert+key    (socat cert=)
+#   client.crt  - client certificate (curl --cert)
+#   client.key  - client private key (curl --key)
+tang_generate_certs() {
+    local basedir="${1}"
+    [ -z "${basedir}" ] && error "tang_generate_certs: please specify 'basedir'"
+
+    local ca_key="${basedir}/ca.key"
+    local ca_crt="${basedir}/ca.crt"
+    local srv_key="${basedir}/server.key"
+    local srv_crt="${basedir}/server.crt"
+    local srv_csr="${basedir}/server.csr"
+    local srv_pem="${basedir}/server.pem"
+    local cli_key="${basedir}/client.key"
+    local cli_crt="${basedir}/client.crt"
+    local cli_csr="${basedir}/client.csr"
+
+    # Self-signed CA.
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout "${ca_key}" \
+        -out "${ca_crt}" -subj "/CN=clevis-test-ca" -days 1
+
+    # Server certificate signed by the CA. The subjectAltName must include
+    # 'localhost' or curl's hostname verification would reject it.
+    openssl req -newkey rsa:2048 -nodes -keyout "${srv_key}" \
+        -out "${srv_csr}" -subj "/CN=localhost"
+    openssl x509 -req -in "${srv_csr}" -CA "${ca_crt}" -CAkey "${ca_key}" \
+        -CAcreateserial -out "${srv_crt}" -days 1 \
+        -extfile <(printf 'subjectAltName=DNS:localhost,IP:127.0.0.1')
+    cat "${srv_crt}" "${srv_key}" > "${srv_pem}"
+
+    # Client certificate signed by the same CA.
+    openssl req -newkey rsa:2048 -nodes -keyout "${cli_key}" \
+        -out "${cli_csr}" -subj "/CN=clevis-test-client"
+    openssl x509 -req -in "${cli_csr}" -CA "${ca_crt}" -CAkey "${ca_key}" \
+        -CAcreateserial -out "${cli_crt}" -days 1
+
+    return 0
+}
+
+# Start a test tang server fronted by TLS with mandatory client-certificate
+# verification, i.e. mutual TLS. Requires tang_generate_certs to have been
+# run against the same basedir first.
+tang_run_mtls() {
+    tang_mtls_sanity_check
+    local basedir="${1}"
+    local sig_name="${2:-}"
+    local exc_name="${3:-}"
+
+    [ -z "${basedir}" ] && error "tang_run_mtls: please specify 'basedir'"
+
+    if ! tang_new_keys "${basedir}" "" "${sig_name}" "${exc_name}"; then
+        error "Error creating new keys for tang server"
+    fi
+
+    local KEYS="${basedir}/db"
+    local srv_pem="${basedir}/server.pem"
+    local ca_crt="${basedir}/ca.crt"
+
+    local pid pidfile portfile
+    pidfile="${basedir}/tang.pid"
+    portfile="${basedir}/tang.port"
+
+    "${SOCAT}" OPENSSL-LISTEN:0,fork,reuseaddr,cert="${srv_pem}",cafile="${ca_crt}",verify=1 \
+               exec:"${TANGD} ${KEYS}" &
+    pid=$!
+
+    echo "${pid}" > "${pidfile}"
+    process_wait_until_port_ready "${pid}"
+    process_find_port "${pid}" "tang" > "${portfile}"
+}

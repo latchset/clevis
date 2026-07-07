@@ -1,0 +1,89 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    [ -n "${TMP}" ] && tang_stop "${TMP}"
+    [ -d "${TMP}" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+# Bail out early (as a skip) if the environment cannot do mTLS.
+tang_mtls_sanity_check
+
+TMP="$(mktemp -d)"
+
+# Generate CA, server and client certificates.
+tang_generate_certs "${TMP}"
+
+# Start a TLS tang server that *requires* a client certificate (mutual TLS).
+tang_run_mtls "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+url="https://localhost:${port}"
+cacert="${TMP}/ca.crt"
+cert="${TMP}/client.crt"
+key="${TMP}/client.key"
+
+# 1. Positive case: with a valid client certificate, encryption (which fetches
+#    the advertisement via GET /adv) and decryption (POST /rec) must both work
+#    over mutual TLS. '-y' skips the interactive trust check.
+cfg="$(printf '{"url":"%s","cacert":"%s","cert":"%s","key":"%s"}' \
+       "$url" "$cacert" "$cert" "$key")"
+enc="$(echo -n "hi" | clevis encrypt tang "$cfg" -y)"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "hi"
+
+# 2. The (m)TLS parameters must have been persisted into the JWE protected
+#    header so that decryption can reuse them without any extra configuration.
+hdr="$(echo -n "${enc}" | cut -d. -f1)"
+jhd="$(jose b64 dec -i- <<< "${hdr}")"
+test "$(jose fmt -j- -Og clevis -g tang -g cacert -Su- <<< "$jhd")" == "${cacert}"
+test "$(jose fmt -j- -Og clevis -g tang -g cert -Su- <<< "$jhd")" == "${cert}"
+test "$(jose fmt -j- -Og clevis -g tang -g key -Su- <<< "$jhd")" == "${key}"
+
+# 3. Negative case: mutual TLS must actually be enforced. Without a client
+#    certificate the TLS handshake fails, so fetching the advertisement (and
+#    therefore encryption) must fail.
+cfg_noclient="$(printf '{"url":"%s","cacert":"%s"}' "$url" "$cacert")"
+! echo -n "hi" | clevis encrypt tang "${cfg_noclient}" -y
+
+# 4. Negative case: 'key' without 'cert' is a no-op for curl, so encryption
+#    must be rejected up front rather than silently dropping the client key.
+cfg_keynocert="$(printf '{"url":"%s","cacert":"%s","key":"%s"}' \
+                 "$url" "$cacert" "$key")"
+! echo -n "hi" | clevis encrypt tang "${cfg_keynocert}" -y
+
+# 5. Negative case: a referenced (m)TLS file that does not exist must be
+#    reported at encrypt time instead of being baked into the JWE.
+cfg_badcert="$(printf '{"url":"%s","cacert":"%s","cert":"%s","key":"%s"}' \
+               "$url" "$cacert" "${TMP}/does-not-exist.crt" "$key")"
+! echo -n "hi" | clevis encrypt tang "${cfg_badcert}" -y
+
+# 6. Negative case: over http:// curl silently ignores the (m)TLS options, so
+#    encryption must be rejected up front rather than baking them into the JWE
+#    while sending traffic in the clear. Uses valid files so the scheme check
+#    (not the file-existence check) is what rejects it.
+cfg_httpurl="$(printf '{"url":"http://localhost:%s","cacert":"%s","cert":"%s","key":"%s"}' \
+               "$port" "$cacert" "$cert" "$key")"
+! echo -n "hi" | clevis encrypt tang "${cfg_httpurl}" -y

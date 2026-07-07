@@ -87,6 +87,25 @@ if ! url="$(jose fmt -j- -Og clevis -g tang -g url -Su- <<< "$jhd")"; then
     exit 1
 fi
 
+# Optional (m)TLS parameters. Absent for JWEs created without mTLS, in which
+# case curl behaves exactly as before.
+cacert="$(jose fmt -j- -Og clevis -g tang -g cacert -Su- <<< "$jhd")" || true
+cert="$(jose fmt -j- -Og clevis -g tang -g cert -Su- <<< "$jhd")" || true
+key="$(jose fmt -j- -Og clevis -g tang -g key -Su- <<< "$jhd")" || true
+
+# Fail with a targeted diagnostic if a referenced (m)TLS file is missing.
+# Otherwise curl -sfg fails silently below and the generic "Error
+# communicating with server" sends the operator chasing network issues,
+# when the real cause is a rotated cert or a file left out of the initramfs.
+[ -n "$cacert" ] && [ ! -f "$cacert" ] && { echo "mTLS CA cert '$cacert' not found (is it in the initramfs?)" >&2; exit 1; }
+[ -n "$cert" ]   && [ ! -f "$cert" ]   && { echo "mTLS client cert '$cert' not found (is it in the initramfs?)" >&2; exit 1; }
+[ -n "$key" ]    && [ ! -f "$key" ]    && { echo "mTLS client key '$key' not found (is it in the initramfs?)" >&2; exit 1; }
+
+curl_opts=()
+[ -n "$cacert" ] && curl_opts+=(--cacert "$cacert")
+[ -n "$cert" ]   && curl_opts+=(--cert "$cert")
+[ -n "$key" ]    && curl_opts+=(--key "$key")
+
 if ! crv="$(jose fmt -j- -Og crv -Su- <<< "$clt")"; then
     echo "Unable to determine EPK's curve!" >&2
     exit 1
@@ -101,7 +120,7 @@ xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
 rec_url="$url/rec/$kid"
 ct="Content-Type: application/jwk+json"
-if ! rep="$(curl -sfg -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
+if ! rep="$(curl -sfg "${curl_opts[@]}" -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
     echo "Error communicating with server $url" >&2
     exit 1
 fi

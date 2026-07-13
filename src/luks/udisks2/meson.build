@@ -1,6 +1,6 @@
-audit = dependency('audit', version: '>=2.7.8', required: false)
-udisks2 = dependency('udisks2', required: false)
-gio = dependency('gio-2.0', required: false)
+udisks2 = dependency('udisks2', required: get_option('udisks'))
+audit = dependency('audit', version: '>=2.7.8', required: get_option('udisks'))
+gio = dependency('gio-2.0', required: get_option('udisks'))
 
 if udisks2.found() and audit.found() and gio.found()
   autostartdir = join_paths(sysconfdir, 'xdg', 'autostart')
@@ -18,7 +18,7 @@ if udisks2.found() and audit.found() and gio.found()
     install_dir: libexecdir,
     install: true,
   )
-else
+elif get_option('udisks').auto()
   warning('Will not build udisks2 support due to missing dependencies!')
 endif
 

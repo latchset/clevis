@@ -9,6 +9,6 @@ if dracut.found()
     install_dir: dracutdir,
     configuration: data,
   )
-else
+elif get_option('dracut').auto()
   warning('Will not install dracut module clevis-pin-tang due to missing dependencies!')
 endif

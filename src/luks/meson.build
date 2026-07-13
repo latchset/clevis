@@ -42,7 +42,7 @@ clevis_luks_unbind = configure_file(input: 'clevis-luks-unbind.in',
 
 # SystemD dependencies checked here, used both in systemd and dracut subdirs
 systemd = dependency('systemd', required: false)
-systemdutildir = systemd.found() ? systemd.get_pkgconfig_variable('systemdutildir', default: '') : ''
+systemdutildir = systemd.found() ? systemd.get_variable(pkgconfig : 'systemdutildir', default_value: '') : ''
 
 sd_reply_pass = find_program(
   (systemdutildir != '') ? join_paths(systemdutildir, 'systemd-reply-password') : '',

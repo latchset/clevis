@@ -11,7 +11,7 @@ if systemd.found() and sd_reply_pass.found()
     systemd_data.set('TCSD_WANTS', '')
   endif
 
-  unitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
+  unitdir = systemd.get_variable(pkgconfig : 'systemdsystemunitdir')
 
   configure_file(
     input: 'clevis-luks-askpass.service.in',

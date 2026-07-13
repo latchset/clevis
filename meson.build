@@ -1,6 +1,10 @@
 project('clevis', 'c', license: 'GPL3+',
   version: '23',
-  default_options: 'c_std=c99'
+  default_options: [ 
+    'c_std=c99',
+    'warning_level=2',
+    'werror=true'
+  ]
 )
 
 libexecdir = join_paths(get_option('prefix'), get_option('libexecdir'))
@@ -15,9 +19,6 @@ data.set('bindir', bindir)
 data.set('libdir', libdir)
 
 add_project_arguments(
-  '-Wall',
-  '-Wextra',
-  '-Werror',
   '-Wstrict-aliasing',
   '-Wchar-subscripts',
   '-Wformat-security',

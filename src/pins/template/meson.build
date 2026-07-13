@@ -29,7 +29,7 @@ if curl.found()
 
 #%# Run the test.
   test('pin-@pin@', find_program('./pin-@pin@'), env: env)
-else
+elif get_option('dracut').auto()
   warning('Will not install @pin@ pin due to missing dependencies!')
 endif
 

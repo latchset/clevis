@@ -8,7 +8,7 @@ mans += join_paths(meson.current_source_dir(), 'clevis-encrypt-file.1')
 
 env = environment()
 env.append('PATH',
-  join_paths(meson.source_root(), 'src'),
+  join_paths(meson.project_source_root(), 'src'),
   meson.current_source_dir(),
   '/usr/libexec',
   libexecdir,

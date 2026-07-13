@@ -42,8 +42,8 @@ tang_tests_common = configure_file(
 
 env = environment()
 env.prepend('PATH',
-  join_paths(meson.source_root(), 'src'),
-  join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.project_source_root(), 'src'),
+  join_paths(meson.project_source_root(), 'src', 'pins', 'tang'),
   join_paths(meson.build_root(), 'src', 'luks', 'tests'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
   separator: ':'

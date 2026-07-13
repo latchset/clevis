@@ -3,3 +3,4 @@ option('group', type: 'string', value: 'clevis', description: 'Unprivileged grou
 option('tpm1', type: 'feature', value: 'auto', description: 'Enable TPM 1.2 pin support')
 option('pkcs11', type: 'feature', value: 'auto', description: 'Enable PKCS11 pin support')
 option('dracut', type: 'feature', value: 'auto', description: 'Enable dracut support for clevis')
+option('udisks', type: 'feature', value: 'auto', description: 'Enable udisks2 support for clevis')

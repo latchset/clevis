@@ -5,7 +5,7 @@ if dracut.found()
 
   dracut_data = configuration_data()
   dracut_data.merge_from(data)
-  dracut_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.found() ? sd_reply_pass.path() : '')
+  dracut_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.found() ? sd_reply_pass.full_path() : '')
 
   configure_file(
     input: 'module-setup.sh.in',

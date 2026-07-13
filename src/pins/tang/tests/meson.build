@@ -23,15 +23,15 @@ tang_data.set('TANGD_KEYGEN', '')
 tang_data.set('TANGD', '')
 
 if socat.found()
-  tang_data.set('SOCAT', socat.path())
+  tang_data.set('SOCAT', socat.full_path())
 endif
 
 if kgen.found()
-  tang_data.set('TANGD_KEYGEN', kgen.path())
+  tang_data.set('TANGD_KEYGEN', kgen.full_path())
 endif
 
 if tang.found()
-  tang_data.set('TANGD', tang.path())
+  tang_data.set('TANGD', tang.full_path())
 endif
 
 tang_tests_common = configure_file(

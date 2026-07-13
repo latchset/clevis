@@ -23,14 +23,14 @@ tcsd = find_program('tcsd', '/usr/sbin/tcsd', required: false)
 swtpm = find_program('swtpm', '/usr/bin/swtpm', required: false)
 swtpm_setup = find_program('swtpm_setup', '/usr/bin/swtpm_setup', required: false)
 
-tpm1_data.set('TPM_VERSION_BIN', tpm_version.found() ? tpm_version.path() : '')
-tpm1_data.set('TPM_SEALDATA_BIN', tpm_sealdata.found() ? tpm_sealdata.path() : '')
-tpm1_data.set('TPM_UNSEALDATA_BIN', tpm_unsealdata.found() ? tpm_unsealdata.path() : '')
-tpm1_data.set('TPM_TAKEOWNERSHIP_BIN', tpm_takeownership.found() ? tpm_takeownership.path() : '')
-tpm1_data.set('TCSD_BIN', tcsd.found() ? tcsd.path() : '')
-tpm1_data.set('SWTPM_BIN', swtpm.found() ? swtpm.path() : '')
-tpm1_data.set('SWTPM_SETUP_BIN', swtpm_setup.found() ? swtpm_setup.path() : '')
-tpm1_data.set('LIBCLEVIS_TPM1_TCSD_PRELOAD', libclevis_tpm1_tcsd_preload.path())
+tpm1_data.set('TPM_VERSION_BIN', tpm_version.found() ? tpm_version.full_path() : '')
+tpm1_data.set('TPM_SEALDATA_BIN', tpm_sealdata.found() ? tpm_sealdata.full_path() : '')
+tpm1_data.set('TPM_UNSEALDATA_BIN', tpm_unsealdata.found() ? tpm_unsealdata.full_path() : '')
+tpm1_data.set('TPM_TAKEOWNERSHIP_BIN', tpm_takeownership.found() ? tpm_takeownership.full_path() : '')
+tpm1_data.set('TCSD_BIN', tcsd.found() ? tcsd.full_path() : '')
+tpm1_data.set('SWTPM_BIN', swtpm.found() ? swtpm.full_path() : '')
+tpm1_data.set('SWTPM_SETUP_BIN', swtpm_setup.found() ? swtpm_setup.full_path() : '')
+tpm1_data.set('LIBCLEVIS_TPM1_TCSD_PRELOAD', libclevis_tpm1_tcsd_preload.full_path())
 
 configure_file(
   input: 'tpm1-common-test-functions.in',

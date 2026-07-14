@@ -1,5 +1,5 @@
-pcscd = find_program('pcscd', required: false)
-pkcs11tool = find_program('pkcs11-tool', required: false)
+pcscd = find_program('pcscd', required: get_option('pkcs11'))
+pkcs11tool = find_program('pkcs11-tool', required: get_option('pkcs11'))
 pcscd_disable_polkit = false
 git = find_program('git', required: false)
 
@@ -37,7 +37,7 @@ if pcscd.found() and pkcs11tool.found()
     install: true,
     c_args: GIT_VERSION_FLAG
   )
-else
+elif get_option('pkcs11').auto()
   warning('Will not install pkcs11 pin due to missing dependencies!')
   if not pcscd.found()
     warning('pcscd not found')

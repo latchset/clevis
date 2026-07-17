@@ -131,6 +131,24 @@ compact_jwe(FILE *file)
     return json_incref(jwe);
 }
 
+/* Queue a child pid for reaping at teardown.  Deferring the wait keeps the
+ * poll loop non-blocking: a child that stalls after closing its stdout can
+ * no longer freeze the event loop and starve its healthy siblings. */
+static void
+defer_reap(pid_t **reap, size_t *nreap, pid_t pid)
+{
+    pid_t *tmp = realloc(*reap, (*nreap + 1) * sizeof(*tmp));
+
+    if (!tmp) {
+        /* Out of memory: reap now rather than leak the child. */
+        waitpid(pid, NULL, 0);
+        return;
+    }
+
+    *reap = tmp;
+    (*reap)[(*nreap)++] = pid;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -144,6 +162,8 @@ main(int argc, char *argv[])
     struct pollfd *pollfds = NULL;
     nfds_t nfds = 0;
     size_t pl = 0;
+    pid_t *reap = NULL;
+    size_t nreap = 0;
 
     if (argc == 2 && strcmp(argv[1], "--summary") == 0)
         return EXIT_FAILURE;
@@ -234,7 +254,7 @@ main(int argc, char *argv[])
                     fclose(pin->file);
                     pin->file = NULL;
                     pollfds[pi].fd = -1;
-                    waitpid(pin->pid, NULL, 0);
+                    defer_reap(&reap, &nreap, pin->pid);
                     pin->pid = 0;
                     pin->next->prev = pin->prev;
                     pin->prev->next = pin->next;
@@ -277,7 +297,7 @@ main(int argc, char *argv[])
             /* Remove closed fd from poll set (poll ignores negative fds) */
             pollfds[pi].fd = -1;
 
-            waitpid(pin->pid, NULL, 0);
+            defer_reap(&reap, &nreap, pin->pid);
             pin->pid = 0;
 
             if (!pin->pt) {
@@ -350,6 +370,15 @@ egress:
         free(pin->pt);
         free(pin);
     }
+
+    /* Reap children whose pipes closed during the poll loop.  Blocking is
+     * safe here: the loop is finished, so a stalled child can no longer
+     * affect its siblings, and SIGTERM bounds anything stuck after close. */
+    for (size_t i = 0; i < nreap; i++) {
+        kill(reap[i], SIGTERM);
+        waitpid(reap[i], NULL, 0);
+    }
+    free(reap);
 
     free(pollfds);
     return ret;

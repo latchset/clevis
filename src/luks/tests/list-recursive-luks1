@@ -38,21 +38,25 @@ CFG=$(printf '
 {
   "t": 1,
   "pins": {
-    "sss": {
-      "t": 1,
-      "pins": {
-        "sss": {
-          "t": 1,
-          "pins": {
-            "tang": [
-              {
-                "url": "ADDR","adv": "%s"
+    "sss": [
+      {
+        "t": 1,
+        "pins": {
+          "sss": [
+            {
+              "t": 1,
+              "pins": {
+                "tang": [
+                  {
+                    "url": "ADDR","adv": "%s"
+                  }
+                ]
               }
-            ]
-          }
+            }
+          ]
         }
       }
-    }
+    ]
   }
 }
 ' "${ADV}")

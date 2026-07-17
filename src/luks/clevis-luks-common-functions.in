@@ -293,7 +293,7 @@ clevis_luks_process_sss_pin() {
             sss_tpm2="${sss_tpm2},${cfg}"
             ;;
         sss)
-            sss=$(echo "${cfg}" | tr -d "'")
+            sss="${sss},${cfg}"
             ;;
         esac
     done
@@ -304,7 +304,7 @@ clevis_luks_process_sss_pin() {
     fi
 
     if [ -n "${sss_tang}" ]; then
-        cfg=$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
     fi
 
     if [ -n "${sss_tpm1}" ]; then
@@ -320,7 +320,7 @@ clevis_luks_process_sss_pin() {
     fi
 
     if [ -n "${sss}" ]; then
-        cfg=$(printf '%s,"sss":%s' "${cfg}" "${sss}")
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "sss" "${sss}")
     fi
 
     # Remove possible leading comma.

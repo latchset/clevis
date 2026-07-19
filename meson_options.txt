@@ -5,3 +5,4 @@ option('pkcs11', type: 'feature', value: 'auto', description: 'Enable PKCS11 pin
 option('dracut', type: 'feature', value: 'auto', description: 'Enable dracut support for clevis')
 option('udisks', type: 'feature', value: 'auto', description: 'Enable udisks2 support for clevis')
 option('bashcompdir', type: 'string', value: '', description: 'Directory for bash completion files')
+option('initramfs_tools', type: 'feature', value: 'auto', description: 'Enable initramfs-tools support in clevis')

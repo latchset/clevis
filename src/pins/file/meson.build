@@ -41,6 +41,6 @@ if initramfs_tools.found()
     install_dir: initramfs_hooks_dir,
     configuration: initramfs_data,
   )
-else
+elif get_option('initramfs_tools').auto()
   warning('Will not install initramfs module clevis-pin-file due to missing dependencies!')
 endif

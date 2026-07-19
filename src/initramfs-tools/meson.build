@@ -1,4 +1,4 @@
-initramfs_tools = find_program('update-initramfs', required: false)
+initramfs_tools = find_program('update-initramfs', required: get_option('initramfs_tools'))
 
 if initramfs_tools.found()
   initramfstools_dir = '/usr/share/initramfs-tools'
@@ -11,6 +11,6 @@ if initramfs_tools.found()
   initramfs_data.set('libdir', libdir)
   subdir('hooks')
   subdir('scripts')
-else
+elif get_option('initramfs_tools').auto()
   warning('Will not install initramfs-tools module due to missing dependencies!')
 endif

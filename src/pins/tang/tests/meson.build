@@ -23,15 +23,15 @@ tang_data.set('TANGD_KEYGEN', '')
 tang_data.set('TANGD', '')
 
 if socat.found()
-  tang_data.set('SOCAT', socat.path())
+  tang_data.set('SOCAT', socat.full_path())
 endif
 
 if kgen.found()
-  tang_data.set('TANGD_KEYGEN', kgen.path())
+  tang_data.set('TANGD_KEYGEN', kgen.full_path())
 endif
 
 if tang.found()
-  tang_data.set('TANGD', tang.path())
+  tang_data.set('TANGD', tang.full_path())
 endif
 
 tang_tests_common = configure_file(
@@ -42,10 +42,10 @@ tang_tests_common = configure_file(
 
 env = environment()
 env.prepend('PATH',
-  join_paths(meson.source_root(), 'src'),
-  join_paths(meson.source_root(), 'src', 'pins', 'tang'),
-  join_paths(meson.build_root(), 'src', 'luks', 'tests'),
-  join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
+  join_paths(meson.project_source_root(), 'src'),
+  join_paths(meson.project_source_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.project_build_root(), 'src', 'luks', 'tests'),
+  join_paths(meson.project_build_root(), 'src', 'pins', 'tang', 'tests'),
   separator: ':'
 )
 

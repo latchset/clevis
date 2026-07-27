@@ -18,6 +18,6 @@ if dracut.found()
     )
   install_data('clevis-pkcs11-prehook.sh', install_dir: dracutdir)
 
-else
+elif get_option('dracut').auto()
   warning('Will not install dracut module clevis-pin-pkcs11 due to missing dependencies!')
 endif

@@ -38,6 +38,6 @@ if dracut.found()
   install_data('clevis-cleanup-hook.sh', install_dir: dracutdir)
   install_data('clevis-password-unlocker-hook.sh', install_dir: dracutdir)
   install_data('clevis-online-hook.sh', install_dir: dracutdir)
-else
+elif get_option('dracut').auto()
   warning('Will not install dracut module due to missing dependencies!')
 endif

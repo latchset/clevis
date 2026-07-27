@@ -2,3 +2,7 @@ option('user', type: 'string', value: 'clevis', description: 'Unprivileged user 
 option('group', type: 'string', value: 'clevis', description: 'Unprivileged group for secure clevis operations')
 option('tpm1', type: 'feature', value: 'auto', description: 'Enable TPM 1.2 pin support')
 option('pkcs11', type: 'feature', value: 'auto', description: 'Enable PKCS11 pin support')
+option('dracut', type: 'feature', value: 'auto', description: 'Enable dracut support for clevis')
+option('udisks', type: 'feature', value: 'auto', description: 'Enable udisks2 support for clevis')
+option('bashcompdir', type: 'string', value: '', description: 'Directory for bash completion files')
+option('initramfs_tools', type: 'feature', value: 'auto', description: 'Enable initramfs-tools support in clevis')

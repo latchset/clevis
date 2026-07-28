@@ -233,6 +233,11 @@ main(int argc, char *argv[])
     if (!pins)
         goto egress;
 
+    /* Nothing to wait for: poll() blocks forever on an empty set, and the
+     * loop's own exit check sits past the poll and would never run. */
+    if (nfds == 0)
+        goto egress;
+
     while (true) {
         int r;
 

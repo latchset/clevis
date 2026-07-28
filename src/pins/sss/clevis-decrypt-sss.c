@@ -133,20 +133,13 @@ compact_jwe(FILE *file)
 
 /* Queue a child pid for reaping at teardown.  Deferring the wait keeps the
  * poll loop non-blocking: a child that stalls after closing its stdout can
- * no longer freeze the event loop and starve its healthy siblings. */
+ * no longer freeze the event loop and starve its healthy siblings.  The
+ * array holds one slot per child and each child is queued at most once, so
+ * this cannot fail and needs no allocation of its own. */
 static void
-defer_reap(pid_t **reap, size_t *nreap, pid_t pid)
+defer_reap(pid_t *reap, size_t *nreap, pid_t pid)
 {
-    pid_t *tmp = realloc(*reap, (*nreap + 1) * sizeof(*tmp));
-
-    if (!tmp) {
-        /* Out of memory: reap now rather than leak the child. */
-        waitpid(pid, NULL, 0);
-        return;
-    }
-
-    *reap = tmp;
-    (*reap)[(*nreap)++] = pid;
+    reap[(*nreap)++] = pid;
 }
 
 int
@@ -162,6 +155,7 @@ main(int argc, char *argv[])
     struct pollfd *pollfds = NULL;
     nfds_t nfds = 0;
     size_t pl = 0;
+    size_t npins = 0;
     pid_t *reap = NULL;
     size_t nreap = 0;
 
@@ -190,7 +184,16 @@ main(int argc, char *argv[])
     if (pl == SIZE_MAX)
         goto egress;
 
-    for (size_t i = 0; i < json_array_size(pins); i++) {
+    /* One slot per possible child, allocated before any child exists: the
+     * deferred reap list can then never fail from inside the poll loop. */
+    npins = json_array_size(pins);
+    if (npins > 0) {
+        reap = calloc(npins, sizeof(*reap));
+        if (!reap)
+            goto egress;
+    }
+
+    for (size_t i = 0; i < npins; i++) {
         char *args[] = { "clevis", "decrypt", NULL };
         const json_t *val = json_array_get(pins, i);
         struct pin *pin = NULL;
@@ -231,7 +234,13 @@ main(int argc, char *argv[])
         goto egress;
 
     while (true) {
-        int r = poll(pollfds, nfds, -1);
+        int r;
+
+        /* A caught signal must not abort a decryption whose children are
+         * all healthy; EINTR is the one poll() failure worth retrying. */
+        do {
+            r = poll(pollfds, nfds, -1);
+        } while (r < 0 && errno == EINTR);
         if (r <= 0)
             break;
 
@@ -254,7 +263,7 @@ main(int argc, char *argv[])
                     fclose(pin->file);
                     pin->file = NULL;
                     pollfds[pi].fd = -1;
-                    defer_reap(&reap, &nreap, pin->pid);
+                    defer_reap(reap, &nreap, pin->pid);
                     pin->pid = 0;
                     pin->next->prev = pin->prev;
                     pin->prev->next = pin->next;
@@ -297,7 +306,7 @@ main(int argc, char *argv[])
             /* Remove closed fd from poll set (poll ignores negative fds) */
             pollfds[pi].fd = -1;
 
-            defer_reap(&reap, &nreap, pin->pid);
+            defer_reap(reap, &nreap, pin->pid);
             pin->pid = 0;
 
             if (!pin->pt) {

@@ -314,12 +314,6 @@ main(int argc, char *argv[])
             defer_reap(reap, &nreap, pin->pid);
             pin->pid = 0;
 
-            if (!pin->pt) {
-                pin->next->prev = pin->prev;
-                pin->prev->next = pin->next;
-                free(pin);
-            }
-
             break;
         }
 

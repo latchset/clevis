@@ -35,13 +35,12 @@
  * Interfaces.
  */
 
-#define _GNU_SOURCE
 #include "sss.h"
 
 #include <jose/b64.h>
 #include <jose/jwe.h>
 
-#include <sys/epoll.h>
+#include <poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -131,6 +130,17 @@ compact_jwe(FILE *file)
     return json_incref(jwe);
 }
 
+/* Queue a child pid for reaping at teardown.  Deferring the wait keeps the
+ * poll loop non-blocking: a child that stalls after closing its stdout can
+ * no longer freeze the event loop and starve its healthy siblings.  The
+ * array holds one slot per child and each child is queued at most once, so
+ * this cannot fail and needs no allocation of its own. */
+static void
+defer_reap(pid_t *reap, size_t *nreap, pid_t pid)
+{
+    reap[(*nreap)++] = pid;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -141,18 +151,18 @@ main(int argc, char *argv[])
     int ret = EXIT_FAILURE;
     json_t *p = NULL;
     json_int_t t = 1;
-    int epoll = -1;
+    struct pollfd *pollfds = NULL;
+    nfds_t nfds = 0;
     size_t pl = 0;
+    size_t npins = 0;
+    pid_t *reap = NULL;
+    size_t nreap = 0;
 
     if (argc == 2 && strcmp(argv[1], "--summary") == 0)
         return EXIT_FAILURE;
 
     if (isatty(STDIN_FILENO) || argc != 1)
         goto usage;
-
-    epoll = epoll_create1(EPOLL_CLOEXEC);
-    if (epoll < 0)
-        return ret;
 
     jwe = compact_jwe(stdin);
     if (!jwe)
@@ -173,7 +183,16 @@ main(int argc, char *argv[])
     if (pl == SIZE_MAX)
         goto egress;
 
-    for (size_t i = 0; i < json_array_size(pins); i++) {
+    /* One slot per possible child, allocated before any child exists: the
+     * deferred reap list can then never fail from inside the poll loop. */
+    npins = json_array_size(pins);
+    if (npins > 0) {
+        reap = calloc(npins, sizeof(*reap));
+        if (!reap)
+            goto egress;
+    }
+
+    for (size_t i = 0; i < npins; i++) {
         char *args[] = { "clevis", "decrypt", NULL };
         const json_t *val = json_array_get(pins, i);
         struct pin *pin = NULL;
@@ -195,12 +214,17 @@ main(int argc, char *argv[])
         if (!pin->file)
             goto egress;
 
-        if (epoll_ctl(epoll, EPOLL_CTL_ADD, fileno(pin->file),
-                      &(struct epoll_event) {
-                          .events = EPOLLIN | EPOLLPRI,
-                          .data.fd = fileno(pin->file)
-                      }) < 0)
-            goto egress;
+        {
+            struct pollfd *tmp = realloc(pollfds,
+                                        (nfds + 1) * sizeof(*pollfds));
+            if (!tmp)
+                goto egress;
+            pollfds = tmp;
+            pollfds[nfds].fd = fileno(pin->file);
+            pollfds[nfds].events = POLLIN | POLLPRI;
+            pollfds[nfds].revents = 0;
+            nfds++;
+        }
     }
 
     json_decref(pins);
@@ -208,18 +232,52 @@ main(int argc, char *argv[])
     if (!pins)
         goto egress;
 
-    for (struct epoll_event e; true; ) {
-        int r = 0;
+    /* Nothing to wait for: poll() blocks forever on an empty set, and the
+     * loop's own exit check sits past the poll and would never run. */
+    if (nfds == 0)
+        goto egress;
 
-        r = epoll_wait(epoll, &e, 1, -1);
-        if (r != 1)
+    while (true) {
+        int r;
+
+        /* A caught signal must not abort a decryption whose children are
+         * all healthy; EINTR is the one poll() failure worth retrying. */
+        do {
+            r = poll(pollfds, nfds, -1);
+        } while (r < 0 && errno == EINTR);
+        if (r <= 0)
             break;
 
         for (struct pin *pin = chldrn.next; pin != &chldrn; pin = pin->next) {
-            if (!pin->file || e.data.fd != fileno(pin->file))
+            nfds_t pi;
+
+            if (!pin->file)
                 continue;
 
-            if (e.events & (EPOLLIN | EPOLLPRI)) {
+            for (pi = 0; pi < nfds; pi++) {
+                if (pollfds[pi].fd == fileno(pin->file))
+                    break;
+            }
+            if (pi >= nfds)
+                continue;
+
+            /* If no data available but pipe closed/errored, mark as failed */
+            if (!(pollfds[pi].revents & (POLLIN | POLLPRI))) {
+                if (pollfds[pi].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                    fclose(pin->file);
+                    pin->file = NULL;
+                    pollfds[pi].fd = -1;
+                    defer_reap(reap, &nreap, pin->pid);
+                    pin->pid = 0;
+                    pin->next->prev = pin->prev;
+                    pin->prev->next = pin->next;
+                    free(pin);
+                    break;
+                }
+                continue;
+            }
+
+            {
                 const size_t ptl = pl * 2;
 
                 pin->pt = malloc(ptl);
@@ -249,15 +307,11 @@ main(int argc, char *argv[])
 
             fclose(pin->file);
             pin->file = NULL;
+            /* Remove closed fd from poll set (poll ignores negative fds) */
+            pollfds[pi].fd = -1;
 
-            waitpid(pin->pid, NULL, 0);
+            defer_reap(reap, &nreap, pin->pid);
             pin->pid = 0;
-
-            if (!pin->pt) {
-                pin->next->prev = pin->prev;
-                pin->prev->next = pin->next;
-                free(pin);
-            }
 
             break;
         }
@@ -324,7 +378,16 @@ egress:
         free(pin);
     }
 
-    close(epoll);
+    /* Reap children whose pipes closed during the poll loop.  Blocking is
+     * safe here: the loop is finished, so a stalled child can no longer
+     * affect its siblings, and SIGTERM bounds anything stuck after close. */
+    for (size_t i = 0; i < nreap; i++) {
+        kill(reap[i], SIGTERM);
+        waitpid(reap[i], NULL, 0);
+    }
+    free(reap);
+
+    free(pollfds);
     return ret;
 
 usage:

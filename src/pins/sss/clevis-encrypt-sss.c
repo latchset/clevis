@@ -35,7 +35,6 @@
  * Interfaces.
  */
 
-#define _GNU_SOURCE
 #include "sss.h"
 
 #include <openssl/crypto.h>

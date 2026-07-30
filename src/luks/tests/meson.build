@@ -4,7 +4,7 @@ jq = find_program('jq', required: false)
 # All LUKS tests require cryptsetup. The test directory is included
 # unconditionally by the parent meson.build, so we must handle the case
 # where cryptsetup is not available (e.g., on macOS/Darwin).
-cryptsetup = find_program('cryptsetup', required: false)
+cryptsetup = find_program('cryptsetup', required: host_machine.system() == 'linux')
 if not cryptsetup.found()
   warning('Will not run LUKS tests due to missing cryptsetup')
   subdir_done()

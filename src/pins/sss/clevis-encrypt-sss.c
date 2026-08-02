@@ -109,7 +109,7 @@ encrypt_frag(json_t *sss, const char *pin, const json_t *cfg, int assume_yes)
     if (!pnt)
         return NULL;
 
-    pipe = call(args, pnt, pntl, &pid);
+    pipe = call(args, pnt, pntl, &pid, false);
     OPENSSL_cleanse(pnt, pntl);
     free(pnt);
     if (!pipe)

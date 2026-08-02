@@ -191,7 +191,7 @@ main(int argc, char *argv[])
         chldrn.next = pin;
 
         pin->file = call(args, json_string_value(val),
-                         json_string_length(val), &pin->pid);
+                         json_string_length(val), &pin->pid, true);
         if (!pin->file)
             goto egress;
 
@@ -314,7 +314,13 @@ egress:
             fclose(pin->file);
 
         if (pin->pid > 0) {
-            kill(pin->pid, SIGTERM);
+            /*
+             * Kill entire process group (negative PID). This ensures
+             * grandchildren (e.g., curl spawned by clevis-decrypt-tang)
+             * are terminated. Fall back to direct kill if group doesn't exist.
+             */
+            if (kill(-pin->pid, SIGTERM) < 0)
+                (void) kill(pin->pid, SIGTERM);
             waitpid(pin->pid, NULL, 0);
         }
 

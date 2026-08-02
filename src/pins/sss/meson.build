@@ -21,6 +21,7 @@ if jansson.found() and libcrypto.found()
   env.prepend('PATH',
     join_paths(meson.source_root(), 'src'),
     join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+    join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
     meson.current_build_dir(),
     '/usr/libexec',
     libexecdir,
@@ -33,6 +34,8 @@ if jansson.found() and libcrypto.found()
 
   test('pin-sss', find_program(join_paths(src, 'pin-sss')), env: env)
   test('pin-null', find_program(join_paths(src, 'pin-null')), env: env)
+
+  subdir('tests')
 else
   warning('Will not install sss pin due to missing dependencies!')
 endif

@@ -1,0 +1,177 @@
+#!/bin/bash -e
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2025 Red Hat, Inc.
+# Author: Sergio Correia <scorreia@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Test to verify that clevis-decrypt-sss properly kills all child processes
+# and their descendants (grandchildren) after successful decryption.
+#
+# This test addresses issue #460:
+# https://github.com/latchset/clevis/issues/460
+#
+# The issue: When using SSS with multiple pins (e.g., tang, fido2) and t < n,
+# after successful decryption with t pins, the remaining child processes
+# (and their grandchildren like curl or fido2-assert) were not being killed.
+#
+# The fix uses process groups: each child becomes a process group leader
+# via setpgid(0,0), and cleanup uses kill(-pid, SIGTERM) to kill the
+# entire process group.
+#
+# Test strategy:
+# 1. Start a real tang server that responds quickly
+# 2. Start a "hanging" server that accepts connections but never responds
+# 3. Encrypt with SSS t=1, two tang pins (real + hanging)
+# 4. Decrypt - the real tang succeeds, the hanging one's child should be killed
+# 5. Verify no orphaned curl processes remain after decryption
+
+. tang-common-test-functions
+
+TMP="$(mktemp -d)"
+
+# Force exit - kills background jobs first, then exits
+force_exit() {
+    local code="$1"
+    trap - EXIT  # Disable trap to prevent recursion
+
+    # Kill all child processes to prevent bash from waiting
+    # Use both pkill and direct kill to be thorough
+    pkill -9 -P $$ 2>/dev/null || true
+    jobs -p 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+
+    if [ "${code}" -eq 0 ]; then
+        # Success - normal exit after killing children
+        exit 0
+    else
+        # Failure - kill entire process group for immediate exit
+        kill -9 -$$ 2>/dev/null || kill -9 $$ 2>/dev/null || exit "${code}"
+    fi
+}
+
+# No cleanup trap - we'll force kill on exit
+
+# Start a real tang server
+tang_run "${TMP}" sig exc
+port_real=$(tang_get_port "${TMP}")
+url_real="http://localhost:${port_real}"
+
+# Get the advertisement from the real tang server
+adv="${TMP}/adv.jws"
+tang_get_adv "${port_real}" "${adv}"
+
+# Start a "hanging" server - accepts TCP connections but never sends HTTP response.
+# This simulates a tang server that is unreachable or very slow.
+# We use socat to listen and spawn a process that just sleeps forever.
+# Use disown to prevent bash from waiting for this background job on exit.
+"${SOCAT}" TCP4-LISTEN:0,fork EXEC:"sleep 3600" &
+hang_pid=$!
+disown "${hang_pid}"
+echo "${hang_pid}" > "${TMP}/hang.pid"
+
+# Wait for the hanging server to start listening
+sleep 0.5
+port_hang=$(lsof -nP -a -p "${hang_pid}" -iTCP -sTCP:LISTEN -Fn 2>/dev/null \
+            | grep '^n.*:' | head -1 | sed 's/.*://')
+
+if [ -z "${port_hang}" ]; then
+    echo "Failed to start hanging server" >&2
+    force_exit 1
+fi
+
+url_hang="http://localhost:${port_hang}"
+
+echo "Real tang server on port ${port_real}"
+echo "Hanging server on port ${port_hang}"
+
+# Encrypt with SSS: t=1, two tang pins
+# Both pins use the same advertisement (from the real server) so encryption works.
+# During decryption, one will contact the real server (succeeds) and one will
+# contact the hanging server (curl hangs waiting for response).
+cfg=$(cat <<EOF
+{
+    "t": 1,
+    "pins": {
+        "tang": [
+            {"url": "${url_real}", "adv": "${adv}"},
+            {"url": "${url_hang}", "adv": "${adv}"}
+        ]
+    }
+}
+EOF
+)
+
+echo "Encrypting test data..."
+enc="$(echo -n "test-cleanup-data" | clevis encrypt sss "${cfg}" -y)"
+echo "Encryption successful."
+
+# Record curl processes before decryption
+curl_before=$(pgrep -x curl 2>/dev/null | wc -l || echo 0)
+
+echo "Starting decryption... ($(date +%T))"
+
+# Decrypt with a timeout. The real tang should respond quickly, so decryption
+# should complete in a few seconds. The hanging server's child process
+# (and its curl grandchild) should be killed after decryption succeeds.
+#
+# Without the fix: curl connecting to the hanging server would remain running
+# after clevis-decrypt-sss exits (orphaned to init).
+#
+# With the fix: the entire process group is killed, including curl.
+
+# Decrypt the data. Without the fix, decryption succeeds but leaves orphaned
+# grandchild processes (curl) which we detect below.
+dec=""
+if ! dec="$(echo -n "${enc}" | clevis decrypt)"; then
+    echo "FAIL: Decryption failed" >&2
+    force_exit 1
+fi
+
+if [ "${dec}" != "test-cleanup-data" ]; then
+    echo "FAIL: Decrypted data mismatch: got '${dec}'" >&2
+    force_exit 1
+fi
+
+echo "Decryption successful: '${dec}' ($(date +%T))"
+
+# Give a moment for process cleanup
+sleep 0.5
+
+# Check for orphaned curl processes connecting to the hanging server.
+# Use lsof to find any process with a connection to port_hang.
+# -n: no hostname resolution (faster)
+# -P: no port name resolution (faster)
+# -t: terse output (just PIDs)
+orphaned_connections=$(lsof -nP -i "TCP:${port_hang}" -t 2>/dev/null | grep -v "^${hang_pid}$" || true)
+
+if [ -n "${orphaned_connections}" ]; then
+    echo "FAIL: Found orphaned processes connecting to hanging server:" >&2
+    echo "${orphaned_connections}" >&2
+    force_exit 1
+fi
+
+# Also check that we don't have more curl processes than before
+# (accounting for possible legitimate curl usage)
+curl_after=$(pgrep -x curl 2>/dev/null | wc -l || echo 0)
+
+# We expect curl_after <= curl_before (the curl that was connecting to hang
+# server should have been killed)
+if [ "${curl_after}" -gt "${curl_before}" ]; then
+    echo "WARNING: More curl processes after decryption (${curl_after}) than before (${curl_before})" >&2
+    echo "This might indicate orphaned processes, but checking connections is more reliable." >&2
+fi
+
+echo "SUCCESS: No orphaned processes detected after SSS decryption cleanup"
+force_exit 0

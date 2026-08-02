@@ -340,7 +340,8 @@ enum {
 };
 
 FILE *
-call(char *const argv[], const void *buf, size_t len, pid_t *pid)
+call(char *const argv[], const void *buf, size_t len, pid_t *pid,
+     bool use_pgrp)
 {
     int dump[2] = { -1, -1 };
     int load[2] = { -1, -1 };
@@ -360,12 +361,28 @@ call(char *const argv[], const void *buf, size_t len, pid_t *pid)
         goto error;
 
     if (*pid == 0) {
+        /*
+         * Create a new process group so we can kill all descendants.
+         * Only do this when use_pgrp is set (i.e., for decryption where
+         * we may need to kill leftover children). For encryption, this
+         * can cause issues with terminal job control in child scripts.
+         */
+        if (use_pgrp && setpgid(0, 0) < 0)
+            exit(EXIT_FAILURE);
+
         if (dup2(dump[PIPE_RD], STDIN_FILENO) < 0 ||
             dup2(load[PIPE_WR], STDOUT_FILENO) < 0)
             exit(EXIT_FAILURE);
 
         execvp(argv[0], argv);
         exit(EXIT_FAILURE);
+    }
+
+    if (use_pgrp) {
+        /* Also set from parent to eliminate race with child's setpgid().
+         * This may fail if the child has already called setpgid(0,0) or
+         * exec'd, which is fine - the important thing is one succeeds. */
+        (void) setpgid(*pid, *pid);
     }
 
     for (const uint8_t *tmp = buf; len > 0; tmp += wr, len -= wr) {
@@ -390,7 +407,18 @@ error:
     close(load[PIPE_WR]);
 
     if (*pid > 0) {
-        kill(*pid, SIGTERM);
+        if (use_pgrp) {
+            /*
+             * Kill entire process group (negative PID). This ensures
+             * grandchildren (e.g., curl spawned by clevis-decrypt-tang)
+             * are terminated. Fall back to direct kill if group doesn't
+             * exist.
+             */
+            if (kill(-*pid, SIGTERM) < 0)
+                (void) kill(*pid, SIGTERM);
+        } else {
+            (void) kill(*pid, SIGTERM);
+        }
         waitpid(*pid, NULL, 0);
         *pid = 0;
     }

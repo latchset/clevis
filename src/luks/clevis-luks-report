@@ -97,9 +97,13 @@ report_sss() {
     [ -z "${content}" ] && return 1
 
     local jwe
-    for jwe in $(jose fmt --json="${content}" --get jwe --foreach=-); do
+    local jwe_list
+    if ! jwe_list="$(jose fmt --json="${content}" --get jwe --foreach=-);"; then
+        return 1
+    fi
+    for jwe in $jwe_list; do
         jwe="$(printf '%s' "${jwe}" | sed -e 's/"//g')"
-        report_decode "${jwe}"
+        report_decode "${jwe}" || return 1
     done
 }
 
@@ -129,10 +133,10 @@ report_decode() {
 
     case "${pin}" in
     tang)
-        report_tang "${content}"
+        report_tang "${content}" || return 1
         ;;
     sss)
-        report_sss "${content}"
+        report_sss "${content}" || return 1
         ;;
     esac
 }

@@ -83,7 +83,7 @@ check() {
 }
 
 depends() {
-    echo clevis network
+    echo clevis
     return 0
 }
 

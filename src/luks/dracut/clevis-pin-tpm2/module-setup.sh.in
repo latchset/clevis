@@ -21,12 +21,12 @@
 check() {
     require_binaries clevis-decrypt-tpm2 || return 1
 
-    if command -v clevis-pin-tpm2 >/dev/null;
-    then
+    if command -v clevis-pin-tpm2 >/dev/null; then
         require_binaries clevis-pin-tpm2 || return 1
     else
         require_binaries tpm2_createprimary tpm2_flushcontext \
-                           tpm2_load tpm2_unseal tpm2_getcap || return 1
+            tpm2_load tpm2_startauthsession tpm2_policypcr \
+            tpm2_unseal tpm2_getcap || return 1
         require_any_binary tpm2_pcrread tpm2_pcrlist || return 1
     fi
     return 0
@@ -39,7 +39,8 @@ depends() {
 
 install_tpm2_tools() {
     inst_multiple tpm2_createprimary tpm2_flushcontext \
-        tpm2_load tpm2_unseal tpm2_getcap
+        tpm2_load tpm2_startauthsession tpm2_policypcr \
+        tpm2_unseal tpm2_getcap
     inst_multiple -o tpm2_pcrread tpm2_pcrlist
 }
 

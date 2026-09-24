@@ -1,0 +1,60 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
+adv="${TMP}/adv.jws"
+tang_get_adv "${port}" "${adv}"
+url="http://localhost:${port}"
+
+# Encrypt and decrypt must work regardless of tang_pub support.
+cfg="$(printf '{"url":"%s","thp":"%s"}' "$url" "$thp")"
+enc="$(echo -n "hi" | clevis encrypt tang "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "hi"
+
+# Verify consistent behavior: if adv is absent from the JWE header,
+# the server must actually return tang_pub in recovery responses.
+hdr="$(echo -n "$enc" | cut -d. -f1)"
+jhd="$(jose b64 dec -i- <<< "$hdr")"
+if ! jose fmt -j- -Og clevis -g tang -g adv -Oo- <<< "$jhd" >/dev/null 2>&1; then
+    ver_resp="$(curl -sf "http://localhost:${port}/version")"
+    [ "$(jose fmt -j- -Og features -Og tang_pub -o- <<< "$ver_resp" \
+         2>/dev/null)" = "true" ]
+fi
+
+# Server down must cause decrypt to fail.
+tang_stop "${TMP}"
+! echo "$enc" | clevis decrypt

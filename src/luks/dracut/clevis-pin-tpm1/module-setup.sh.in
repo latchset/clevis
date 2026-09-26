@@ -83,7 +83,7 @@ check() {
 }
 
 depends() {
-    echo clevis network
+    echo clevis
     return 0
 }
 
@@ -109,16 +109,13 @@ install() {
 
     inst_rules 60-tpm-udev.rules
 
-    if ! [[ $hostonly ]] || ! dracut_module_included "systemd"; then
-        # /etc/hosts is installed only in host-only mode with systemd, so
-        # we need to create our own in order to get tpm tools working.
-        # The localhost entry is required by tpm tools.
-        if [ ! -f "$initdir/etc/hosts" ]; then
-            echo "127.0.0.1 localhost" >> "$initdir/etc/hosts"
-            echo "::1 localhost ip6-localhost ip6-loopback" >> "$initdir/etc/hosts"
-            echo "ff02::1 ip6-allnodes" >> "$initdir/etc/hosts"
-            echo "ff02::2 ip6-allrouters" >> "$initdir/etc/hosts"
-        fi
+    # The tpm tools need localhost; the systemd module copies the host's
+    # /etc/hosts only in host-only mode and only if it exists
+    if [ ! -f "$initdir/etc/hosts" ]; then
+        echo "127.0.0.1 localhost" >> "$initdir/etc/hosts"
+        echo "::1 localhost ip6-localhost ip6-loopback" >> "$initdir/etc/hosts"
+        echo "ff02::1 ip6-allnodes" >> "$initdir/etc/hosts"
+        echo "ff02::2 ip6-allrouters" >> "$initdir/etc/hosts"
     fi
 
     if [[ $hostonly ]]; then

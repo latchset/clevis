@@ -375,3 +375,30 @@ zfs_recover_prompt_key() {
 	root="$(zfs_get_prompt_encryptionroot "${1}")" || return 1
 	zfs_recover_key "${root}"
 }
+
+# Prints the used pins of all labels, space-separated and sorted, needs
+# clevis-luks-common-functions
+zfs_read_used_pins() {
+	local dataset="${1}"
+	local label jwe pins=
+
+	for label in $(zfs_get_labels "${dataset}"); do
+		jwe="$(zfs_get_clevis_label "${dataset}" "${label}")" || continue
+		[[ -n "${jwe}" ]] || continue
+		pins=$(printf "%s\n%s" "${pins}" "$(clevis_luks_decode_used_pins "${jwe}")")
+	done
+
+	echo -n "${pins}" | tr ' ' '\n' | sed -e '/^$/d' | sort -u | tr '\n' ' ' | sed -e 's/ $//'
+}
+
+# Succeeds when a bound dataset uses the pin, needs clevis-luks-common-functions
+zfs_have_bound_pin() {
+	local pin="${1}"
+	local dataset pins
+
+	while IFS=$'\t' read -r dataset _; do
+		pins="$(zfs_read_used_pins "${dataset}")"
+		[[ " ${pins} " == *" ${pin} "* ]] && return 0
+	done < <(zfs get -H -o name,value -s local "${zfs_labels_prop}" 2>/dev/null)
+	return 1
+}

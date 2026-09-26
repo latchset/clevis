@@ -32,6 +32,8 @@ have_tang_bindings() {
             return 0
         fi
     done
+    (. clevis-zfs-common-functions 2>/dev/null && zfs_have_bound_pin tang) \
+        && return 0
     return 1
 }
 

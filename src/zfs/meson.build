@@ -5,3 +5,4 @@ bins += join_paths(meson.current_source_dir(), 'clevis-zfs-unbind')
 bins += join_paths(meson.current_source_dir(), 'clevis-zfs-unlock')
 
 subdir('dracut')
+subdir('initramfs-tools')

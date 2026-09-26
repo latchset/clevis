@@ -115,8 +115,6 @@ clevisloop() {
     local sleep_time
     local CRYPTTAB_SOURCE
     local OLD_CRYPTTAB_SOURCE=""
-    local netcfg_attempted=0
-    local tpm1cfg_attempted=0
     local pins
     local PASSFIFO
 
@@ -150,12 +148,10 @@ EOM
         [ "$CRYPTTAB_SOURCE" = "$OLD_CRYPTTAB_SOURCE" ] && continue
         OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
 
-        if [[ " $pins " == *" tang "* ]] && [ $netcfg_attempted -eq 0 ]; then
-            netcfg_attempted=1
+        if [[ " $pins " == *" tang "* ]]; then
             do_configure_networking
         fi
-        if [[ " $pins " == *" tpm1 "* ]] && [ $tpm1cfg_attempted -eq 0 ]; then
-            tpm1cfg_attempted=1
+        if [[ " $pins " == *" tpm1 "* ]]; then
             do_configure_tpm1
         fi
 

@@ -97,7 +97,21 @@ wait_for_device() {
     return $ret
 }
 
-do_configure_networking() {
+# Subshell, so that the lock is released on return
+do_configure_networking() (
+    local conf lock_fd
+
+    # Once per boot, shared by all clevis unlockers
+    exec {lock_fd}>/var/lock/clevis-network.lock
+    flock "${lock_fd}"
+    [ -f /tmp/clevis-network-attempted ] && return 0
+    : > /tmp/clevis-network-attempted
+
+    # Configured already, checked the same way as configure_networking does
+    for conf in /run/net-*.conf /run/net6-*.conf; do
+        [ -e "${conf}" ] && return 0
+    done
+
     # Make sure networking is set up: if booting via nfs, it already is
     if [ "$boot" != nfs ] && wait_for_device; then
         clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
@@ -105,7 +119,8 @@ do_configure_networking() {
             echo ""
             echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
         fi
-        configure_networking
+        # Background processes must not inherit the lock
+        (exec {lock_fd}>&-; configure_networking)
 
         # Add DNS servers from configure_networking to /etc/resolv.conf
         if [ ! -e /etc/resolv.conf ]; then
@@ -124,12 +139,20 @@ do_configure_networking() {
             done
         fi
     fi
-}
+)
 
-do_configure_tpm1() {
+# Subshell, so that the lock is released on return
+do_configure_tpm1() (
     local tcsd_output=
+    local lock_fd
 
     [ -x @bindir@/clevis-decrypt-tpm1 ] && [ -f @libexecdir@/clevis-luks-tpm1-functions ] || return
+
+    # Once per boot, shared by all clevis unlockers
+    exec {lock_fd}>/var/lock/clevis-tcsd.lock
+    flock "${lock_fd}"
+    [ -f /tmp/clevis-tcsd-attempted ] && return
+    : > /tmp/clevis-tcsd-attempted
 
     . @libexecdir@/clevis-luks-tpm1-functions
 
@@ -141,7 +164,8 @@ do_configure_tpm1() {
     TCSD_NO_PRIVILEGE_DROP=0
     [ -f /conf/conf.d/clevis ] && . /conf/conf.d/clevis
 
-    if ! tcsd_output=$(start_tcsd 2>&1); then
+    # The started TCSD must not inherit the lock
+    if ! tcsd_output=$(exec {lock_fd}>&-; start_tcsd 2>&1); then
         if [ -n "$tcsd_output" ]; then
             log_failure_msg "failed to start TCSD: $tcsd_output"
         else
@@ -150,4 +174,4 @@ do_configure_tpm1() {
     fi
 
     log_end_msg
-}
+)

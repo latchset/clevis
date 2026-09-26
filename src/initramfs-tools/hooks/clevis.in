@@ -164,9 +164,11 @@ copy_exec @bindir@/clevis || die 1 "@bindir@/clevis not found"
 curl_bin=$(find_binary "curl")
 awk_bin=$(find_binary "awk")
 bash_bin=$(find_binary "bash")
+flock_bin=$(find_binary "flock")
 copy_exec "${curl_bin}" || die 2 "Unable to copy ${curl_bin} to initrd image"
 copy_exec "${awk_bin}" || die 2 "Unable to copy ${awk_bin} to initrd image"
 copy_exec "${bash_bin}" || die 2 "Unable to copy ${bash_bin} to initrd image"
+copy_exec "${flock_bin}" || die 2 "Unable to copy ${flock_bin} to initrd image"
 
 # Copy latest versions of shared objects needed for DNS resolution
 for so in $(ldconfig -p | sed -nr 's/^\s*libnss_files\.so\.[0-9]+\s.*=>\s*//p'); do

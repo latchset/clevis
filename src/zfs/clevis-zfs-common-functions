@@ -354,3 +354,24 @@ zfs_recover_key() {
 	done
 	return 1
 }
+
+# Prints the dataset's encryption root if it is locked, bound and prompting
+zfs_get_prompt_encryptionroot() {
+	local dataset="${1}"
+	local root
+
+	root="$(zfs get -H -o value encryptionroot "${dataset}" 2>/dev/null)" || return 1
+	[[ -n "${root}" && "${root}" != "-" ]] || return 1
+	[[ "$(zfs get -H -o value keylocation "${root}")" == "prompt" ]] || return 1
+	[[ "$(zfs get -H -o value keystatus "${root}")" == "unavailable" ]] || return 1
+	zfs_is_bound "${root}" || return 1
+	echo "${root}"
+}
+
+# Prints the key for a password prompt of the dataset
+zfs_recover_prompt_key() {
+	local root
+
+	root="$(zfs_get_prompt_encryptionroot "${1}")" || return 1
+	zfs_recover_key "${root}"
+}

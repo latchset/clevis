@@ -5,7 +5,7 @@
 ## Welcome to Clevis!
 Clevis is a pluggable framework for automated decryption. It can be used to
 provide automated decryption of data or even automated unlocking of LUKS
-volumes.
+volumes and ZFS encryption roots.
 
 ### Encrypting Data
 
@@ -673,6 +673,82 @@ luks list command. For example:
 
 ```bash
 $ sudo clevis luks list -d /dev/sda1
+```
+
+### Binding ZFS Encryption Roots
+
+Clevis can be used to bind a ZFS native encryption root using a pin so that
+its key can be loaded automatically.
+
+ZFS has a single passphrase or key for each encryption root, so Clevis encrypts
+the existing one and stores the output JWE in user properties of the
+encryption root. After changing the key with `zfs change-key`, bind the
+encryption root again with `-f`.
+
+Here is an example where we bind the `rpool` encryption root using the Tang
+pin:
+
+```bash
+$ sudo clevis zfs bind -d rpool tang '{"url": "http://tang.local"}'
+Enter existing ZFS password for rpool:
+```
+
+Each binding is stored under a label, `default` unless another one is given
+with `-l`, so several bindings can unlock the same encryption root.
+
+The unlockers load only keys of encryption roots with `keylocation=prompt`.
+They answer the regular password prompt of OpenZFS, so the password can still
+be typed in. Network based unlocking works the same way as for LUKS volumes.
+
+#### ZFS Unlocker: Dracut
+
+With the OpenZFS dracut module installed, rebuild your initramfs after
+installing Clevis:
+
+```bash
+$ sudo dracut -f
+```
+
+Upon reboot, Clevis unlocks the encryption root of the root file system
+automatically, while the password prompt is shown.
+
+#### ZFS Unlocker: Initramfs-tools
+
+With OpenZFS 2.2 or newer, Clevis installs the key loading hook
+`/etc/zfs/initramfs-tools-load-key.d/clevis`, which the OpenZFS initramfs
+script runs before prompting for the password. Rebuild your initramfs:
+
+```bash
+sudo update-initramfs -u -k 'all'
+```
+
+#### ZFS Unlocker: Systemd
+
+The encryption roots loaded by the units of `zfs-mount-generator` ask for the
+password through systemd. Clevis answers these prompts when the following unit
+is enabled:
+
+```bash
+$ sudo systemctl enable clevis-luks-askpass.path
+```
+
+#### ZFS Unlocker: Clevis command
+
+A ZFS encryption root bound to a Clevis policy can also be unlocked by using
+the clevis zfs unlock command:
+
+```bash
+$ sudo clevis zfs unlock -d tank
+```
+
+#### Unbinding and listing ZFS encryption roots
+
+The bindings can be removed using the clevis zfs unbind command, and listed
+using the clevis zfs list command. For example:
+
+```bash
+$ sudo clevis zfs unbind -d rpool
+$ sudo clevis zfs list
 ```
 
 ## Installing Clevis

@@ -1,0 +1,47 @@
+CLEVIS-ZFS-UNBIND(1)
+====================
+:doctype: manpage
+
+
+== NAME
+
+clevis-zfs-unbind - Unbinds a label from a ZFS encryption root
+
+== SYNOPSIS
+
+*clevis zfs unbind* [-f] [-k KEY] -d DATASET [-a | -l LABEL]
+
+== OVERVIEW
+
+The *clevis zfs unbind* command removes a Clevis binding from a ZFS
+encryption root. Without *-a* and *-l*, the binding with the _default_ label is
+removed. For example:
+
+    $ clevis zfs unbind -d rpool
+
+The existing passphrase or key is checked first, unless *-f* is given.
+
+== OPTIONS
+
+* *-d* _DATASET_ :
+  The bound ZFS encryption root
+
+* *-l* _LABEL_ :
+  The label of the binding to remove
+
+* *-a* :
+  Remove all bindings, cannot be combined with *-l*
+
+* *-f* :
+  Do not ask for the existing passphrase or key
+
+* *-k* _KEY_ :
+  Non-interactively read the ZFS passphrase or key from KEY file
+
+* *-k* - :
+  Non-interactively read the ZFS passphrase or key from standard input
+
+== SEE ALSO
+
+link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)],
+link:clevis-zfs-list.1.adoc[*clevis-zfs-list*(1)]

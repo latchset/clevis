@@ -1,0 +1,31 @@
+CLEVIS-ZFS-LIST(1)
+==================
+:doctype: manpage
+
+
+== NAME
+
+clevis-zfs-list - Lists ZFS encryption roots bound with Clevis
+
+== SYNOPSIS
+
+*clevis zfs list* [-d DATASET]
+
+== OVERVIEW
+
+The *clevis zfs list* command lists the ZFS encryption roots bound with
+Clevis together with the labels of their bindings. For example:
+
+    $ clevis zfs list
+    rpool	default tang2
+    tank	default
+
+== OPTIONS
+
+* *-d* _DATASET_ :
+  List only the labels of the given encryption root
+
+== SEE ALSO
+
+link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)],
+link:clevis-zfs-unbind.1.adoc[*clevis-zfs-unbind*(1)]

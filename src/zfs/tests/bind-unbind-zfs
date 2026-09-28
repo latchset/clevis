@@ -1,0 +1,75 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. zfs-common-test-functions
+
+zfs_check_requirements
+
+on_exit() {
+    zfs_destroy_pool "${POOL}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+POOL="$(zfs_new_pool "${TMP}")"
+DS="${POOL}/enc"
+P="${ZFS_TEST_PASSPHRASE}"
+zfs_new_encryptionroot "${DS}"
+
+clevis zfs bind -k - -d "${DS}" null '{}' <<< "${P}" \
+    || error "${TEST}: Binding the default label failed"
+[ "$(clevis zfs list -d "${DS}")" = "default" ] \
+    || error "${TEST}: The default label is not listed"
+
+if clevis zfs bind -k - -d "${DS}" null '{}' <<< "${P}"; then
+    error "${TEST}: Rebinding without -f succeeded"
+fi
+clevis zfs bind -f -k - -d "${DS}" null '{}' <<< "${P}" \
+    || error "${TEST}: Rebinding with -f failed"
+
+clevis zfs bind -k - -d "${DS}" -l my.label-2 null '{}' <<< "${P}" \
+    || error "${TEST}: Binding a label with dot and hyphen failed"
+if clevis zfs bind -k - -d "${DS}" -l bad:label null '{}' <<< "${P}"; then
+    error "${TEST}: Binding an invalid label succeeded"
+fi
+if clevis zfs bind -k - -d "${DS}" -l other null '{}' <<< "wrong-passphrase"; then
+    error "${TEST}: Binding with a wrong passphrase succeeded"
+fi
+if clevis zfs bind -k - -d "${POOL}" null '{}' <<< "${P}"; then
+    error "${TEST}: Binding a dataset that is not an encryption root succeeded"
+fi
+[ "$(clevis zfs list -d "${DS}")" = "default my.label-2" ] \
+    || error "${TEST}: Unexpected labels listed"
+
+if clevis zfs unbind -k - -d "${DS}" -a -l default <<< "${P}"; then
+    error "${TEST}: Unbinding with both -a and -l succeeded"
+fi
+clevis zfs unbind -k - -d "${DS}" <<< "${P}" \
+    || error "${TEST}: Unbinding the default label failed"
+[ "$(clevis zfs list -d "${DS}")" = "my.label-2" ] \
+    || error "${TEST}: The default label was not unbound"
+
+clevis zfs unbind -k - -d "${DS}" -a <<< "${P}" \
+    || error "${TEST}: Unbinding all labels failed"
+[ -z "$(zfs_clevis_properties "${DS}")" ] \
+    || error "${TEST}: Clevis properties are left after unbinding"

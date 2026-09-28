@@ -12,3 +12,7 @@ mans += join_paths(meson.current_source_dir(), 'clevis-zfs-unlockers.7')
 
 subdir('dracut')
 subdir('initramfs-tools')
+
+if not meson.is_cross_build()
+  subdir('tests')
+endif

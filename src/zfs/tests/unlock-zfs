@@ -1,0 +1,52 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. zfs-common-test-functions
+
+zfs_check_requirements
+
+on_exit() {
+    zfs_destroy_pool "${POOL}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+POOL="$(zfs_new_pool "${TMP}")"
+DS="${POOL}/enc"
+P="${ZFS_TEST_PASSPHRASE}"
+zfs_new_encryptionroot "${DS}"
+
+clevis zfs bind -k - -d "${DS}" null '{}' <<< "${P}" \
+    || error "${TEST}: Binding failed"
+zfs unload-key "${DS}" || error "${TEST}: Unable to unload the key"
+
+clevis zfs unlock -t -d "${DS}" || error "${TEST}: Testing the binding failed"
+[ "$(zfs_keystatus "${DS}")" = "unavailable" ] \
+    || error "${TEST}: Testing the binding loaded the key"
+if clevis zfs unlock -l missing -d "${DS}"; then
+    error "${TEST}: Unlocking with a missing label succeeded"
+fi
+
+clevis zfs unlock -d "${DS}" || error "${TEST}: Unlocking failed"
+[ "$(zfs_keystatus "${DS}")" = "available" ] \
+    || error "${TEST}: Unlocking did not load the key"

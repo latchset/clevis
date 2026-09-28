@@ -62,7 +62,8 @@ clevis_all_netbootable_devices() {
 }
 
 get_specified_device() {
-    local dev="$(echo $IP | awk -F: '{ print $6 }')"
+    local dev
+    dev="$(echo $IP | awk -F: '{ print $6 }')"
     [ -z "$dev" ] || echo $dev
 }
 
@@ -126,6 +127,7 @@ do_configure_networking() (
         if [ ! -e /etc/resolv.conf ]; then
             touch /etc/resolv.conf
             for intf in /run/net-*.conf; do
+                # shellcheck disable=SC1090 # The net-*.conf files come from configure_networking
                 . "${intf}"
                 if [ ! -z "${IPV4DNS0}" ] && [ "${IPV4DNS0}" != "0.0.0.0" ]; then
                     echo nameserver "${IPV4DNS0}" >> /etc/resolv.conf

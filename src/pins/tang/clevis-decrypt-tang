@@ -50,6 +50,9 @@ if ! kid="$(jose fmt -j- -Og kid -Su- <<< "$jhd")"; then
     exit 1
 fi
 
+kem_ct="$(jose fmt -j- -Og clevis -g tang -g kem_ct -Su- <<< "$jhd" 2>/dev/null)" || true
+kem_kid="$(jose fmt -j- -Og kem_kid -Su- <<< "$jhd" 2>/dev/null)" || true
+
 CLEVIS_DEFAULT_THP_ALG=S256       # SHA-256.
 CLEVIS_DEFAULT_THP_LEN=43         # Length of SHA-256 thumbprint.
 CLEVIS_ALTERNATIVE_THP_ALGS=S1    # SHA-1.
@@ -105,6 +108,7 @@ if ! crv="$(jose fmt -j- -Og crv -Su- <<< "$clt")"; then
     exit 1
 fi
 
+### ECMR recovery (common to classical and hybrid paths)
 if ! eph="$(jose jwk gen -i "{\"alg\":\"ECMR\",\"crv\":\"$crv\"}")"; then
     echo "Error generating ephemeral key!" >&2
     exit 1
@@ -148,5 +152,44 @@ fi
 tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv")"
 rep="$(jose jwk pub -i- <<< "$rep")"
 jwk="$(jose jwk exc -l- -r- <<< "$rep$tmp")"
+
+if [ -n "$kem_ct" ] && [ -n "$kem_kid" ]; then
+    ### Hybrid ECC+KEM recovery via jose CLI
+    ec_x="$(jose fmt -j- -Og x -Su- <<< "$jwk")"
+
+    if ! kem_resp="$(curl -sfg "${curl_opts[@]}" -X POST \
+            -H "Content-Type: application/json" \
+            --data-binary "{\"ct\":\"$kem_ct\"}" \
+            "$url/rec-kem/$kem_kid")"; then
+        echo "Error communicating with server $url for KEM recovery" >&2
+        exit 1
+    fi
+
+    if ! kem_k="$(jose fmt -j- -Og k -Su- <<< "$kem_resp")"; then
+        echo "KEM response missing shared secret!" >&2
+        exit 1
+    fi
+
+    ec_hex="$(jose b64 dec -i- <<< "$ec_x" | xxd -p -c 9999)"
+    kem_hex="$(jose b64 dec -i- <<< "$kem_k" | xxd -p -c 9999)"
+    ec_byte_len=$(( ${#ec_hex} / 2 ))
+    kem_byte_len=$(( ${#kem_hex} / 2 ))
+    ikm_hex="$(printf '%08x' "$ec_byte_len")${ec_hex}$(printf '%08x' "$kem_byte_len")${kem_hex}"
+    info_hex="$(printf 'NBDE-HYBRID-v1\x00\x01ECMR+ML-KEM-768%s%s' "$kid" "$kem_kid" \
+                | xxd -p -c 9999)"
+    derived_hex="$(openssl kdf -keylen 32 -kdfopt digest:SHA256 \
+        -kdfopt mode:EXTRACT_AND_EXPAND \
+        -kdfopt "hexkey:${ikm_hex}" -kdfopt "hexinfo:${info_hex}" HKDF \
+        | tr -d ': \n' | tr 'A-F' 'a-f')"
+    derived_b64="$(echo -n "$derived_hex" | xxd -r -p | jose b64 enc -I-)"
+    hybrid_cek="{\"alg\":\"A256GCM\",\"k\":\"$derived_b64\",\"kty\":\"oct\"}"
+
+    unset ec_x kem_k ec_hex kem_hex ikm_hex info_hex derived_hex derived_b64
+
+    (echo -n "$hybrid_cek$hdr."; /bin/cat) | jose jwe dec -k- -i-
+    exit $?
+fi
+
+### Classical ECDH-ES recovery
 (echo -n "$jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
 exit $?

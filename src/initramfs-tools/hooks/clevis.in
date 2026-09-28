@@ -167,6 +167,10 @@ bash_bin=$(find_binary "bash")
 copy_exec "${curl_bin}" || die 2 "Unable to copy ${curl_bin} to initrd image"
 copy_exec "${awk_bin}" || die 2 "Unable to copy ${awk_bin} to initrd image"
 copy_exec "${bash_bin}" || die 2 "Unable to copy ${bash_bin} to initrd image"
+xxd_bin=$(find_binary "xxd")
+openssl_bin=$(find_binary "openssl")
+copy_exec "${xxd_bin}" || die 2 "Unable to copy ${xxd_bin} to initrd image"
+copy_exec "${openssl_bin}" || die 2 "Unable to copy ${openssl_bin} to initrd image"
 
 # Copy latest versions of shared objects needed for DNS resolution
 for so in $(ldconfig -p | sed -nr 's/^\s*libnss_files\.so\.[0-9]+\s.*=>\s*//p'); do

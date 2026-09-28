@@ -52,5 +52,7 @@ EOF
 
     inst_multiple \
 	clevis-decrypt-tang \
-	curl
+	curl \
+	openssl \
+	xxd
 }

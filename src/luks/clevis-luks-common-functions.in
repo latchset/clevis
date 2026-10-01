@@ -931,6 +931,8 @@ clevis_luks_get_hash() {
 }
 
 # clevis_luks_add_key() adds a new key to a key slot.
+# Keep passing DEV directly to cryptsetup: it may be a detached LUKS header
+# file, which cryptsetup accepts for key operations. See issue #398.
 clevis_luks_add_key() {
     local DEV="${1}"
     local SLT="${2}"
@@ -968,6 +970,8 @@ clevis_luks_add_key() {
 }
 
 # clevis_luks_update_key() will update a key slot with a new key.
+# Keep passing DEV directly to cryptsetup here as well; detached LUKS header
+# files are supported by these key operations. See issue #398.
 clevis_luks_update_key() {
     local DEV="${1}"
     local SLT="${2}"

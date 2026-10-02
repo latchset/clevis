@@ -229,15 +229,15 @@ if [ -n "$tang_kem_pub" ] && [ -n "$has_hybrid_recovery" ]; then
 
     encap_result="$(jose jwk encap -i- <<< "$tang_kem_pub")"
     clevis_kem_ct="$(jose fmt -j- -Og ct -Su- <<< "$encap_result")"
-    kem_ss_k="$(jose fmt -j- -Og ss -Og k -Su- <<< "$encap_result")"
+    enc_key_k="$(jose fmt -j- -Og ss -Og k -Su- <<< "$encap_result")"
 
-    kem_ss_jwk="$(jose fmt -j- -Og ss -Oo- <<< "$encap_result")"
-    ek_digest="$(jose jwk thp -i- -a S256 <<< "$kem_ss_jwk")"
+    enc_key_jwk="$(jose fmt -j- -Og ss -Oo- <<< "$encap_result")"
+    ek_digest="$(jose jwk thp -i- -a S256 <<< "$enc_key_jwk")"
 
     kem_kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}" <<< "$tang_kem_pub")"
 
     ec_hex="$(jose b64 dec -i- <<< "$enc_ec_x" | xxd -p -c 9999)"
-    kem_hex="$(jose b64 dec -i- <<< "$kem_ss_k" | xxd -p -c 9999)"
+    kem_hex="$(jose b64 dec -i- <<< "$enc_key_k" | xxd -p -c 9999)"
     ec_byte_len=$(( ${#ec_hex} / 2 ))
     kem_byte_len=$(( ${#kem_hex} / 2 ))
     ikm_hex="$(printf '%08x' "$ec_byte_len")${ec_hex}$(printf '%08x' "$kem_byte_len")${kem_hex}"
@@ -250,7 +250,7 @@ if [ -n "$tang_kem_pub" ] && [ -n "$has_hybrid_recovery" ]; then
     derived_b64="$(echo -n "$derived_hex" | xxd -r -p | jose b64 enc -I-)"
     enc_key="{\"alg\":\"A256GCM\",\"k\":\"$derived_b64\",\"kty\":\"oct\"}"
 
-    unset clevis_ec_key enc_ec_key enc_ec_x kem_ss_k kem_ss_jwk encap_result
+    unset clevis_ec_key enc_ec_key enc_ec_x enc_key_k enc_key_jwk encap_result
     unset ec_hex kem_hex ikm_hex info_hex derived_hex derived_b64
 
     jwe='{"protected":{"alg":"dir","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
@@ -259,7 +259,7 @@ if [ -n "$tang_kem_pub" ] && [ -n "$has_hybrid_recovery" ]; then
     jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"
     jwe="$(jose fmt -j "$jwe" -g protected -j- -s epk -UUo- <<< "$clevis_ec_pub")"
     jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \
-        -q "$clevis_kem_ct" -s kem_ct -UUUUo-)"
+        -q "$clevis_kem_ct" -s clevis_kem_ct -UUUUo-)"
     jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \
         -j- -s tang_kem_pub -UUUUo- <<< "$tang_kem_pub")"
     jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \

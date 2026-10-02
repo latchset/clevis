@@ -50,7 +50,7 @@ if ! kid="$(jose fmt -j- -Og kid -Su- <<< "$jhd")"; then
     exit 1
 fi
 
-kem_ct="$(jose fmt -j- -Og clevis -g tang -g kem_ct -Su- <<< "$jhd" 2>/dev/null)" || true
+clevis_kem_ct="$(jose fmt -j- -Og clevis -g tang -g clevis_kem_ct -Su- <<< "$jhd" 2>/dev/null)" || true
 kem_kid="$(jose fmt -j- -Og kem_kid -Su- <<< "$jhd" 2>/dev/null)" || true
 
 CLEVIS_DEFAULT_THP_ALG=S256       # SHA-256.
@@ -117,11 +117,11 @@ fi
 xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
 derive_enc_key() {
-    local _ec_x="$1" _kem_k="$2" _kid="$3" _kem_kid="$4"
+    local _ec_x="$1" _enc_key_k="$2" _kid="$3" _kem_kid="$4"
     local _ec_hex _kem_hex _ec_blen _kem_blen _ikm _info _dhex _db64
 
     _ec_hex="$(jose b64 dec -i- <<< "$_ec_x" | xxd -p -c 9999)"
-    _kem_hex="$(jose b64 dec -i- <<< "$_kem_k" | xxd -p -c 9999)"
+    _kem_hex="$(jose b64 dec -i- <<< "$_enc_key_k" | xxd -p -c 9999)"
     _ec_blen=$(( ${#_ec_hex} / 2 ))
     _kem_blen=$(( ${#_kem_hex} / 2 ))
     _ikm="$(printf '%08x' "$_ec_blen")${_ec_hex}$(printf '%08x' "$_kem_blen")${_kem_hex}"
@@ -196,7 +196,7 @@ ecmr_recover() {
     ecmr_unblind "$_rep" "$srv"
 }
 
-if [ -n "$kem_ct" ] && [ -n "$kem_kid" ]; then
+if [ -n "$clevis_kem_ct" ] && [ -n "$kem_kid" ]; then
     ### Hybrid ECC+KEM recovery (secure transport)
 
     tang_kem_pub="$(jose fmt -j- -Og clevis -g tang -g tang_kem_pub -Oo- \
@@ -209,24 +209,24 @@ if [ -n "$kem_ct" ] && [ -n "$kem_kid" ]; then
     ec_x="$(jose fmt -j- -Og x -Su- <<< "$ec_jwk")"
 
     # --- Step 2: Ephemeral KEM keypair ---
-    clevis_kem_key="$(jose jwk gen -i '{"alg":"ML-KEM-768"}')"
-    clevis_kem_pub="$(jose jwk pub -i- <<< "$clevis_kem_key")"
+    clevis_kem_priv="$(jose jwk gen -i '{"alg":"ML-KEM-768"}')"
+    clevis_kem_pub="$(jose jwk pub -i- <<< "$clevis_kem_priv")"
 
     # --- Step 3: Forward transport channel ---
     transport_encap="$(jose jwk encap -i- <<< "$tang_kem_pub")"
     clevis_transport_ct="$(jose fmt -j- -Og ct -Su- <<< "$transport_encap")"
     clevis_transport_key="$(jose fmt -j- -Og ss -Oo- <<< "$transport_encap")"
 
-    # --- Step 4: Encrypt inner payload (kem_ct + clevis_kem_pub + ek_digest) ---
-    inner_payload="$(printf '{"kem_ct":"%s","clevis_kem_pub":%s,"ek_digest":"%s"}' \
-        "$kem_ct" "$clevis_kem_pub" "$ek_digest")"
+    # --- Step 4: Encrypt inner payload (clevis_kem_ct + clevis_kem_pub + ek_digest) ---
+    inner_payload="$(printf '{"clevis_kem_ct":"%s","clevis_kem_pub":%s,"ek_digest":"%s"}' \
+        "$clevis_kem_ct" "$clevis_kem_pub" "$ek_digest")"
     clevis_encrypted_blob="$(jose jwe enc \
         -i '{"protected":{"alg":"dir","enc":"A256GCM"}}' \
         -k- -I- -c < <(echo -n "$clevis_transport_key"; \
                        echo -n "$inner_payload"))"
 
     # --- Step 5: POST to /rec-kem ---
-    req_body="$(printf '{"encrypted_blob":"%s","transport_ct":"%s"}' \
+    req_body="$(printf '{"clevis_encrypted_blob":"%s","clevis_transport_ct":"%s"}' \
         "$clevis_encrypted_blob" "$clevis_transport_ct")"
 
     if ! kem_resp="$(curl -sfg "${curl_opts[@]}" -X POST \
@@ -238,28 +238,28 @@ if [ -n "$kem_ct" ] && [ -n "$kem_kid" ]; then
     fi
 
     # --- Step 6: Decapsulate return channel ---
-    tang_encrypted_key="$(jose fmt -j- -Og encrypted_key -Su- \
+    tang_encrypted_key="$(jose fmt -j- -Og tang_encrypted_key -Su- \
         <<< "$kem_resp")"
-    tang_transport_ct="$(jose fmt -j- -Og transport_ct -Su- \
+    tang_transport_ct="$(jose fmt -j- -Og tang_transport_ct -Su- \
         <<< "$kem_resp")"
 
     tang_transport_key="$(jose jwk decap -i- -c "$tang_transport_ct" \
-        <<< "$clevis_kem_key")"
+        <<< "$clevis_kem_priv")"
 
-    # --- Step 7: Decrypt enc_kem_key ---
-    enc_kem_key_json="$(jose jwe dec -k- -i- \
+    # --- Step 7: Decrypt enc_key ---
+    enc_key_json="$(jose jwe dec -k- -i- \
         < <(echo -n "$tang_transport_key"; echo -n "$tang_encrypted_key"))"
-    kem_k="$(jose fmt -j- -Og k -Su- <<< "$enc_kem_key_json")"
+    enc_key_k="$(jose fmt -j- -Og k -Su- <<< "$enc_key_json")"
 
     # --- Step 8: enc_key = PRF(enc_ec_key, enc_kem_key) ---
-    enc_key="$(derive_enc_key "$ec_x" "$kem_k" "$kid" "$kem_kid")"
+    enc_key="$(derive_enc_key "$ec_x" "$enc_key_k" "$kid" "$kem_kid")"
 
     # --- Step 9: Discard all ephemeral/transport material ---
-    unset clevis_kem_key clevis_kem_pub transport_encap
+    unset clevis_kem_priv clevis_kem_pub transport_encap
     unset clevis_transport_ct clevis_transport_key
     unset inner_payload clevis_encrypted_blob req_body kem_resp
     unset tang_encrypted_key tang_transport_ct tang_transport_key
-    unset enc_kem_key_json ec_jwk ec_x kem_k ek_digest tang_kem_pub
+    unset enc_key_json ec_jwk ec_x enc_key_k ek_digest tang_kem_pub
 
     (echo -n "$enc_key$hdr."; /bin/cat) | jose jwe dec -k- -i-
     exit $?

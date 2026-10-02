@@ -207,15 +207,25 @@ fi
 jwk="$(jose fmt -j- -Od key_ops -o- <<< "$jwk")"
 jwk="$(jose fmt -j- -Od alg -o- <<< "$jwk")"
 kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}"  <<< "$jwk")"
-### Check for KEM key in advertisement (hybrid PQC support)
+### Check for KEM key via /adv-kem endpoint (hybrid PQC support)
 tang_kem_pub=
-while IFS= read -r _key; do
-    _kty="$(jose fmt -j- -Og kty -Su- <<< "$_key" 2>/dev/null)" || continue
-    if [ "$_kty" = "AKP" ]; then
-        tang_kem_pub="$_key"
-        break
+if [ -n "$has_hybrid_recovery" ]; then
+    if kem_jws="$(curl -sfg "${curl_opts[@]}" "$url/adv-kem" 2>/dev/null)"; then
+        if kem_jwks="$(jose fmt -j- -Og payload -SyOg keys \
+                       -AUo- <<< "$kem_jws" 2>/dev/null)"; then
+            if jose jws ver -i "$kem_jws" -k- -a <<< "$ver" >/dev/null 2>&1; then
+                while IFS= read -r _key; do
+                    _kty="$(jose fmt -j- -Og kty -Su- <<< "$_key" 2>/dev/null)" \
+                        || continue
+                    if [ "$_kty" = "AKP" ]; then
+                        tang_kem_pub="$_key"
+                        break
+                    fi
+                done < <(jose fmt -j- -Og keys -Af- <<< "$kem_jwks" 2>/dev/null)
+            fi
+        fi
     fi
-done < <(jose fmt -j- -Og keys -Af- <<< "$jwks" 2>/dev/null)
+fi
 
 if [ -n "$tang_kem_pub" ] && [ -n "$has_hybrid_recovery" ]; then
     ### Hybrid ECC+KEM encryption via jose CLI

@@ -108,7 +108,7 @@ if ! crv="$(jose fmt -j- -Og crv -Su- <<< "$clt")"; then
     exit 1
 fi
 
-### ECMR recovery (common to classical and hybrid paths)
+### ECMR blinding (shared across all paths)
 if ! eph="$(jose jwk gen -i "{\"alg\":\"ECMR\",\"crv\":\"$crv\"}")"; then
     echo "Error generating ephemeral key!" >&2
     exit 1
@@ -116,80 +116,157 @@ fi
 
 xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
-rec_url="$url/rec/$kid"
-ct="Content-Type: application/jwk+json"
-if ! full_rep="$(curl -sfg "${curl_opts[@]}" -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
-    echo "Error communicating with server $url" >&2
-    exit 1
-fi
+derive_enc_key() {
+    local _ec_x="$1" _kem_k="$2" _kid="$3" _kem_kid="$4"
+    local _ec_hex _kem_hex _ec_blen _kem_blen _ikm _info _dhex _db64
 
-# Use tang_pub from recovery response when available.
-if tang_pub="$(jose fmt -j- -Og tang_pub -Oo- <<< "$full_rep" 2>/dev/null)"; then
-    if tang_pub_key="$(jose jwk thp -i- -f "${kid}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
-                       <<< "$tang_pub" 2>/dev/null)"; then
-        srv="$tang_pub_key"
-    else
-        for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
-            tang_pub_key="$(jose jwk thp -i- -f "$kid" -a "${alg}" \
-                           <<< "$tang_pub" 2>/dev/null)" \
-                && srv="$tang_pub_key" && break
-        done
+    _ec_hex="$(jose b64 dec -i- <<< "$_ec_x" | xxd -p -c 9999)"
+    _kem_hex="$(jose b64 dec -i- <<< "$_kem_k" | xxd -p -c 9999)"
+    _ec_blen=$(( ${#_ec_hex} / 2 ))
+    _kem_blen=$(( ${#_kem_hex} / 2 ))
+    _ikm="$(printf '%08x' "$_ec_blen")${_ec_hex}$(printf '%08x' "$_kem_blen")${_kem_hex}"
+    _info="$(printf 'NBDE-HYBRID-v1\x00\x01ECMR+ML-KEM-768%s%s' "$_kid" "$_kem_kid" \
+             | xxd -p -c 9999)"
+    _dhex="$(openssl kdf -keylen 32 -kdfopt digest:SHA256 \
+        -kdfopt mode:EXTRACT_AND_EXPAND \
+        -kdfopt "hexkey:${_ikm}" -kdfopt "hexinfo:${_info}" HKDF \
+        | tr -d ': \n' | tr 'A-F' 'a-f')"
+    _db64="$(echo -n "$_dhex" | xxd -r -p | jose b64 enc -I-)"
+    printf '{"alg":"A256GCM","k":"%s","kty":"oct"}' "$_db64"
+}
+
+ecmr_unblind() {
+    local _rep="$1" _srv="$2"
+    local _tmp _rep_pub
+
+    _tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$_srv")"
+    _rep_pub="$(jose jwk pub -i- <<< "$_rep")"
+    jose jwk exc -l- -r- <<< "$_rep_pub$_tmp"
+}
+
+validate_tang_ec_pub() {
+    local _tang_pub="$1" _kid="$2"
+
+    if jose jwk thp -i- -f "$_kid" -a "${CLEVIS_DEFAULT_THP_ALG}" \
+           <<< "$_tang_pub" >/dev/null 2>&1; then
+        return 0
     fi
-fi
+    for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
+        if jose jwk thp -i- -f "$_kid" -a "$alg" \
+               <<< "$_tang_pub" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
 
-if [ -z "$srv" ]; then
-    echo "Unable to determine server exchange key from tang_pub in recovery response" >&2
-    exit 1
-fi
+ecmr_recover() {
+    local _full_rep _tang_pub _rep
 
-rep="$(jose fmt -j- -Od tang_pub -o- <<< "$full_rep" 2>/dev/null)" || rep="$full_rep"
+    if ! _full_rep="$(curl -sfg "${curl_opts[@]}" -X POST \
+            -H "Content-Type: application/jwk+json" \
+            --data-binary @- "$url/rec/$kid" <<< "$xfr")"; then
+        echo "Error communicating with server $url" >&2
+        return 1
+    fi
 
-if ! rep="$(jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- <<< "$rep")"; then
-    echo "Received invalid server reply!" >&2
-    exit 1
-fi
+    if _tang_pub="$(jose fmt -j- -Og tang_pub -Oo- \
+                    <<< "$_full_rep" 2>/dev/null)"; then
+        if ! validate_tang_ec_pub "$_tang_pub" "$kid"; then
+            echo "tang_pub thumbprint does not match kid!" >&2
+            return 1
+        fi
+        srv="$_tang_pub"
+    fi
 
-tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv")"
-rep="$(jose jwk pub -i- <<< "$rep")"
-jwk="$(jose jwk exc -l- -r- <<< "$rep$tmp")"
+    if [ -z "$srv" ]; then
+        echo "Unable to determine server exchange key" >&2
+        return 1
+    fi
+
+    _rep="$(jose fmt -j- -Od tang_pub -o- <<< "$_full_rep" 2>/dev/null)" \
+        || _rep="$_full_rep"
+
+    if ! _rep="$(jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- \
+                 <<< "$_rep")"; then
+        echo "Received invalid server reply!" >&2
+        return 1
+    fi
+
+    ecmr_unblind "$_rep" "$srv"
+}
 
 if [ -n "$kem_ct" ] && [ -n "$kem_kid" ]; then
-    ### Hybrid ECC+KEM recovery via jose CLI
-    ec_x="$(jose fmt -j- -Og x -Su- <<< "$jwk")"
+    ### Hybrid ECC+KEM recovery (secure transport)
+
+    tang_kem_pub="$(jose fmt -j- -Og clevis -g tang -g tang_kem_pub -Oo- \
+                    <<< "$jhd")"
+    ek_digest="$(jose fmt -j- -Og clevis -g tang -g ek_digest -Su- \
+                 <<< "$jhd")"
+
+    # --- Step 1: ECMR recovery via /rec ---
+    ec_jwk="$(ecmr_recover)"
+    ec_x="$(jose fmt -j- -Og x -Su- <<< "$ec_jwk")"
+
+    # --- Step 2: Ephemeral KEM keypair ---
+    clevis_kem_key="$(jose jwk gen -i '{"alg":"ML-KEM-768"}')"
+    clevis_kem_pub="$(jose jwk pub -i- <<< "$clevis_kem_key")"
+
+    # --- Step 3: Forward transport channel ---
+    transport_encap="$(jose jwk encap -i- <<< "$tang_kem_pub")"
+    clevis_transport_ct="$(jose fmt -j- -Og ct -Su- <<< "$transport_encap")"
+    clevis_transport_key="$(jose fmt -j- -Og ss -Oo- <<< "$transport_encap")"
+
+    # --- Step 4: Encrypt inner payload (kem_ct + clevis_kem_pub + ek_digest) ---
+    inner_payload="$(printf '{"kem_ct":"%s","clevis_kem_pub":%s,"ek_digest":"%s"}' \
+        "$kem_ct" "$clevis_kem_pub" "$ek_digest")"
+    clevis_encrypted_blob="$(jose jwe enc \
+        -i '{"protected":{"alg":"dir","enc":"A256GCM"}}' \
+        -k- -I- -c < <(echo -n "$clevis_transport_key"; \
+                       echo -n "$inner_payload"))"
+
+    # --- Step 5: POST to /rec-kem ---
+    req_body="$(printf '{"encrypted_blob":"%s","transport_ct":"%s"}' \
+        "$clevis_encrypted_blob" "$clevis_transport_ct")"
 
     if ! kem_resp="$(curl -sfg "${curl_opts[@]}" -X POST \
             -H "Content-Type: application/json" \
-            --data-binary "{\"ct\":\"$kem_ct\"}" \
+            --data-binary "$req_body" \
             "$url/rec-kem/$kem_kid")"; then
         echo "Error communicating with server $url for KEM recovery" >&2
         exit 1
     fi
 
-    if ! kem_k="$(jose fmt -j- -Og k -Su- <<< "$kem_resp")"; then
-        echo "KEM response missing shared secret!" >&2
-        exit 1
-    fi
+    # --- Step 6: Decapsulate return channel ---
+    tang_encrypted_key="$(jose fmt -j- -Og encrypted_key -Su- \
+        <<< "$kem_resp")"
+    tang_transport_ct="$(jose fmt -j- -Og transport_ct -Su- \
+        <<< "$kem_resp")"
 
-    ec_hex="$(jose b64 dec -i- <<< "$ec_x" | xxd -p -c 9999)"
-    kem_hex="$(jose b64 dec -i- <<< "$kem_k" | xxd -p -c 9999)"
-    ec_byte_len=$(( ${#ec_hex} / 2 ))
-    kem_byte_len=$(( ${#kem_hex} / 2 ))
-    ikm_hex="$(printf '%08x' "$ec_byte_len")${ec_hex}$(printf '%08x' "$kem_byte_len")${kem_hex}"
-    info_hex="$(printf 'NBDE-HYBRID-v1\x00\x01ECMR+ML-KEM-768%s%s' "$kid" "$kem_kid" \
-                | xxd -p -c 9999)"
-    derived_hex="$(openssl kdf -keylen 32 -kdfopt digest:SHA256 \
-        -kdfopt mode:EXTRACT_AND_EXPAND \
-        -kdfopt "hexkey:${ikm_hex}" -kdfopt "hexinfo:${info_hex}" HKDF \
-        | tr -d ': \n' | tr 'A-F' 'a-f')"
-    derived_b64="$(echo -n "$derived_hex" | xxd -r -p | jose b64 enc -I-)"
-    hybrid_cek="{\"alg\":\"A256GCM\",\"k\":\"$derived_b64\",\"kty\":\"oct\"}"
+    tang_transport_key="$(jose jwk decap -i- -c "$tang_transport_ct" \
+        <<< "$clevis_kem_key")"
 
-    unset ec_x kem_k ec_hex kem_hex ikm_hex info_hex derived_hex derived_b64
+    # --- Step 7: Decrypt enc_kem_key ---
+    enc_kem_key_json="$(jose jwe dec -k- -i- \
+        < <(echo -n "$tang_transport_key"; echo -n "$tang_encrypted_key"))"
+    kem_k="$(jose fmt -j- -Og k -Su- <<< "$enc_kem_key_json")"
 
-    (echo -n "$hybrid_cek$hdr."; /bin/cat) | jose jwe dec -k- -i-
+    # --- Step 8: enc_key = PRF(enc_ec_key, enc_kem_key) ---
+    enc_key="$(derive_enc_key "$ec_x" "$kem_k" "$kid" "$kem_kid")"
+
+    # --- Step 9: Discard all ephemeral/transport material ---
+    unset clevis_kem_key clevis_kem_pub transport_encap
+    unset clevis_transport_ct clevis_transport_key
+    unset inner_payload clevis_encrypted_blob req_body kem_resp
+    unset tang_encrypted_key tang_transport_ct tang_transport_key
+    unset enc_kem_key_json ec_jwk ec_x kem_k ek_digest tang_kem_pub
+
+    (echo -n "$enc_key$hdr."; /bin/cat) | jose jwe dec -k- -i-
     exit $?
 fi
 
-### Classical ECDH-ES recovery
-(echo -n "$jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
+### Classical ECMR recovery
+ec_jwk="$(ecmr_recover)"
+
+(echo -n "$ec_jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
 exit $?

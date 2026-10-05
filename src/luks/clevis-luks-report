@@ -86,8 +86,7 @@ report_tang() {
     local mdata_keys
     if ! mdata_keys="$(jose fmt --json="${content}" --get adv --output=-)" \
                        || [ -z "${mdata_keys}" ]; then
-        echo "Keys from clevis metadata not found" >&2
-        return 1
+        return 0
     fi
     report_compare "${adv_keys}" "${mdata_keys}"
 }
@@ -128,7 +127,7 @@ report_decode() {
     fi
 
     case "${pin}" in
-    tang)
+    tang|tang-pqc)
         report_tang "${content}"
         ;;
     sss)

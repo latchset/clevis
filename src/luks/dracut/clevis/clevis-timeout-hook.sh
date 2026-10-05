@@ -1,9 +1,4 @@
-#!/bin/bash
-# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
-#
-# Copyright (c) 2024 Oldřich Jedlička
-#
-# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#!/bin/sh
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,20 +12,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-[ -s /run/clevis.pid ] || exit 0
+[ ! -f /run/clevis-online ] || exit 0
 
-. clevis-luks-common-functions
-
-if [ -f @libexecdir@/clevis-luks-tpm1-functions ]; then
-    . @libexecdir@/clevis-luks-tpm1-functions
-    stop_tcsd
-fi
-
-pid=$(cat /run/clevis.pid)
-clevis_kill_pid $pid
-
-rm -f /run/clevis.pid
-rm -f /run/clevis-online
-rm -f /run/clevis-network-timeout
-rm -rf /run/cryptroot-ask-pipes
+# shellcheck disable=SC2154 # $hookdir is a dracut variable
+# If the network did not come online by the initqueue timeout, run the askpass
+# hook from settled so the password prompt remains available as a fallback.
+for askpass in "$hookdir"/initqueue/online/cryptroot-ask-*.sh; do
+    [ -f "$askpass" ] || continue
+    if mv -f "$askpass" "$hookdir/initqueue/settled/${askpass##*/}"; then
+        : > /run/clevis-network-timeout
+    fi
+done

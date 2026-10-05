@@ -73,6 +73,10 @@ fi
 
 
 copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
+if [ -x @bindir@/clevis-decrypt-tang-pqc ]; then
+    copy_exec @bindir@/clevis-encrypt-tang-pqc || die 1 "@bindir@/clevis-encrypt-tang-pqc not found"
+    copy_exec @bindir@/clevis-decrypt-tang-pqc || die 1 "@bindir@/clevis-decrypt-tang-pqc not found"
+fi
 copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
 copy_exec @bindir@/clevis-decrypt-null || die 1 "@bindir@/clevis-decrypt-null not found"
 copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"

@@ -1,5 +1,8 @@
 subdir('clevis')
 subdir('clevis-pin-tang')
+if not get_option('tang-pqc').disabled()
+  subdir('clevis-pin-tang-pqc')
+endif
 if not get_option('tpm1').disabled()
   subdir('clevis-pin-tpm1')
 endif

@@ -62,6 +62,60 @@ advertisement is stored, or the JSON contents of the advertisement itself. When
 the advertisement is specified manually like this, Clevis presumes that the
 advertisement is trusted.
 
+#### PIN: Tang PQC (Hybrid ECC+ML-KEM)
+
+Clevis provides an optional hybrid post-quantum pin (`tang-pqc`) that combines
+classical elliptic-curve key exchange (ECMR) with ML-KEM-768 lattice-based
+key encapsulation. This protects LUKS bindings against future quantum attacks
+while retaining classical security guarantees.
+
+```bash
+$ echo hi | clevis encrypt tang-pqc '{"url": "http://tang.local"}' -y > hi.jwe
+$ clevis decrypt < hi.jwe
+hi
+```
+
+The pin produces JWE tokens with `"pin":"tang-pqc"` in the header. Decryption
+uses a bidirectional KEM-secured transport channel to recover the encryption
+key from the Tang server.
+
+##### Dependencies
+
+The tang-pqc pin requires the following libraries **with post-quantum support**:
+
+| Dependency  | Minimum version / feature                                  |
+|-------------|------------------------------------------------------------|
+| `jose`      | Must include ML-KEM support (`jose jwk gen -i '{"alg":"ML-KEM-768"}'`, `jose jwk encap`, `jose jwk decap`) |
+| `libcrypto` | OpenSSL 3.5+ (or patched build with ML-KEM-768 and EVP_KDF HKDF support) |
+| `jansson`   | Any version (already a Clevis core dependency)             |
+| `libcurl`   | Any version (already used by the classical Tang pin)       |
+
+The Meson build option `tang-pqc` defaults to `auto`: if any dependency is
+missing, the pin is silently skipped with a build warning. To force a build
+failure when dependencies are absent, configure with:
+
+```bash
+$ meson setup build -Dtang-pqc=enabled
+```
+
+To explicitly disable the pin:
+
+```bash
+$ meson setup build -Dtang-pqc=disabled
+```
+
+##### Tang server requirements
+
+The Tang server must support the hybrid recovery endpoints:
+
+- `GET /adv-kem` — serves KEM public keys as a JWS signed by the same
+  signing keys as `/adv`
+- `POST /rec-kem/$kem_kid` — performs KEM-based key recovery with
+  bidirectional secure transport
+- `GET /version` — must report `features.hybrid_recovery: true`
+
+These endpoints are available in the Tang server fork with PQC support.
+
 #### PIN: TPM1 and TPM2
 
 Clevis provides support to encrypt a key in a Trusted Platform Module 1.2 (TPM1)

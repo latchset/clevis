@@ -183,7 +183,10 @@ bool verifyTrust(
 
         std::cerr << "Do you wish to trust these keys? [ynYN] ";
         std::string ans;
-        std::getline(std::cin, ans);
+        std::ifstream tty("/dev/tty");
+        if (!tty)
+            return false;
+        std::getline(tty, ans);
         return !ans.empty() && (ans[0] == 'y' || ans[0] == 'Y');
     }
 

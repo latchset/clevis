@@ -46,6 +46,7 @@ report_compare() {
 
 report_tang() {
     local content="${1}"
+    local header="${2}"
     [ -z "${content}" ] && return 1
 
     local url
@@ -84,11 +85,25 @@ report_tang() {
         return 1
     fi
     local mdata_keys
-    if ! mdata_keys="$(jose fmt --json="${content}" --get adv --output=-)" \
-                       || [ -z "${mdata_keys}" ]; then
+    if mdata_keys="$(jose fmt --json="${content}" --get adv --output=-)" \
+                       && [ -n "${mdata_keys}" ]; then
+        report_compare "${adv_keys}" "${mdata_keys}"
+        return $?
+    fi
+
+    # No stored adv (tang_pub mode). Check if the binding's kid is
+    # still present in the server's current advertisement.
+    local kid
+    if [ -n "${header}" ]; then
+        kid="$(jose fmt --json="${header}" --get kid --unquote=-)" 2>/dev/null
+    fi
+    if [ -z "${kid}" ]; then
         return 0
     fi
-    report_compare "${adv_keys}" "${mdata_keys}"
+    if ! printf '%s' "${adv_keys}" | jose jwk thp --input=- \
+                                          --find "${kid}" >/dev/null 2>&1; then
+        printf '%s' "${kid}"
+    fi
 }
 
 report_sss() {
@@ -128,7 +143,7 @@ report_decode() {
 
     case "${pin}" in
     tang|tang-pqc)
-        report_tang "${content}"
+        report_tang "${content}" "${data}"
         ;;
     sss)
         report_sss "${content}"

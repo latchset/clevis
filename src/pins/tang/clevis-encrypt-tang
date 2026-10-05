@@ -120,7 +120,6 @@ curl_opts=()
 
 ### Get the advertisement
 has_tang_pub=
-has_hybrid_recovery=
 if jws="$(jose fmt -j- -g adv -Oo- <<< "$cfg")"; then
     thp="${thp:-any}"
 elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
@@ -143,10 +142,6 @@ else
         if [ "$(jose fmt -j- -Og features -Og tang_pub -o- \
                <<< "$ver_resp" 2>/dev/null)" = "true" ]; then
             has_tang_pub=yes
-        fi
-        if [ "$(jose fmt -j- -Og features -Og hybrid_recovery -o- \
-               <<< "$ver_resp" 2>/dev/null)" = "true" ]; then
-            has_hybrid_recovery=yes
         fi
     fi
 fi
@@ -207,86 +202,6 @@ fi
 jwk="$(jose fmt -j- -Od key_ops -o- <<< "$jwk")"
 jwk="$(jose fmt -j- -Od alg -o- <<< "$jwk")"
 kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}"  <<< "$jwk")"
-### Check for KEM key via /adv-kem endpoint (hybrid PQC support)
-tang_kem_pub=
-if [ -n "$has_hybrid_recovery" ]; then
-    if kem_jws="$(curl -sfg "${curl_opts[@]}" "$url/adv-kem" 2>/dev/null)"; then
-        if kem_jwks="$(jose fmt -j- -Og payload -SyOg keys \
-                       -AUo- <<< "$kem_jws" 2>/dev/null)"; then
-            if jose jws ver -i "$kem_jws" -k- -a <<< "$ver" >/dev/null 2>&1; then
-                while IFS= read -r _key; do
-                    _kty="$(jose fmt -j- -Og kty -Su- <<< "$_key" 2>/dev/null)" \
-                        || continue
-                    if [ "$_kty" = "AKP" ]; then
-                        tang_kem_pub="$_key"
-                        break
-                    fi
-                done < <(jose fmt -j- -Og keys -Af- <<< "$kem_jwks" 2>/dev/null)
-            fi
-        fi
-    fi
-fi
-
-if [ -n "$tang_kem_pub" ] && [ -n "$has_hybrid_recovery" ]; then
-    ### Hybrid ECC+KEM encryption via jose CLI
-    crv="$(jose fmt -j- -Og crv -Su- <<< "$jwk")"
-
-    clevis_ec_key="$(jose jwk gen -i "{\"alg\":\"ECMR\",\"crv\":\"$crv\"}")"
-    clevis_ec_pub="$(jose jwk pub -i- <<< "$clevis_ec_key")"
-
-    enc_ec_key="$(jose jwk exc -l- -r- <<< "$clevis_ec_key$jwk")"
-    enc_ec_x="$(jose fmt -j- -Og x -Su- <<< "$enc_ec_key")"
-
-    encap_result="$(jose jwk encap -i- <<< "$tang_kem_pub")"
-    clevis_kem_ct="$(jose fmt -j- -Og ct -Su- <<< "$encap_result")"
-    enc_key_k="$(jose fmt -j- -Og ss -Og k -Su- <<< "$encap_result")"
-
-    enc_key_jwk="$(jose fmt -j- -Og ss -Oo- <<< "$encap_result")"
-    ek_digest="$(jose jwk thp -i- -a S256 <<< "$enc_key_jwk")"
-
-    kem_kid="$(jose jwk thp -i- -a "${CLEVIS_DEFAULT_THP_ALG}" <<< "$tang_kem_pub")"
-
-    ec_hex="$(jose b64 dec -i- <<< "$enc_ec_x" | xxd -p -c 9999)"
-    kem_hex="$(jose b64 dec -i- <<< "$enc_key_k" | xxd -p -c 9999)"
-    ec_byte_len=$(( ${#ec_hex} / 2 ))
-    kem_byte_len=$(( ${#kem_hex} / 2 ))
-    ikm_hex="$(printf '%08x' "$ec_byte_len")${ec_hex}$(printf '%08x' "$kem_byte_len")${kem_hex}"
-    info_hex="$(printf 'NBDE-HYBRID-v1\x00\x01ECMR+ML-KEM-768%s%s' "$kid" "$kem_kid" \
-                | xxd -p -c 9999)"
-    derived_hex="$(openssl kdf -keylen 32 -kdfopt digest:SHA256 \
-        -kdfopt mode:EXTRACT_AND_EXPAND \
-        -kdfopt "hexkey:${ikm_hex}" -kdfopt "hexinfo:${info_hex}" HKDF \
-        | tr -d ': \n' | tr 'A-F' 'a-f')"
-    derived_b64="$(echo -n "$derived_hex" | xxd -r -p | jose b64 enc -I-)"
-    enc_key="{\"alg\":\"A256GCM\",\"k\":\"$derived_b64\",\"kty\":\"oct\"}"
-
-    unset clevis_ec_key enc_ec_key enc_ec_x enc_key_k enc_key_jwk encap_result
-    unset ec_hex kem_hex ikm_hex info_hex derived_hex derived_b64
-
-    jwe='{"protected":{"alg":"dir","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
-    jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
-    jwe="$(jose fmt -j "$jwe" -g protected -q "$kem_kid" -s kem_kid -UUo-)"
-    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"
-    jwe="$(jose fmt -j "$jwe" -g protected -j- -s epk -UUo- <<< "$clevis_ec_pub")"
-    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \
-        -q "$clevis_kem_ct" -s clevis_kem_ct -UUUUo-)"
-    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \
-        -j- -s tang_kem_pub -UUUUo- <<< "$tang_kem_pub")"
-    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang \
-        -q "$ek_digest" -s ek_digest -UUUUo-)"
-    [ -n "$cacert" ] && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cacert" -s cacert -UUUUo-)"
-    [ -n "$cert" ]   && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cert" -s cert -UUUUo-)"
-    [ -n "$key" ]    && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$key" -s key -UUUUo-)"
-    if [ -z "$has_tang_pub" ]; then
-        jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks")"
-    fi
-
-    unset clevis_ec_pub clevis_kem_ct kem_kid ek_digest
-
-    exec jose jwe enc -i- -k- -I- -c < <(echo -n "${jwe}${enc_key}"; /bin/cat)
-fi
-
-### Classical ECDH-ES encryption
 jwe='{"protected":{"alg":"ECDH-ES","enc":"A256GCM","clevis":{"pin":"tang","tang":{}}}}'
 jwe="$(jose fmt -j "$jwe" -g protected -q "$kid" -s kid -UUo-)"
 jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo-)"

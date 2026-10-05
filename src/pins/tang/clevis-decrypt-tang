@@ -112,68 +112,41 @@ fi
 
 xfr="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$clt$eph")"
 
-ecmr_unblind() {
-    local _rep="$1" _srv="$2"
-    local _tmp _rep_pub
+rec_url="$url/rec/$kid"
+ct="Content-Type: application/jwk+json"
+if ! full_rep="$(curl -sfg "${curl_opts[@]}" -X POST -H "$ct" --data-binary @- "$rec_url" <<< "$xfr")"; then
+    echo "Error communicating with server $url" >&2
+    exit 1
+fi
 
-    _tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$_srv")"
-    _rep_pub="$(jose jwk pub -i- <<< "$_rep")"
-    jose jwk exc -l- -r- <<< "$_rep_pub$_tmp"
-}
-
-validate_tang_ec_pub() {
-    local _tang_pub="$1" _kid="$2"
-
-    if jose jwk thp -i- -f "$_kid" -a "${CLEVIS_DEFAULT_THP_ALG}" \
-           <<< "$_tang_pub" >/dev/null 2>&1; then
-        return 0
+# Use tang_pub from recovery response when available.
+if tang_pub="$(jose fmt -j- -Og tang_pub -Oo- <<< "$full_rep" 2>/dev/null)"; then
+    if tang_pub_key="$(jose jwk thp -i- -f "${kid}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
+                       <<< "$tang_pub" 2>/dev/null)"; then
+        srv="$tang_pub_key"
+    else
+        for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
+            tang_pub_key="$(jose jwk thp -i- -f "$kid" -a "${alg}" \
+                           <<< "$tang_pub" 2>/dev/null)" \
+                && srv="$tang_pub_key" && break
+        done
     fi
-    for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
-        if jose jwk thp -i- -f "$_kid" -a "$alg" \
-               <<< "$_tang_pub" >/dev/null 2>&1; then
-            return 0
-        fi
-    done
-    return 1
-}
+fi
 
-ecmr_recover() {
-    local _full_rep _tang_pub _rep
+if [ -z "$srv" ]; then
+    echo "Unable to determine server exchange key from tang_pub in recovery response" >&2
+    exit 1
+fi
 
-    if ! _full_rep="$(curl -sfg "${curl_opts[@]}" -X POST \
-            -H "Content-Type: application/jwk+json" \
-            --data-binary @- "$url/rec/$kid" <<< "$xfr")"; then
-        echo "Error communicating with server $url" >&2
-        return 1
-    fi
+rep="$(jose fmt -j- -Od tang_pub -o- <<< "$full_rep" 2>/dev/null)" || rep="$full_rep"
 
-    if _tang_pub="$(jose fmt -j- -Og tang_pub -Oo- \
-                    <<< "$_full_rep" 2>/dev/null)"; then
-        if ! validate_tang_ec_pub "$_tang_pub" "$kid"; then
-            echo "tang_pub thumbprint does not match kid!" >&2
-            return 1
-        fi
-        srv="$_tang_pub"
-    fi
+if ! rep="$(jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- <<< "$rep")"; then
+    echo "Received invalid server reply!" >&2
+    exit 1
+fi
 
-    if [ -z "$srv" ]; then
-        echo "Unable to determine server exchange key" >&2
-        return 1
-    fi
-
-    _rep="$(jose fmt -j- -Od tang_pub -o- <<< "$_full_rep" 2>/dev/null)" \
-        || _rep="$_full_rep"
-
-    if ! _rep="$(jose fmt -j- -Og kty -q EC -EUUg crv -q "$crv" -EUUo- \
-                 <<< "$_rep")"; then
-        echo "Received invalid server reply!" >&2
-        return 1
-    fi
-
-    ecmr_unblind "$_rep" "$srv"
-}
-
-ec_jwk="$(ecmr_recover)"
-
-(echo -n "$ec_jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
+tmp="$(jose jwk exc -i '{"alg":"ECMR"}' -l- -r- <<< "$eph$srv")"
+rep="$(jose jwk pub -i- <<< "$rep")"
+jwk="$(jose jwk exc -l- -r- <<< "$rep$tmp")"
+(echo -n "$jwk$hdr."; /bin/cat) | jose jwe dec -k- -i-
 exit $?

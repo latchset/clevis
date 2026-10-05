@@ -71,9 +71,9 @@ JweHeader parseHeader(const json_t* header)
         hdr.kemKid = kemKidVal;
 
     auto clevis = json_object_get(header, "clevis");
-    auto tang = clevis ? json_object_get(clevis, "tang") : nullptr;
+    auto tang = clevis ? json_object_get(clevis, "tang-pqc") : nullptr;
     if (!tang)
-        throw PinError("JWE missing 'clevis.tang' header!");
+        throw PinError("JWE missing 'clevis.tang-pqc' header!");
 
     auto urlVal = json_string_value(json_object_get(tang, "url"));
     if (!urlVal)

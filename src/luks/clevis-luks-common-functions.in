@@ -269,6 +269,7 @@ clevis_luks_process_sss_pin() {
     local sss_null
     local sss_pkcs11
     local sss_tang
+    local sss_tang_pqc
     local sss_tpm1
     local sss_tpm2
     local sss
@@ -292,6 +293,9 @@ clevis_luks_process_sss_pin() {
         tang)
             sss_tang="${sss_tang},${cfg}"
             ;;
+        tang-pqc)
+            sss_tang_pqc="${sss_tang_pqc},${cfg}"
+            ;;
         tpm1)
             sss_tpm1="${sss_tpm1},${cfg}"
             ;;
@@ -311,6 +315,10 @@ clevis_luks_process_sss_pin() {
 
     if [ -n "${sss_tang}" ]; then
         cfg="${cfg},"$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tang_pqc}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tang-pqc" "${sss_tang_pqc}")
     fi
 
     if [ -n "${sss_tpm1}" ]; then

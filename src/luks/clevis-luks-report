@@ -142,8 +142,13 @@ report_decode() {
     fi
 
     case "${pin}" in
+<<<<<<< HEAD
     tang)
         report_tang "${content}" "${data}"
+=======
+    tang|tang-pqc)
+        report_tang "${content}"
+>>>>>>> 03a056e (Fix clevis-luks-report and tests for tang_pub compatibility)
         ;;
     sss)
         report_sss "${content}"

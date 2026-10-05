@@ -1,0 +1,70 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-pqc-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
+    tang_stop "${TMP2}"
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    [ -d "$TMP2" ] && rm -rf "$TMP2"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+TMP2="$(mktemp -d)"
+
+tang_pqc_sanity_check
+
+# Start two tang servers (both PQC-capable).
+tang_run "${TMP}" sig exc
+port1=$(tang_get_port "${TMP}")
+tang_pqc_check_version "${port1}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+tang_run "${TMP2}" sig2 exc2
+port2=$(tang_get_port "${TMP2}")
+
+url1="http://localhost:${port1}"
+url2="http://localhost:${port2}"
+thp1="$(jose jwk thp -i "$TMP/db/sig.jwk")"
+thp2="$(jose jwk thp -i "$TMP2/db/sig2.jwk")"
+
+# SSS with two tang-pqc pins, threshold 1 of 2.
+cfg="$(printf '{"t":1,"pins":{"tang-pqc":[{"url":"%s","thp":"%s"},{"url":"%s","thp":"%s"}]}}' \
+       "$url1" "$thp1" "$url2" "$thp2")"
+enc="$(echo -n "sss pqc" | clevis encrypt sss "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "sss pqc"
+
+# SSS combining tang-pqc with classic tang, threshold 1 of 2.
+cfg="$(printf '{"t":1,"pins":{"tang-pqc":[{"url":"%s","thp":"%s"}],"tang":[{"url":"%s","thp":"%s"}]}}' \
+       "$url1" "$thp1" "$url2" "$thp2")"
+enc="$(echo -n "sss mixed" | clevis encrypt sss "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "sss mixed"
+
+# Decrypt must work when one of two servers is down (t=1).
+tang_stop "${TMP2}"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "sss mixed"

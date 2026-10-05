@@ -52,6 +52,8 @@ if jansson.found() and libcrypto.found() and libcurl.found() and jose.found()
   test('tang-pqc-jose-wrapper', test_jose_wrapper)
   test('tang-pqc-key-deriver', test_key_deriver)
   test('tang-pqc-ecmr-ops', test_ecmr_ops)
+
+  subdir('tests')
 else
   warning('Will not install tang-pqc pin due to missing dependencies!')
 endif

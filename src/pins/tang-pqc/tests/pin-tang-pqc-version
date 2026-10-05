@@ -1,0 +1,67 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-pqc-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+url="http://localhost:${port}"
+
+# /version must be reachable.
+ver="$(curl -sf "${url}/version")"
+[ -n "$ver" ]
+
+# tang_version field must be present.
+tang_ver="$(jose fmt -j- -Og tang_version -u- <<< "$ver")"
+[ -n "$tang_ver" ]
+
+# features.tang_pub must be true.
+tang_pub="$(jose fmt -j- -Og features -Og tang_pub -o- <<< "$ver")"
+test "$tang_pub" = "true"
+
+# features.hybrid_recovery must be true when PQC keys are present.
+hybrid="$(jose fmt -j- -Og features -Og hybrid_recovery -o- <<< "$ver")"
+test "$hybrid" = "true" \
+    || skip_test "Tang server does not have PQC keys (hybrid_recovery=false)"
+
+# /adv-kem endpoint must be reachable and return a JWS.
+adv_kem="$(curl -sf "${url}/adv-kem")"
+[ -n "$adv_kem" ]
+
+# KEM advertisement must contain a payload with an AKP key.
+payload="$(jose fmt -j- -Og payload -Su- <<< "$adv_kem" \
+           | jose b64 dec -i-)"
+kty="$(jose fmt -j- -Og keys -Ag 0 -Og kty -u- <<< "$payload" 2>/dev/null)" \
+    || kty="$(jose fmt -j- -Og kty -u- <<< "$payload" 2>/dev/null)" \
+    || true
+test "$kty" = "AKP"

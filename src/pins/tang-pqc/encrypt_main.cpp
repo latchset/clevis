@@ -250,7 +250,7 @@ std::string hybridEncrypt(
         "{\"protected\":{"
         "\"alg\":\"dir\","
         "\"enc\":\"A256GCM\","
-        "\"clevis\":{\"pin\":\"tang-pqc\",\"tang\":{}}"
+        "\"clevis\":{\"pin\":\"tang-pqc\",\"tang-pqc\":{}}"
         "}}");
     auto prot = json_object_get(jwe.get(), "protected");
 
@@ -259,7 +259,7 @@ std::string hybridEncrypt(
                         json_string(kemKid.c_str()));
 
     auto tang = json_object_get(
-        json_object_get(prot, "clevis"), "tang");
+        json_object_get(prot, "clevis"), "tang-pqc");
     json_object_set_new(tang, "url",
                         json_string(config.url.c_str()));
     json_object_set_new(prot, "epk",

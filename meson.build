@@ -41,6 +41,28 @@ add_project_arguments(
   language: 'c'
 )
 
+add_project_arguments(
+  '-Wall',
+  '-Wextra',
+  '-Werror',
+  '-Wchar-subscripts',
+  '-Wformat-security',
+  '-Wpointer-arith',
+  '-Wshadow',
+  '-Wsign-compare',
+  '-Wtype-limits',
+  '-Wunused-function',
+  '-Wno-missing-field-initializers',
+  '-Wno-unused-parameter',
+  '-Wno-unknown-pragmas',
+  '-D_DEFAULT_SOURCE',
+  '-D_POSIX_C_SOURCE=200112L',
+  '-DBINDIR="' + bindir + '"',
+  '-DCLEVIS_USER="' + get_option('user') + '"',
+  '-DCLEVIS_GROUP="' + get_option('group') + '"',
+  language: 'cpp'
+)
+
 jansson = dependency('jansson', version: '>=2.10', required: false)
 jose = dependency('jose', version: '>=8')
 a2x = find_program('a2x', required: false)
@@ -65,3 +87,4 @@ else
 endif
 
 summary('TPM 1.2 pin', get_option('tpm1'), section: 'Features')
+summary('Tang PQC pin', get_option('tang-pqc'), section: 'Features')

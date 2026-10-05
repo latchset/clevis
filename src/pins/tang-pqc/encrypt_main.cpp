@@ -62,6 +62,11 @@ void printUsage()
            "advertisement\n"
         << "  adv: <object>   A trusted advertisement (raw JSON)\n"
         << "\n"
+        << "  adv_kem: <string>  A filename containing a trusted "
+           "KEM advertisement\n"
+        << "  adv_kem: <object>  A trusted KEM advertisement "
+           "(raw JSON)\n"
+        << "\n"
         << "  cacert: <string>  CA bundle for verifying Tang's TLS "
            "certificate\n"
         << "  cert: <string>    Client TLS certificate for mTLS\n"
@@ -76,6 +81,8 @@ struct Config {
     TlsConfig tls;
     JsonPtr inlineAdv;
     std::string advFile;
+    JsonPtr inlineAdvKem;
+    std::string advKemFile;
     bool trust = false;
 };
 
@@ -118,6 +125,13 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
         config.advFile = json_string_value(adv);
         if (config.thp.empty())
             config.thp = "any";
+    }
+
+    auto advKem = json_object_get(cfg.get(), "adv_kem");
+    if (advKem && json_is_object(advKem)) {
+        config.inlineAdvKem = jsonDeepCopy(advKem);
+    } else if (advKem && json_is_string(advKem)) {
+        config.advKemFile = json_string_value(advKem);
     }
 
     return config;
@@ -354,16 +368,44 @@ int main(int argc, char* argv[])
         auto kid = JoseWrapper::thumbprint(
             tangEcPub.get(), DEFAULT_THP_ALG);
 
-        VersionInfo version;
-        if (fetchedFromNetwork)
-            version = tang.fetchVersion();
+        bool advOffline = !fetchedFromNetwork;
+        bool kemOffline = config.inlineAdvKem
+                          || !config.advKemFile.empty();
 
-        if (!version.hybridRecovery)
+        if (advOffline != kemOffline)
             throw PinError(
-                "Tang server does not support hybrid PQC. "
-                "Use clevis-encrypt-tang for classical mode.");
+                "Both 'adv' and 'adv_kem' must be provided "
+                "together for offline binding.");
 
-        auto kemJws = tang.fetchKemAdvertisement();
+        JsonPtr kemJws;
+        bool hasTangPub = advOffline;
+
+        if (advOffline) {
+            if (config.inlineAdvKem) {
+                kemJws = std::move(config.inlineAdvKem);
+            } else {
+                auto f = std::ifstream(config.advKemFile);
+                if (!f)
+                    throw PinError("KEM advertisement file '"
+                        + config.advKemFile + "' not found!");
+                std::string content(
+                    (std::istreambuf_iterator<char>(f)),
+                    std::istreambuf_iterator<char>());
+                kemJws = jsonParse(content);
+            }
+        } else {
+            VersionInfo version = tang.fetchVersion();
+
+            if (!version.hybridRecovery)
+                throw PinError(
+                    "Tang server does not support hybrid PQC. "
+                    "Use clevis-encrypt-tang for classical "
+                    "mode.");
+
+            hasTangPub = version.tangPub;
+            kemJws = tang.fetchKemAdvertisement();
+        }
+
         if (!JoseWrapper::jwsVerify(
                 kemJws.get(), verKeys.get(), true))
             throw PinError(
@@ -374,13 +416,13 @@ int main(int argc, char* argv[])
         auto tangKemPub = findKemKey(kemJwks.get());
         if (!tangKemPub)
             throw PinError(
-                "No ML-KEM key found in Tang /adv-kem. "
+                "No ML-KEM key found in KEM advertisement. "
                 "Use clevis-encrypt-tang for classical mode.");
 
         auto plaintext = readStdin();
         auto result = hybridEncrypt(
             tangEcPub.get(), tangKemPub.get(), kid,
-            config, jwks.get(), version.tangPub, plaintext);
+            config, jwks.get(), hasTangPub, plaintext);
 
         OPENSSL_cleanse(&plaintext[0], plaintext.size());
 

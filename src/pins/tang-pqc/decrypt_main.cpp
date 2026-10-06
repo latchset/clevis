@@ -212,7 +212,7 @@ std::string secureTransportRecover(
     auto clevisKemPub = JoseWrapper::publicKey(
         clevisKemPriv.get());
 
-    auto [transportCt, transportKey] =
+    auto [clevisTransportCt, clevisTransportKey] =
         JoseWrapper::encapsulate(hdr.tangKemPub.get());
 
     auto clevisKemPubStr = jsonDump(clevisKemPub.get());
@@ -227,14 +227,14 @@ std::string secureTransportRecover(
     auto blobJwe = jsonParse(
         "{\"protected\":{\"alg\":\"dir\",\"enc\":\"A256GCM\"}}");
     if (!JoseWrapper::jweEncrypt(
-            blobJwe.get(), transportKey.get(),
+            blobJwe.get(), clevisTransportKey.get(),
             innerPayload.data(), innerPayload.size()))
         throw PinError("Failed to encrypt inner payload");
 
     auto encryptedBlob = JoseWrapper::jweToCompact(blobJwe.get());
 
     auto kemResp = tang.kemRecover(
-        hdr.kemKid, encryptedBlob, transportCt);
+        hdr.kemKid, encryptedBlob, clevisTransportCt);
 
     auto tangTransportKey = JoseWrapper::decapsulate(
         clevisKemPriv.get(), kemResp.tangTransportCt);

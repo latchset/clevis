@@ -20,7 +20,7 @@ debian:*|ubuntu:*)
     export DEBIAN_FRONTEND=noninteractive
     apt-get install -y keyboard-configuration console-setup
 
-    while ! apt-get -y install ${COMMON} \
+    while ! apt-get -y install ${COMMON} g++ \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
         libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev \
@@ -38,7 +38,7 @@ debian:*|ubuntu:*)
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
         opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers
     command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) \
-        || dnf -y install dnf-command\(builddep\)
+        || dnf -y install dnf-command\(builddep\) gcc-g++
     dnf -y builddep clevis
     ;;
 
@@ -54,7 +54,7 @@ debian:*|ubuntu:*)
     yum -y install pkgconfig openssl-devel openssl zlib-devel \
         jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
         audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts opensc \
-        pcsc-lite softhsm swtpm-tools tpm-tools trousers
+        pcsc-lite softhsm swtpm-tools tpm-tools trousers gcc-g++
     sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
     ;;
 esac

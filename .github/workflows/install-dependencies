@@ -1,6 +1,17 @@
 #!/bin/bash -ex
 
-COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof procps ${CC}"
+# Dynamically pick the C++ package based on $CC and $DISTRO
+if [[ "${CC}" == *"clang"* ]]; then
+    CXX_PKG="clang"
+elif [[ "${DISTRO}" == *"debian"* ]] || [[ "${DISTRO}" == *"ubuntu"* ]]; then
+    CXX_PKG="g++"
+else
+    # Fedora and CentOS
+    CXX_PKG="gcc-c++"
+fi
+
+COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof procps ${CC} ${CXX_PKG}"
+
 
 case "${DISTRO}" in
 debian:*|ubuntu:*)
@@ -20,7 +31,7 @@ debian:*|ubuntu:*)
     export DEBIAN_FRONTEND=noninteractive
     apt-get install -y keyboard-configuration console-setup
 
-    while ! apt-get -y install ${COMMON} g++ \
+    while ! apt-get -y install ${COMMON} \
         build-essential pkg-config libssl-dev libjansson-dev libjose-dev \
         luksmeta libluksmeta-dev libpwquality-tools libglib2.0-dev \
         libudisks2-dev libaudit-dev systemd opensc pcscd libsofthsm2-dev \
@@ -36,9 +47,9 @@ debian:*|ubuntu:*)
     dnf -y install --allowerasing systemd awk
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
-        opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers
+        opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers ${CXX_PKG}
     command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) \
-        || dnf -y install dnf-command\(builddep\) gcc-g++
+        || dnf -y install dnf-command\(builddep\)
     dnf -y builddep clevis
     ;;
 
@@ -54,7 +65,7 @@ debian:*|ubuntu:*)
     yum -y install pkgconfig openssl-devel openssl zlib-devel \
         jansson-devel findutils gcc libjose-devel luksmeta libluksmeta-devel \
         audit-libs-devel tpm2-tools desktop-file-utils cracklib-dicts opensc \
-        pcsc-lite softhsm swtpm-tools tpm-tools trousers gcc-g++
+        pcsc-lite softhsm swtpm-tools tpm-tools trousers
     sed -i 's|>=1\.0\.2|>=1\.0\.1|' meson.build
     ;;
 esac

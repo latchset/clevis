@@ -36,6 +36,7 @@ have_tang_pqc_bindings() {
 }
 
 install() {
+    # shellcheck disable=SC2154 # $hostonly_cmdline and $initdir are dracut variables
     if [ "${hostonly_cmdline}" = "yes" ] && have_tang_pqc_bindings; then
         echo "rd.neednet=1" > "${initdir}/etc/cmdline.d/99clevis-pin-tang-pqc.conf"
 

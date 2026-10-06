@@ -53,7 +53,5 @@ EOF
 
     inst_multiple \
 	clevis-encrypt-tang-pqc \
-	clevis-decrypt-tang-pqc \
-	curl \
-	openssl
+	clevis-decrypt-tang-pqc
 }

@@ -204,8 +204,7 @@ EcmrRecoveryResult ecmrRecover(
 
 std::string secureTransportRecover(
     TangClient& tang,
-    const JweHeader& hdr,
-    const std::string& ecX)
+    const JweHeader& hdr)
 {
     auto clevisKemPriv = JoseWrapper::generateKey(
         "{\"alg\":\"ML-KEM-768\"}");
@@ -332,8 +331,7 @@ int main(int argc, char* argv[])
         if (!ecX)
             throw PinError("ECMR result missing x-coordinate");
 
-        auto encKeyK = secureTransportRecover(
-            tang, hdr, ecX);
+        auto encKeyK = secureTransportRecover(tang, hdr);
 
         auto encKey = KeyDeriver::deriveEncKey(
             ecX, encKeyK, hdr.kid, hdr.kemKid);

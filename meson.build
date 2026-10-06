@@ -1,6 +1,6 @@
-project('clevis', 'c', 'cpp', license: 'GPL3+',
+project('clevis', 'c', license: 'GPL3+',
   version: '23',
-  default_options: ['c_std=c99', 'cpp_std=c++17']
+  default_options: ['c_std=c99']
 )
 
 libexecdir = join_paths(get_option('prefix'), get_option('libexecdir'))
@@ -41,30 +41,54 @@ add_project_arguments(
   language: 'c'
 )
 
-add_project_arguments(
-  '-Wall',
-  '-Wextra',
-  '-Werror',
-  '-Wchar-subscripts',
-  '-Wformat-security',
-  '-Wpointer-arith',
-  '-Wshadow',
-  '-Wsign-compare',
-  '-Wtype-limits',
-  '-Wunused-function',
-  '-Wno-missing-field-initializers',
-  '-Wno-unused-parameter',
-  '-Wno-unknown-pragmas',
-  '-D_DEFAULT_SOURCE',
-  '-D_POSIX_C_SOURCE=200112L',
-  '-DBINDIR="' + bindir + '"',
-  '-DCLEVIS_USER="' + get_option('user') + '"',
-  '-DCLEVIS_GROUP="' + get_option('group') + '"',
-  language: 'cpp'
-)
-
 jansson = dependency('jansson', version: '>=2.10', required: false)
 jose = dependency('jose', version: '>=8')
+
+has_kem_api = false
+if not get_option('tang-pqc').disabled() and jansson.found()
+  cc = meson.get_compiler('c')
+  has_kem_api = cc.links('''
+#include <jose/jose.h>
+int main(void) {
+    json_auto_t *j = json_pack("{s:s}", "alg", "ML-KEM-768");
+    if (!jose_jwk_gen(NULL, j))
+        return 1;
+    json_auto_t *enc = jose_jwk_kem_enc(NULL, j);
+    return enc ? 0 : 1;
+}
+''', dependencies: [jose, jansson], name: 'ML-KEM KEM API support in jose')
+endif
+
+have_cpp = false
+if has_kem_api
+  have_cpp = add_languages('cpp', required: get_option('tang-pqc'))
+  if have_cpp
+    add_project_arguments(
+      '-Wall',
+      '-Wextra',
+      '-Werror',
+      '-Wchar-subscripts',
+      '-Wformat-security',
+      '-Wpointer-arith',
+      '-Wshadow',
+      '-Wsign-compare',
+      '-Wtype-limits',
+      '-Wunused-function',
+      '-Wno-missing-field-initializers',
+      '-Wno-unused-parameter',
+      '-Wno-unknown-pragmas',
+      '-D_DEFAULT_SOURCE',
+      '-D_POSIX_C_SOURCE=200112L',
+      '-DBINDIR="' + bindir + '"',
+      '-DCLEVIS_USER="' + get_option('user') + '"',
+      '-DCLEVIS_GROUP="' + get_option('group') + '"',
+      language: 'cpp'
+    )
+  endif
+elif get_option('tang-pqc').enabled()
+  error('tang-pqc pin is enabled but jose lacks ML-KEM KEM API support')
+endif
+
 a2x = find_program('a2x', required: false)
 
 bins = []

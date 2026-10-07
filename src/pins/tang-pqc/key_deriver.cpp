@@ -131,6 +131,8 @@ JsonPtr KeyDeriver::deriveEncKey(
     auto kemKBytes = JoseWrapper::base64UrlDecode(kemKBase64);
 
     auto ikm = buildIkm(ecXBytes, kemKBytes);
+    OPENSSL_cleanse(ecXBytes.data(), ecXBytes.size());
+    OPENSSL_cleanse(kemKBytes.data(), kemKBytes.size());
     auto info = buildInfo(kid, kemKid);
     auto derived = hkdfSha256(ikm, info);
 
@@ -141,6 +143,7 @@ JsonPtr KeyDeriver::deriveEncKey(
 
     std::string keyJson = "{\"alg\":\"A256GCM\",\"k\":\"" + kBase64
                         + "\",\"kty\":\"oct\"}";
+    OPENSSL_cleanse(&kBase64[0], kBase64.size());
     auto key = jsonParse(keyJson);
     OPENSSL_cleanse(&keyJson[0], keyJson.size());
     return key;

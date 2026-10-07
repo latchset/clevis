@@ -46,20 +46,9 @@ struct FreeDeleter {
     }
 };
 
-struct SecureFreeDeleter {
-    void operator()(char* s) const noexcept
-    {
-        if (s) {
-            OPENSSL_cleanse(s, std::strlen(s));
-            std::free(s);
-        }
-    }
-};
-
 using JsonPtr = std::unique_ptr<json_t, JsonDeleter>;
 using CStringPtr = std::unique_ptr<char, FreeDeleter>;
 using BufferPtr = std::unique_ptr<void, FreeDeleter>;
-using SecureStringPtr = std::unique_ptr<char, SecureFreeDeleter>;
 
 inline JsonPtr makeJsonPtr(json_t* j)
 {

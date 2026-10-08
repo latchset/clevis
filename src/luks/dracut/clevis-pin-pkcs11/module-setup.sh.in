@@ -58,6 +58,8 @@ install() {
         clevis-pkcs11-common \
         clevis-decrypt-pkcs11
 
+    inst_multiple -o /lib64/libpcsclite_real.so.1
+
     # Include libraries from configuration automatically
     . /usr/bin/clevis-pkcs11-common
     for file in $(clevis_get_module_path_from_pkcs11_config | sed -e 's@;@\n@g'); do

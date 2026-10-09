@@ -111,12 +111,14 @@ std::vector<uint8_t> KeyDeriver::buildInfo(
     auto labelLen = std::strlen(LABEL);
     auto suiteLen = std::strlen(SUITE);
     info.reserve(labelLen + VERSION_LEN + suiteLen
-                 + kid.size() + kemKid.size());
+                 + 8 + kid.size() + kemKid.size());
 
     info.insert(info.end(), LABEL, LABEL + labelLen);
     info.insert(info.end(), VERSION, VERSION + VERSION_LEN);
     info.insert(info.end(), SUITE, SUITE + suiteLen);
+    appendUint32BE(info, static_cast<uint32_t>(kid.size()));
     info.insert(info.end(), kid.begin(), kid.end());
+    appendUint32BE(info, static_cast<uint32_t>(kemKid.size()));
     info.insert(info.end(), kemKid.begin(), kemKid.end());
     return info;
 }

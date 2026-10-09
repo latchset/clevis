@@ -80,4 +80,33 @@ class PinError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+inline void cleanseJsonSecrets(json_t* j) noexcept
+{
+    if (!j)
+        return;
+
+    if (json_is_string(j)) {
+        auto s = json_string_value(j);
+        if (s)
+            OPENSSL_cleanse(
+                const_cast<char*>(s), std::strlen(s));
+        return;
+    }
+
+    if (json_is_object(j)) {
+        const char* key;
+        json_t* value;
+        json_object_foreach(j, key, value)
+            cleanseJsonSecrets(value);
+        return;
+    }
+
+    if (json_is_array(j)) {
+        size_t idx;
+        json_t* value;
+        json_array_foreach(j, idx, value)
+            cleanseJsonSecrets(value);
+    }
+}
+
 } // namespace clevis

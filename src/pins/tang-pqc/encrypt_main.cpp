@@ -303,6 +303,11 @@ std::string hybridEncrypt(
             plaintext.data(), plaintext.size()))
         throw PinError("JWE encryption failed");
 
+    cleanseJsonSecrets(clevisEcKey.get());
+    cleanseJsonSecrets(encEcKey.get());
+    cleanseJsonSecrets(kemSs.get());
+    cleanseJsonSecrets(encKey.get());
+
     return JoseWrapper::jweToCompact(jwe.get());
 }
 

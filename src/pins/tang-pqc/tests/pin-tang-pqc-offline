@@ -1,0 +1,72 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-pqc-common-test-functions
+
+on_exit() {
+    exit_status=$?
+    tang_stop "${TMP}"
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+url="http://localhost:${port}"
+adv="${TMP}/adv.jws"
+adv_kem="${TMP}/adv-kem.jws"
+
+# Save advertisements for offline use.
+tang_get_adv "${port}" "${adv}"
+tang_pqc_get_adv_kem "${port}" "${adv_kem}"
+
+# Offline binding with both adv and adv_kem as file paths.
+cfg="$(printf '{"url":"%s","adv":"%s","adv_kem":"%s"}' \
+       "$url" "$adv" "$adv_kem")"
+enc="$(echo -n "offline file" | clevis encrypt tang-pqc "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "offline file"
+
+# Offline binding with inline JSON advertisements.
+adv_json="$(cat "$adv")"
+adv_kem_json="$(cat "$adv_kem")"
+cfg="$(printf '{"url":"%s","adv":%s,"adv_kem":%s}' \
+       "$url" "$adv_json" "$adv_kem_json")"
+enc="$(echo -n "offline inline" | clevis encrypt tang-pqc "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "offline inline"
+
+# Providing adv only (without adv_kem) must fail.
+cfg="$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")"
+! echo -n "should fail" | clevis encrypt tang-pqc "$cfg"
+
+# Providing adv_kem only (without adv) must fail.
+cfg="$(printf '{"url":"%s","adv_kem":"%s"}' "$url" "$adv_kem")"
+! echo -n "should fail" | clevis encrypt tang-pqc "$cfg"

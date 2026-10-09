@@ -1,0 +1,57 @@
+#!/bin/bash
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+depends() {
+    echo clevis network
+    return 0
+}
+
+have_tang_pqc_bindings() {
+    . clevis-luks-common-functions
+    local dev bindings
+    for dev in $(clevis_devices_to_unlock "list-open-devices"); do
+        bindings="$(clevis luks list -d "${dev}" -p 2>/dev/null)" || :
+        if echo "${bindings}" | grep -qw tang-pqc; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+install() {
+    # shellcheck disable=SC2154 # $hostonly_cmdline and $initdir are dracut variables
+    if [ "${hostonly_cmdline}" = "yes" ] && have_tang_pqc_bindings; then
+        echo "rd.neednet=1" > "${initdir}/etc/cmdline.d/99clevis-pin-tang-pqc.conf"
+
+        if dracut_module_included "systemd"; then
+            # shellcheck disable=SC2154 # $systemdsystemunitdir is a dracut variable
+            mkdir -p "${initdir}/${systemdsystemunitdir}/clevis-luks-askpass.path.d"
+            cat > "${initdir}/${systemdsystemunitdir}/clevis-luks-askpass.path.d/network-online.conf" <<EOF
+[Unit]
+After=network-online.target
+Wants=network-online.target
+EOF
+        fi
+    fi
+
+    inst_multiple \
+	clevis-encrypt-tang-pqc \
+	clevis-decrypt-tang-pqc
+}

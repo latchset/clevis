@@ -214,14 +214,15 @@ std::string secureTransportRecover(
     auto [clevisTransportCt, clevisTransportKey] =
         JoseWrapper::encapsulate(hdr.tangKemPub.get());
 
-    auto clevisKemPubStr = jsonDump(clevisKemPub.get());
-    std::string innerPayload =
-        "{\"clevis_kem_ct\":\""
-        + hdr.clevisKemCt
-        + "\",\"clevis_kem_pub\":"
-        + clevisKemPubStr.get()
-        + ",\"ek_digest\":\""
-        + hdr.ekDigest + "\"}";
+    auto innerObj = makeJsonPtr(json_pack(
+        "{s:s, s:O, s:s}",
+        "clevis_kem_ct", hdr.clevisKemCt.c_str(),
+        "clevis_kem_pub", clevisKemPub.get(),
+        "ek_digest", hdr.ekDigest.c_str()));
+    if (!innerObj)
+        throw PinError("Failed to build inner payload");
+    auto innerPayloadDump = jsonDump(innerObj.get());
+    std::string innerPayload(innerPayloadDump.get());
 
     auto blobJwe = jsonParse(
         "{\"protected\":{\"alg\":\"dir\",\"enc\":\"A256GCM\"}}");
@@ -251,10 +252,17 @@ std::string secureTransportRecover(
     if (!kVal)
         throw PinError("Recovered enc_key missing 'k' field");
 
+    std::string result(kVal);
+
     OPENSSL_cleanse(&innerPayload[0], innerPayload.size());
     OPENSSL_cleanse(&encKeyJson[0], encKeyJson.size());
+    OPENSSL_cleanse(encKeyBytes.data(), encKeyBytes.size());
+    cleanseJsonSecrets(clevisKemPriv.get());
+    cleanseJsonSecrets(clevisTransportKey.get());
+    cleanseJsonSecrets(tangTransportKey.get());
+    cleanseJsonSecrets(encKeyObj.get());
 
-    return std::string(kVal);
+    return result;
 }
 
 std::string readCompactJwe()
@@ -346,6 +354,9 @@ int main(int argc, char* argv[])
             static_cast<std::streamsize>(plaintext.size()));
 
         OPENSSL_cleanse(plaintext.data(), plaintext.size());
+        cleanseJsonSecrets(ecKey.get());
+        cleanseJsonSecrets(ephemeral.get());
+        cleanseJsonSecrets(encKey.get());
         return 0;
 
     } catch (const PinError& e) {

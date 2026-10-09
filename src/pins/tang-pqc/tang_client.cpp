@@ -32,11 +32,24 @@ struct CurlDeleter {
 
 using CurlPtr = std::unique_ptr<CURL, CurlDeleter>;
 
+struct SlistDeleter {
+    void operator()(curl_slist* s) const noexcept
+    {
+        curl_slist_free_all(s);
+    }
+};
+
+using SlistPtr = std::unique_ptr<curl_slist, SlistDeleter>;
+
 size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp)
 {
-    auto& response = *static_cast<std::string*>(userp);
-    response.append(static_cast<char*>(contents), size * nmemb);
-    return size * nmemb;
+    try {
+        auto& response = *static_cast<std::string*>(userp);
+        response.append(static_cast<char*>(contents), size * nmemb);
+        return size * nmemb;
+    } catch (...) {
+        return 0;
+    }
 }
 
 CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
@@ -48,6 +61,8 @@ CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
     curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 0L);
+    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 30L);
 
     if (!tls.cacert.empty())
         curl_easy_setopt(curl.get(), CURLOPT_CAINFO,
@@ -94,10 +109,9 @@ std::string TangClient::httpPost(
     std::string fullUrl = url_ + path;
     auto curl = createCurl(fullUrl, tls_);
 
-    struct curl_slist* headers = nullptr;
     std::string ctHeader = "Content-Type: " + contentType;
-    headers = curl_slist_append(headers, ctHeader.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers);
+    SlistPtr headers(curl_slist_append(nullptr, ctHeader.c_str()));
+    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
 
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, body.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE,
@@ -108,7 +122,6 @@ std::string TangClient::httpPost(
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
 
     CURLcode res = curl_easy_perform(curl.get());
-    curl_slist_free_all(headers);
 
     if (res != CURLE_OK)
         throw PinError("HTTP POST failed: " + std::string(path)

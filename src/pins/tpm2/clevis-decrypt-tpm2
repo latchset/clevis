@@ -35,6 +35,36 @@ function on_exit() {
     fi
 }
 
+unseal_with_pcr_policy()
+{
+    local session="$TMP/policy.session"
+    local unsealed
+
+    if ! tpm2_startauthsession -Q \
+        --policy-session \
+        -g "$hash" \
+        -S "$session"; then
+        return 1
+    fi
+
+    if ! tpm2_policypcr -Q \
+        -S "$session" \
+        -l "$pcr_spec"; then
+        tpm2_flushcontext "$session" 2>/dev/null || true
+        return 1
+    fi
+
+    if ! unsealed="$(tpm2_unseal \
+        -c "$TMP/load.context" \
+        -p session:"$session")"; then
+        tpm2_flushcontext "$session" 2>/dev/null || true
+        return 1
+    fi
+
+    tpm2_flushcontext "$session" 2>/dev/null || true
+    printf '%s' "$unsealed"
+}
+
 [ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2
 
 if [ -t 0 ]; then
@@ -161,9 +191,21 @@ fi
 tpm2_flushcontext -t
 
 case "$TPM2TOOLS_VERSION" in
-    3) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-L $pcr_spec})" || fail=$?;;
-    4|5) jwk="$(tpm2_unseal -c "$TMP"/load.context ${pcr_spec:+-p pcr:$pcr_spec})" || fail=$?;;
-    *) fail=1;;
+    3)
+        jwk="$(tpm2_unseal -c "$TMP"/load.context \
+              ${pcr_spec:+-L $pcr_spec})" || fail=$?
+        ;;
+    4|5)
+        if [ -n "$pcr_spec" ]; then
+            jwk="$(unseal_with_pcr_policy)" || fail=$?
+        else
+            jwk="$(tpm2_unseal \
+                -c "$TMP"/load.context)" || fail=$?
+        fi
+        ;;
+    *)
+        fail=1
+        ;;
 esac
 if [ -n "$fail" ]; then
     echo "Unsealing jwk from TPM failed!" >&2

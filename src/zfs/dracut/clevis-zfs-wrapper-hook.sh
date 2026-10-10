@@ -1,7 +1,6 @@
-#!/bin/bash
-# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#!/bin/sh
 #
-# Copyright (c) 2024 Oldřich Jedlička
+# Copyright (c) 2026 Oldřich Jedlička
 #
 # Author: Oldřich Jedlička <oldium.pro@gmail.com>
 #
@@ -17,20 +16,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-# The TCSD may be started without the LUKS unlocker
-if [ -f @libexecdir@/clevis-luks-tpm1-functions ]; then
-    . @libexecdir@/clevis-luks-tpm1-functions
-    stop_tcsd
-fi
-
-[ -s /run/clevis.pid ] || exit 0
-
-. clevis-luks-common-functions
-
-pid=$(cat /run/clevis.pid)
-clevis_kill_pid $pid
-
-rm -f /run/clevis.pid
-rm -f /run/clevis-online
-rm -rf /run/cryptroot-ask-pipes
+# Replace zfs by the wrapper atomically, keeping the original hard linked
+# as zfs.clevis-orig
+zfs="$(command -v zfs)" && zfs="$(readlink -f "${zfs}")" \
+    && [ ! -e "${zfs}.clevis-orig" ] \
+    && cp /bin/clevis-zfs-wrapper "${zfs}.clevis-new" \
+    && ln "${zfs}" "${zfs}.clevis-orig" \
+    && mv -f "${zfs}.clevis-new" "${zfs}"
+unset zfs

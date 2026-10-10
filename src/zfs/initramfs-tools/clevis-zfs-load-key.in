@@ -1,7 +1,6 @@
 #!/bin/bash
-# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
 #
-# Copyright (c) 2024 Oldřich Jedlička
+# Copyright (c) 2026 Oldřich Jedlička
 #
 # Author: Oldřich Jedlička <oldium.pro@gmail.com>
 #
@@ -17,20 +16,23 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-# The TCSD may be started without the LUKS unlocker
-if [ -f @libexecdir@/clevis-luks-tpm1-functions ]; then
-    . @libexecdir@/clevis-luks-tpm1-functions
-    stop_tcsd
-fi
+. /scripts/functions
+. /scripts/clevis-functions
 
-[ -s /run/clevis.pid ] || exit 0
-
+. clevis-zfs-common-functions
 . clevis-luks-common-functions
 
-pid=$(cat /run/clevis.pid)
-clevis_kill_pid $pid
+root="$(zfs_get_prompt_encryptionroot "$1")" || exit 1
 
-rm -f /run/clevis.pid
-rm -f /run/clevis-online
-rm -rf /run/cryptroot-ask-pipes
+pins=$(zfs_read_used_pins "${root}")
+if [[ " $pins " == *" tang "* ]]; then
+    do_configure_networking
+fi
+if [[ " $pins " == *" tpm1 "* ]]; then
+    do_configure_tpm1
+fi
+
+key="$(zfs_recover_key "${root}")" && zfs_load_key "${root}" <<< "${key}" || exit 1
+log_success_msg "clevis: Unlocked ${root}"

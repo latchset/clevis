@@ -1009,7 +1009,7 @@ clevis_luks_update_key() {
     if [ -n "${in_place}" ]; then
         printf '%s' "${input}" | cryptsetup luksChangeKey "${DEV}" \
                                             --key-slot "${SLT}" \
-                                            --batch-mode \
+                                            --force-password --batch-mode \
                                             ${pbkdf_args} \
                                             ${extra_args}
         return

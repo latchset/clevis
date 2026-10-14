@@ -33,7 +33,6 @@ if [ -t 0 ]; then
 fi
 
 on_exit() {
-    rm -f "${PIN_FILE}"
     [ -d "${CLEVIS_PKCS11}" ] && rm -rf "${CLEVIS_PKCS11}"
 }
 
@@ -128,7 +127,6 @@ if ! jwk="$(CLEVIS_PKCS11_PIN="${PIN_value}" pkcs11-tool --login --decrypt --inp
     exit 1
 fi
 
-rm -rf "${PIN_FILE}" 2>/dev/null || :
 
 # Decrypt the data using the decrypted JWK.
 ( printf '%s' "${jwk}${hdr64}." ; cat ) | exec jose jwe dec --key=- --input=-

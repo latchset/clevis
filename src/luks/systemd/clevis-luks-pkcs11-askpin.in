@@ -107,7 +107,7 @@ do
             uri=$(clevis luks list -d "${mapped_device}" | awk -F '"uri":' '{print $2}' | awk -F '"' '{print $2}' | awk -F '"' '{print $1}')
             slot_opt=""
             if ! slot=$(clevis_get_pkcs11_final_slot_from_uri "${uri}"); then
-                echo "Could not find slot for uri:${uri}" >&2
+                echo "Could not find slot for uri:$(clevis_sanitize_pkcs11_uri "${uri}")" >&2
             else
                 slot_opt="--slot-index ${slot}"
             fi

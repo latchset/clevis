@@ -126,7 +126,7 @@ if ! jwk="$(CLEVIS_PKCS11_PIN="${PIN_value}" pkcs11-tool --login --decrypt --inp
     echo "Invalid PIN?" >&2
     exit 1
 fi
-
+unset PIN_value
 
 # Decrypt the data using the decrypted JWK.
 ( printf '%s' "${jwk}${hdr64}." ; cat ) | exec jose jwe dec --key=- --input=-

@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <linux/prctl.h>
@@ -27,9 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
-#include <sys/un.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #ifdef GIT_VERSION
@@ -56,14 +58,16 @@ typedef struct {
 } key_entry_t;
 key_entry_t keys[MAX_ENTRIES];
 uint16_t entry_counter = 0;
-uint8_t thread_loop = 1;
+volatile sig_atomic_t thread_loop = 1;
 uint8_t control_thread_info = 0;
 pthread_mutex_t mutex;
 FILE* logfile = NULL;
+static char g_sock_file[1024];
+static char g_sock_control_file[1024];
 
 static void
 get_control_socket_name(const char* file_sock, char* control_sock, uint32_t control_sock_len) {
-    char *p = strstr(file_sock, ".sock");
+    const char *p = strstr(file_sock, ".sock");
     size_t prefix_length = strlen(file_sock) - strlen(p);
     memset(control_sock, 0, control_sock_len);
     memcpy(control_sock, file_sock, prefix_length);
@@ -140,6 +144,18 @@ static void* control_thread(void *targ) {
             fprintf(logfile, "Control accept\n");
             pthread_exit("control accept");
         }
+        struct ucred ctrl_cred;
+        socklen_t ctrl_cred_len = sizeof(ctrl_cred);
+        if (getsockopt(a, SOL_SOCKET, SO_PEERCRED, &ctrl_cred, &ctrl_cred_len) == -1) {
+            perror("control getsockopt SO_PEERCRED");
+            close(a);
+            continue;
+        }
+        if (ctrl_cred.uid != 0) {
+            fprintf(logfile, "Rejected control connection from UID %u\n", ctrl_cred.uid);
+            close(a);
+            continue;
+        }
         memset(control_msg, 0, MAX_CONTROL_MSG);
         if((r = recv(a, control_msg, MAX_CONTROL_MSG, 0)) < 0) {
             perror("recv error");
@@ -186,12 +202,11 @@ static void dump_wide_version(void) {
     printf("\n");
 }
 
-static void int_handler(int s) {
-    if(logfile) {
-        fprintf(logfile, "Closing, received signal:[%d]\n", s);
-        fclose(logfile);
-    }
-    exit(EXIT_FAILURE);
+static void int_handler(int sig) {
+    (void)sig;
+    unlink(g_sock_file);
+    unlink(g_sock_control_file);
+    _exit(EXIT_FAILURE);
 }
 
 int main(int argc, char* argv[]) {
@@ -200,8 +215,6 @@ int main(int argc, char* argv[]) {
     socklen_t pathlen;
     char key[MAX_KEY];
     char lfile[MAX_PATH];
-    char sock_file[MAX_PATH];
-    char sock_control_file[MAX_PATH];
     socklen_t len = sizeof(accept_addr);
     uint8_t wait_control_thread = 1;
     uint32_t iterations = DEFAULT_MAX_ITERATIONS;
@@ -209,8 +222,8 @@ int main(int argc, char* argv[]) {
     uint32_t ic = 0;
     uint32_t time = 0;
     memset(lfile, 0, MAX_PATH);
-    memset(sock_file, 0, MAX_PATH);
-    memset(sock_control_file, 0, MAX_PATH);
+    memset(g_sock_file, 0, sizeof(g_sock_file));
+    memset(g_sock_control_file, 0, sizeof(g_sock_control_file));
     memset(key, 0, MAX_KEY);
 
     signal(SIGTERM | SIGKILL, int_handler);
@@ -222,11 +235,11 @@ int main(int argc, char* argv[]) {
         int ret_code = EXIT_FAILURE;
         switch (opt) {
         case 'c':
-            strncpy(sock_control_file, optarg, MAX_PATH - 1);
+            strncpy(g_sock_control_file, optarg, sizeof(g_sock_control_file) - 1);
             break;
         case 'f':
-            strncpy(sock_file, optarg, MAX_PATH - 1);
-            unlink(sock_file);
+            strncpy(g_sock_file, optarg, sizeof(g_sock_file) - 1);
+            unlink(g_sock_file);
             break;
         case 'k':
             strncpy(key, optarg, MAX_KEY - 1);
@@ -261,29 +274,30 @@ int main(int argc, char* argv[]) {
         logfile = stdout;
         strncpy(lfile, "stdout", MAX_PATH - 1);
     }
-    if(0 == strlen(sock_file)) {
+    if(0 == strlen(g_sock_file)) {
         fprintf(logfile, "\nSocket file name must be provided\n");
         usage(argv[0], EXIT_FAILURE);
     }
-    if(0 == strlen(sock_control_file) ) {
-        get_control_socket_name(sock_file, sock_control_file, MAX_PATH);
+    if(0 == strlen(g_sock_control_file) ) {
+        get_control_socket_name(g_sock_file, g_sock_control_file, sizeof(g_sock_control_file));
     }
     fprintf(logfile, "LOG FILE: [%s]\n", lfile);
-    fprintf(logfile, "FILE: [%s]\n", sock_file);
+    fprintf(logfile, "FILE: [%s]\n", g_sock_file);
     fprintf(logfile, "START DELAY: [%u] seconds\n", startdelay);
     fprintf(logfile, "TRY ITERATIONS: [%u]\n", iterations);
     dump_version();
 
     pthread_t thid;
     void* tret;
-    if (pthread_create(&thid, NULL, control_thread, sock_control_file) != 0) {
+    umask(0077);
+    if (pthread_create(&thid, NULL, control_thread, g_sock_control_file) != 0) {
         perror("pthread_create() error");
         goto efailure;
     }
 
     memset(&sock_addr, 0, sizeof(sock_addr));
     sock_addr.sun_family = AF_UNIX;
-    strncpy(sock_addr.sun_path, sock_file, sizeof(sock_addr.sun_path)-1);
+    strncpy(sock_addr.sun_path, g_sock_file, sizeof(sock_addr.sun_path)-1);
     s = socket(AF_UNIX, SOCK_STREAM, 0);
     if (s == -1) {
         perror("socket");
@@ -315,6 +329,18 @@ int main(int argc, char* argv[]) {
         if (a == -1) {
             perror("accept");
             goto efailure;
+        }
+        struct ucred cred;
+        socklen_t cred_len = sizeof(cred);
+        if (getsockopt(a, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) == -1) {
+            perror("getsockopt SO_PEERCRED");
+            close(a);
+            continue;
+        }
+        if (cred.uid != 0) {
+            fprintf(logfile, "Rejected connection from UID %u\n", cred.uid);
+            close(a);
+            continue;
         }
         memset(&peer_addr, 0, sizeof(peer_addr));
         len = sizeof(peer_addr);
@@ -370,14 +396,18 @@ int main(int argc, char* argv[]) {
         ic++;
     }
     fprintf(logfile, "Closing (max tries reached)\n");
-    pthread_kill(thid, SIGKILL);
     thread_loop = 0;
+    pthread_cancel(thid);
     if (pthread_join(thid, &tret) != 0) {
         perror("pthread_join error");
         goto efailure;
     }
+    unlink(g_sock_file);
+    unlink(g_sock_control_file);
     return EXIT_SUCCESS;
 efailure:
+    unlink(g_sock_file);
+    unlink(g_sock_control_file);
     if(logfile) {
         fclose(logfile);
         logfile = NULL;

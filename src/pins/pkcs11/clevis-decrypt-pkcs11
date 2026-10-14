@@ -33,8 +33,8 @@ if [ -t 0 ]; then
 fi
 
 on_exit() {
-    [ -d "${CLEVIS_PKCS11}" ] || exit 0
-    rm -rf "${CLEVIS_PKCS11}"
+    rm -f "${PIN_FILE}"
+    [ -d "${CLEVIS_PKCS11}" ] && rm -rf "${CLEVIS_PKCS11}"
 }
 
 unset CLEVIS_PKCS11

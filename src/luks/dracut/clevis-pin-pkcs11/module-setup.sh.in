@@ -49,7 +49,6 @@ install() {
         /usr/lib64/pkcs11/opensc-pkcs11.so \
         /usr/lib64/libopensc.so* \
         /etc/opensc.conf \
-        /usr/lib64/ossl-modules/legacy.so \
         /lib64/libpcsclite.so.1 \
         @libexecdir@/clevis-luks-pkcs11-askpass \
         @libexecdir@/clevis-luks-pkcs11-askpin \

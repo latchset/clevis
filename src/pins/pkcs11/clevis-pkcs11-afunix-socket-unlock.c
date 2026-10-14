@@ -226,7 +226,12 @@ int main(int argc, char* argv[]) {
     memset(g_sock_control_file, 0, sizeof(g_sock_control_file));
     memset(key, 0, MAX_KEY);
 
-    signal(SIGTERM | SIGKILL, int_handler);
+    struct sigaction sa = { .sa_handler = int_handler, .sa_flags = 0 };
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+    signal(SIGPIPE, SIG_IGN);
     prctl(PR_SET_DUMPABLE, 0);
     for (uint16_t e = 0; e < MAX_ENTRIES; e++) {
         memset(&keys[e], 0, sizeof(key_entry_t));

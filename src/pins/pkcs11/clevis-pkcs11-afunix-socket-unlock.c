@@ -83,38 +83,17 @@ get_control_socket_name(const char* file_sock, char* control_sock, uint32_t cont
     return 0;
 }
 
-static void insert_device(const char* dev) {
-    pthread_mutex_lock(&mutex);
-    if(MAX_ENTRIES == entry_counter) {
-        pthread_mutex_unlock(&mutex);
-        perror("No more entries accepted\n");
-        return;
-    }
-    strncpy(keys[entry_counter].dev, dev, MAX_DEVICE);
-    pthread_mutex_unlock(&mutex);
-}
-
-static void insert_key(const char* key) {
-    pthread_mutex_lock(&mutex);
-    if(MAX_ENTRIES == entry_counter) {
-        pthread_mutex_unlock(&mutex);
-        perror("No more entries accepted\n");
-        return;
-    }
-    strncpy(keys[entry_counter++].key, key, MAX_KEY);
-    pthread_mutex_unlock(&mutex);
-}
-
 static const char* get_key(const char* dev) {
-    for(int e = 0; e < entry_counter; e++) {
-        pthread_mutex_lock(&mutex);
-        if(0 == strcmp(keys[e].dev, dev)) {
-            pthread_mutex_unlock(&mutex);
-            return keys[e].key;
+    const char *result = NULL;
+    pthread_mutex_lock(&mutex);
+    for (int e = 0; e < entry_counter; e++) {
+        if (strcmp(keys[e].dev, dev) == 0) {
+            result = keys[e].key;
+            break;
         }
-        pthread_mutex_unlock(&mutex);
     }
-    return NULL;
+    pthread_mutex_unlock(&mutex);
+    return result;
 }
 
 static void* control_thread(void *targ) {
@@ -172,21 +151,24 @@ static void* control_thread(void *targ) {
         } else {
             control_msg[r] = '\0';
         }
-        char *t, *saveptr;
-        int is_device = 1;
-        for (t = strtok_r(control_msg, ",", &saveptr); t;
-             t = strtok_r(NULL, ",", &saveptr)) {
-            if (is_device) {
-                fprintf(logfile, "Adding device:%s\n", t);
-                insert_device(t);
-                is_device = 0;
-            } else {
-                insert_key(t);
-                // As long as some key is inserted, we store it
-                // in the control_thread_info variable
-                control_thread_info = 1;
-            }
+        char *sep = strchr(control_msg, ',');
+        if (!sep) {
+            fprintf(logfile, "Invalid control message (no delimiter)\n");
+            close(a);
+            continue;
         }
+        *sep = '\0';
+        fprintf(logfile, "Adding device:%s\n", control_msg);
+        pthread_mutex_lock(&mutex);
+        if (entry_counter < MAX_ENTRIES) {
+            strncpy(keys[entry_counter].dev, control_msg, MAX_DEVICE);
+            strncpy(keys[entry_counter].key, sep + 1, MAX_KEY);
+            entry_counter++;
+            control_thread_info = 1;
+        } else {
+            fprintf(logfile, "No more entries accepted\n");
+        }
+        pthread_mutex_unlock(&mutex);
         close(a);
     }
     return NULL;

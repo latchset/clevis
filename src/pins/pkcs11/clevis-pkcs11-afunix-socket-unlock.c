@@ -274,6 +274,7 @@ int main(int argc, char* argv[]) {
         logfile = stdout;
         strncpy(lfile, "stdout", MAX_PATH - 1);
     }
+    setvbuf(logfile, NULL, _IONBF, 0);
     if(0 == strlen(g_sock_file)) {
         fprintf(logfile, "\nSocket file name must be provided\n");
         usage(argv[0], EXIT_FAILURE);
@@ -404,6 +405,9 @@ int main(int argc, char* argv[]) {
     }
     unlink(g_sock_file);
     unlink(g_sock_control_file);
+    if(logfile && logfile != stdout) {
+        fclose(logfile);
+    }
     return EXIT_SUCCESS;
 efailure:
     unlink(g_sock_file);

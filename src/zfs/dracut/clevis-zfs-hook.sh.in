@@ -1,0 +1,57 @@
+#!/bin/bash
+
+
+# import the libs now that we know the pool imported
+[ -f /lib/dracut-lib.sh ] && dracutlib=/lib/dracut-lib.sh
+[ -f /usr/lib/dracut/modules.d/99base/dracut-lib.sh ] && dracutlib=/usr/lib/dracut/modules.d/99base/dracut-lib.sh
+# shellcheck source=./lib-zfs.sh.in
+. "$dracutlib"
+
+# load the kernel command line vars
+root="$(getarg root=)"
+# If root is not ZFS= or zfs: or rootfs is not zfs|auto then we are not supposed to handle it.
+[ "${root##zfs:}" = "${root}" ] && [ "${root##ZFS=}" = "${root}" ] && [ "${fstype}" != "zfs" ] && [ "${fstype}" != "auto" ] && exit 0
+
+# There is a race between the zpool import and the pre-mount hooks, so we wait for a pool to be imported
+systemctl start zfs-import.target
+read -r _ < <(zpool list -H) || exit 1
+
+# run this after import as zfs-import-cache/scan service is confirmed good
+# we do not overwrite the ${root} variable, but create a new one, BOOTFS, to hold the dataset
+if [ "${root}" = "zfs:AUTO" ] ; then
+    BOOTFS=
+    while read -r line; do
+        if [[ $line != - ]]; then
+            BOOTFS=$line
+            break
+        fi
+    done < <(zpool list -H -o bootfs)
+else
+    BOOTFS="${root##zfs:}"
+    BOOTFS="${BOOTFS##ZFS=}"
+fi
+
+# if pool encryption is active and the zfs command understands '-o encryption'
+ROOTPOOL="${BOOTFS%%/*}"
+if [ "$(zpool list -H -o feature@encryption "${ROOTPOOL}")" != 'active' ]; then
+    exit 0
+fi
+
+# if the root dataset has encryption enabled
+ENCRYPTIONROOT="$(zfs get -H -o value encryptionroot "${BOOTFS}")"
+if [ "${ENCRYPTIONROOT}" = "-" ]; then
+    exit 0
+fi
+
+# continue only if the key needs to be loaded
+if [ "$(zfs get -H -o value keystatus "${ENCRYPTIONROOT}")" != "unavailable" ]; then
+    exit 0
+fi
+
+# decrypt them
+TRY_COUNT=5
+while [ $TRY_COUNT -gt 0 ]; do
+    clevis-zfs-unlock -d "${ENCRYPTIONROOT}" && break
+    TRY_COUNT=$((TRY_COUNT - 1))
+    echo >&2 "Attempting to unlock with clevis-zfs-unlock; ${TRY_COUNT} attempts left..."
+done

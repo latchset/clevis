@@ -1,0 +1,96 @@
+#!/bin/bash
+#
+# Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2024 Joel Low
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+
+PREREQ=""
+prereqs()
+{
+     echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+     prereqs
+     exit 0
+     ;;
+esac
+
+. @initramfstoolsdir@/hook-functions
+
+die() {
+    code="$1"
+    msg="$2"
+    echo "    (ERROR): $msg" >&2
+    exit $1
+}
+
+find_binary() {
+    bin_name="$1"
+    resolved=$(command -v ${bin_name})
+    [ -z "$resolved" ] && die 1 "Unable to find ${bin_name}"
+    echo "$resolved"
+}
+
+
+copy_exec @bindir@/clevis-decrypt-tang || die 1 "@bindir@/clevis-decrypt-tang not found"
+copy_exec @bindir@/clevis-decrypt-sss || die 1 "@bindir@/clevis-decrypt-sss not found"
+copy_exec @bindir@/clevis-decrypt-null || die 1 "@bindir@/clevis-decrypt-null not found"
+copy_exec @bindir@/clevis-decrypt || die 1 "@bindir@/clevis-decrypt not found"
+copy_exec @libexecdir@/clevis-zfs-common || die 1 "@libexecdir@/clevis-zfs-common not found"
+copy_exec @bindir@/clevis-zfs-unlock || die 1 "@bindir@/clevis-zfs-unlock not found"
+if [ -x @bindir@/clevis-decrypt-tpm2 ]; then
+    copy_exec @bindir@/clevis-decrypt-tpm2 || die 1 "@bindir@/clevis-decrypt-tpm2 not found"
+    tpm2_creatprimary_bin=$(find_binary "tpm2_createprimary")
+    tpm2_unseal_bin=$(find_binary "tpm2_unseal")
+    tpm2_load_bin=$(find_binary "tpm2_load")
+    tpm2_flushcontext=$(find_binary "tpm2_flushcontext")
+    copy_exec "${tpm2_creatprimary_bin}" || die 1 "Unable to copy ${tpm2_creatprimary_bin}" 
+    copy_exec "${tpm2_unseal_bin}" || die 1 "Unable to copy ${tpm2_unseal_bin}"
+    copy_exec "${tpm2_load_bin}" || die 1 "Unable to copy ${tpm2_load_bin}"
+    copy_exec "${tpm2_flushcontext}" || die 1 "Unable to copy ${tpm2_flushcontext}"
+    for _LIBRARY in @libdir@/libtss2-tcti-device.so*; do
+        if [ -e "${_LIBRARY}" ]; then
+            copy_exec "${_LIBRARY}" || die 2 "Unable to copy ${_LIBRARY}"
+        fi
+    done
+    manual_add_modules tpm_crb
+    manual_add_modules tpm_tis
+fi
+
+
+jose_bin=$(find_binary "jose")
+copy_exec "${jose_bin}" || die 2 "Unable to copy ${jose_bin}"
+
+
+copy_exec @bindir@/clevis || die 1 "@bindir@/clevis not found"
+curl_bin=$(find_binary "curl")
+awk_bin=$(find_binary "awk")
+bash_bin=$(find_binary "bash")
+copy_exec "${curl_bin}" || die 2 "Unable to copy ${curl_bin} to initrd image"
+copy_exec "${awk_bin}" || die 2 "Unable to copy ${awk_bin} to initrd image"
+copy_exec "${bash_bin}" || die 2 "Unable to copy ${bash_bin} to initrd image"
+
+# Copy latest versions of shared objects needed for DNS resolution
+for so in $(ldconfig -p | sed -nr 's/^\s*libnss_files\.so\.[0-9]+\s.*=>\s*//p'); do
+  copy_exec "${so}"
+done
+for so in $(ldconfig -p | sed -nr 's/^\s*libnss_dns\.so\.[0-9]+\s.*=>\s*//p'); do
+  copy_exec "${so}"
+done

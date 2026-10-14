@@ -118,8 +118,8 @@ if ! PIN_value="$(clevis_get_pin_value_from_uri ${uri})"; then
     PIN_value=$(cat "${PIN_FILE}" 2>/dev/null || :)
 fi
 
-if ! jwk="$(pkcs11-tool --login --decrypt --input-file ${ENC} \
-            -p ${PIN_value} ${module_opt} ${mechanism_option} ${slot_opt} 2>${ERR})" \
+if ! jwk="$(CLEVIS_PKCS11_PIN="${PIN_value}" pkcs11-tool --login --decrypt --input-file ${ENC} \
+            -p env:CLEVIS_PKCS11_PIN ${module_opt} ${mechanism_option} ${slot_opt} 2>${ERR})" \
             || [ -z "${jwk}" ]; then
     cat "${ERR}" >&2
     echo "Unable to decrypt the JWK" >&2

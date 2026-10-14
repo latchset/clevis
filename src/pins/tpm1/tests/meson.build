@@ -50,7 +50,7 @@ tcsd_patch_src = configure_file(
   configuration: patch_data
 )
 
-libdl_dep = dependency('dl', required: true)
+libdl_dep = dependency('dl', required: false)
 tcsd_patch = shared_library('tcsd-patch', tcsd_patch_src,
   dependencies: libdl_dep,
   install: false)

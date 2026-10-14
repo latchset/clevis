@@ -19,6 +19,13 @@
 . clevis-luks-common-functions
 . clevis-pkcs11-common
 
+CLEVIS_PKCS11_PIN_FILE="/run/systemd/clevis-pkcs11.pin"
+
+on_exit() {
+    rm -f "${CLEVIS_PKCS11_PIN_FILE}"
+}
+trap 'on_exit' EXIT
+
 pkcs11_device=""
 dracut_mode=false
 retry_mode=false
@@ -125,7 +132,9 @@ do
                 pin=$(systemd-ask-password "${msg}Please, insert PIN for ${model} (${uuid}):")
             fi
             # Get key from PKCS11 pin here and feed AF_UNIX socket program
-            (umask 0077; echo "${pin}" > /run/systemd/clevis-pkcs11.pin)
+            _pin_tmp=$(mktemp "${CLEVIS_PKCS11_PIN_FILE}.XXXXXX")
+            echo "${pin}" > "${_pin_tmp}"
+            mv -f "${_pin_tmp}" "${CLEVIS_PKCS11_PIN_FILE}"
             if ! passphrase=$(clevis_luks_unlock_device "${mapped_device}") || [ -z "${passphrase}" ]; then
                 echo "Could not unlock device:${mapped_device}" >&2
                 msg="$(get_pkcs11_error)"

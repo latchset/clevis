@@ -59,21 +59,28 @@ typedef struct {
 key_entry_t keys[MAX_ENTRIES];
 uint16_t entry_counter = 0;
 volatile sig_atomic_t thread_loop = 1;
-uint8_t control_thread_info = 0;
+volatile sig_atomic_t control_thread_info = 0;
 pthread_mutex_t mutex;
 FILE* logfile = NULL;
 static char g_sock_file[1024];
 static char g_sock_control_file[1024];
 
-static void
+static int
 get_control_socket_name(const char* file_sock, char* control_sock, uint32_t control_sock_len) {
     const char *p = strstr(file_sock, ".sock");
+    if (!p) {
+        fprintf(stderr, "Socket file must contain '.sock' or -c must be specified\n");
+        return -1;
+    }
     size_t prefix_length = strlen(file_sock) - strlen(p);
     memset(control_sock, 0, control_sock_len);
     memcpy(control_sock, file_sock, prefix_length);
-    if (prefix_length + strlen(".control.sock") < control_sock_len) {
-        strcat(control_sock + prefix_length, ".control.sock");
+    if (prefix_length + strlen(".control.sock") >= control_sock_len) {
+        fprintf(stderr, "Control socket path too long\n");
+        return -1;
     }
+    strcat(control_sock + prefix_length, ".control.sock");
+    return 0;
 }
 
 static void insert_device(const char* dev) {
@@ -232,7 +239,10 @@ int main(int argc, char* argv[]) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGHUP, &sa, NULL);
     signal(SIGPIPE, SIG_IGN);
-    prctl(PR_SET_DUMPABLE, 0);
+    if (prctl(PR_SET_DUMPABLE, 0) == -1) {
+        perror("prctl PR_SET_DUMPABLE");
+        exit(EXIT_FAILURE);
+    }
     for (uint16_t e = 0; e < MAX_ENTRIES; e++) {
         memset(&keys[e], 0, sizeof(key_entry_t));
     }
@@ -285,7 +295,8 @@ int main(int argc, char* argv[]) {
         usage(argv[0], EXIT_FAILURE);
     }
     if(0 == strlen(g_sock_control_file) ) {
-        get_control_socket_name(g_sock_file, g_sock_control_file, sizeof(g_sock_control_file));
+        if (get_control_socket_name(g_sock_file, g_sock_control_file, sizeof(g_sock_control_file)) == -1)
+            exit(EXIT_FAILURE);
     }
     fprintf(logfile, "LOG FILE: [%s]\n", lfile);
     fprintf(logfile, "FILE: [%s]\n", g_sock_file);

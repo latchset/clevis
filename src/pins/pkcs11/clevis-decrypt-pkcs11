@@ -129,4 +129,7 @@ fi
 unset PIN_value
 
 # Decrypt the data using the decrypted JWK.
-( printf '%s' "${jwk}${hdr64}." ; cat ) | exec jose jwe dec --key=- --input=-
+# Strip trailing newlines/carriage returns that callers (e.g. echo)
+# may append — jose jwe dec returns non-zero if trailing non-base64url
+# data is present on stdin after the compact JWE.
+( printf '%s' "${jwk}${hdr64}." ; tr -d '\n\r' ) | exec jose jwe dec --key=- --input=-

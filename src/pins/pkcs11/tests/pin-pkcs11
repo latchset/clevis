@@ -55,6 +55,20 @@ sword=$(echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
 | clevis decrypt)
 test "${sword}" == "${SECRET_WORD}"
 
+# Test PIN-file fallback: encrypt without pin-value in the URI, then
+# decrypt with the PIN supplied via a file (exercises the env: prefix
+# path added by CVE-2026-109971 and the PIN-file read at decrypt:118).
+PIN_TMP="${TMP}/test-pin-file"
+(umask 0077; echo -n "${PIN}" > "${PIN_TMP}")
+
+jwe=$(echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
+"{\"uri\":\"pkcs11:module-path=${P11LIB}\"\
+,\"mechanism\":\"${SUPPORTED_MECHANISM}\"}")
+
+sword=$(echo "${jwe}" | CLEVIS_PKCS11_PIN_FILE="${PIN_TMP}" clevis decrypt)
+test "${sword}" == "${SECRET_WORD}"
+rm -f "${PIN_TMP}"
+
 ! echo "${SECRET_WORD}" | clevis encrypt pkcs11 \
 "{\"uri\":\"pkcs11:module-path=${P11LIB}?pin-value=${PIN}\" \
 ,\"mechanism\":\"INVALID_MECHANISM\"}" 2>/dev/null

@@ -165,9 +165,10 @@ static void* control_thread(void *targ) {
         } else {
             control_msg[r] = '\0';
         }
-        char* t = control_msg;
+        char *t, *saveptr;
         int is_device = 1;
-        while((t = strtok(t, ","))) {
+        for (t = strtok_r(control_msg, ",", &saveptr); t;
+             t = strtok_r(NULL, ",", &saveptr)) {
             if (is_device) {
                 fprintf(logfile, "Adding device:%s\n", t);
                 insert_device(t);
@@ -178,7 +179,6 @@ static void* control_thread(void *targ) {
                 // in the control_thread_info variable
                 control_thread_info = 1;
             }
-            t = strtok(NULL, ",");
         }
         close(a);
     }
@@ -366,14 +366,11 @@ int main(int argc, char* argv[]) {
         strncpy(peer, peer_addr.sun_path + 1, pathlen - 1);
         fprintf(logfile, "Try: [%u/%u]\n", ic, iterations);
         fprintf(logfile, "getpeername sun_path(peer): [%s]\n", peer);
-        char* t = peer;
+        char *t, *saveptr;
         const char* unlocking_device = "";
-        while((t = strtok(t, "/"))) {
-            if(t) {
-                unlocking_device = t;
-            }
-            t = strtok(NULL, ",");
-        }
+        for (t = strtok_r(peer, "/", &saveptr); t;
+             t = strtok_r(NULL, "/", &saveptr))
+            unlocking_device = t;
         fprintf(logfile, "Trying to unlock device:[%s]\n", unlocking_device);
         // Now we have all the information in peer, something like:
         // \099226072855ae2d8/cryptsetup/luks-6e38d5e1-7f83-43cc-819a-7416bcbf9f84

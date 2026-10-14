@@ -161,3 +161,4 @@ for ((ix=${#devices_array[*]}-1; ix>=0; ix--))
 do
     echo -n "${devices_array[$ix]}" | socat UNIX-CONNECT:/run/systemd/clevis-pkcs11.control.sock -
 done
+unset pin passphrase devices_array

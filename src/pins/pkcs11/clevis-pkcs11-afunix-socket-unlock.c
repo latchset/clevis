@@ -183,8 +183,8 @@ static void* control_thread(void *targ) {
 }
 
 static int usage(const char* name, uint32_t ecode) {
-    printf("\nUsage:\n\t%s -f socket_file [-c control_socket] [-k key] "
-           "[-l logfile] [-t iterations, 3 by default]"
+    printf("\nUsage:\n\t%s -f socket_file [-c control_socket] "
+           "[-l logfile] [-t iterations, 3 by default] "
            "[-s start delay, 0s by default] [-v(version)] [-h(help)]\n\n", name);
     exit(ecode);
 }
@@ -210,7 +210,6 @@ int main(int argc, char* argv[]) {
     int s, a, opt;
     struct sockaddr_un sock_addr, accept_addr, peer_addr;
     socklen_t pathlen;
-    char key[MAX_KEY];
     char lfile[MAX_PATH];
     socklen_t len = sizeof(accept_addr);
     uint8_t wait_control_thread = 1;
@@ -221,7 +220,6 @@ int main(int argc, char* argv[]) {
     memset(lfile, 0, MAX_PATH);
     memset(g_sock_file, 0, sizeof(g_sock_file));
     memset(g_sock_control_file, 0, sizeof(g_sock_control_file));
-    memset(key, 0, MAX_KEY);
 
     struct sigaction sa = { .sa_handler = int_handler, .sa_flags = 0 };
     sigemptyset(&sa.sa_mask);
@@ -236,7 +234,7 @@ int main(int argc, char* argv[]) {
     for (uint16_t e = 0; e < MAX_ENTRIES; e++) {
         memset(&keys[e], 0, sizeof(key_entry_t));
     }
-    while ((opt = getopt(argc, argv, "c:f:k:i:l:s:t:hv")) != -1) {
+    while ((opt = getopt(argc, argv, "c:f:i:l:s:t:hv")) != -1) {
         int ret_code = EXIT_FAILURE;
         switch (opt) {
         case 'c':
@@ -245,9 +243,6 @@ int main(int argc, char* argv[]) {
         case 'f':
             strncpy(g_sock_file, optarg, sizeof(g_sock_file) - 1);
             unlink(g_sock_file);
-            break;
-        case 'k':
-            strncpy(key, optarg, MAX_KEY - 1);
             break;
         case 'l':
             strncpy(lfile, optarg, MAX_PATH - 1);
@@ -381,23 +376,16 @@ int main(int argc, char* argv[]) {
         // NUL random /cryptsetup/ DEVICE
         // If we need to unencrypt device, pick it from peer information
         // To return the key, just respond to socket returned by accept
-        if(strlen(key)) {
-            if (send(a, key, strlen(key), 0) < 0) {
+        const char* entry_key;
+        if((entry_key = get_key(unlocking_device))) {
+            if (send(a, entry_key, strlen(entry_key), 0) < 0) {
                 perror("key send error");
                 goto efailure;
             }
+            fprintf(logfile, "Sending passphrase to device:[%s]\n",
+                    unlocking_device);
         } else {
-            const char* entry_key;
-            if((entry_key = get_key(unlocking_device))) {
-                if (send(a, entry_key, strlen(entry_key), 0)< 0) {
-                    perror("key entry send error");
-                    goto efailure;
-                }
-                fprintf(logfile, "Sending passphrase to device:[%s]\n",
-                        unlocking_device);
-            } else {
-                fprintf(logfile, "Device not found: [%s]\n", unlocking_device);
-            }
+            fprintf(logfile, "Device not found: [%s]\n", unlocking_device);
         }
         close(a);
         ic++;

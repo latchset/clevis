@@ -77,7 +77,7 @@ if ! clevis_valid_pkcs11_uri "${uri}"; then
 fi
 
 module_opt=""
-if module_path="$(clevis_get_module_path_from_uri ${uri})"; then
+if module_path="$(clevis_get_module_path_from_uri "${uri}")"; then
      module_opt="--module ${module_path}"
 fi
 
@@ -113,12 +113,12 @@ if ! printf '%s' "${enc_jwk}" | jose b64 dec -i- > "${ENC}"  2>"${ERR}"; then
 fi
 
 PIN_value=""
-if ! PIN_value="$(clevis_get_pin_value_from_uri ${uri})"; then
+if ! PIN_value="$(clevis_get_pin_value_from_uri "${uri}")"; then
     PIN_value=$(cat "${PIN_FILE}" 2>/dev/null || :)
 fi
 
-if ! jwk="$(CLEVIS_PKCS11_PIN="${PIN_value}" pkcs11-tool --login --decrypt --input-file ${ENC} \
-            -p env:CLEVIS_PKCS11_PIN ${module_opt} ${mechanism_option} ${slot_opt} 2>${ERR})" \
+if ! jwk="$(CLEVIS_PKCS11_PIN="${PIN_value}" pkcs11-tool --login --decrypt --input-file "${ENC}" \
+            -p env:CLEVIS_PKCS11_PIN ${module_opt} ${mechanism_option} ${slot_opt} 2>"${ERR}")" \
             || [ -z "${jwk}" ]; then
     cat "${ERR}" >&2
     echo "Unable to decrypt the JWK" >&2

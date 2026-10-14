@@ -16,6 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <linux/prctl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
@@ -24,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/un.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -154,7 +157,6 @@ static void* control_thread(void *targ) {
                 insert_device(t);
                 is_device = 0;
             } else {
-                fprintf(logfile, "Adding key:%s\n", t);
                 insert_key(t);
                 // As long as some key is inserted, we store it
                 // in the control_thread_info variable
@@ -212,6 +214,7 @@ int main(int argc, char* argv[]) {
     memset(key, 0, MAX_KEY);
 
     signal(SIGTERM | SIGKILL, int_handler);
+    prctl(PR_SET_DUMPABLE, 0);
     for (uint16_t e = 0; e < MAX_ENTRIES; e++) {
         memset(&keys[e], 0, sizeof(key_entry_t));
     }
@@ -230,7 +233,12 @@ int main(int argc, char* argv[]) {
             break;
         case 'l':
             strncpy(lfile, optarg, MAX_PATH - 1);
-            logfile = fopen(lfile, "w+");
+            int log_fd = open(lfile, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            if (log_fd >= 0) {
+                logfile = fdopen(log_fd, "w");
+                if (!logfile)
+                    close(log_fd);
+            }
             break;
         case 't':
             iterations = strtoul(optarg, 0, 10);
@@ -262,7 +270,6 @@ int main(int argc, char* argv[]) {
     }
     fprintf(logfile, "LOG FILE: [%s]\n", lfile);
     fprintf(logfile, "FILE: [%s]\n", sock_file);
-    fprintf(logfile, "KEY: [%s]\n", key);
     fprintf(logfile, "START DELAY: [%u] seconds\n", startdelay);
     fprintf(logfile, "TRY ITERATIONS: [%u]\n", iterations);
     dump_version();

@@ -6,3 +6,4 @@ PartOf=clevis-luks-pkcs11-askpass.socket
 [Service]
 Type=simple
 ExecStart=@libexecdir@/clevis-luks-pkcs11-askpass
+UMask=0077

@@ -73,12 +73,12 @@ get_control_socket_name(const char* file_sock, char* control_sock, uint32_t cont
         return -1;
     }
     size_t prefix_length = strlen(file_sock) - strlen(p);
-    memset(control_sock, 0, control_sock_len);
-    memcpy(control_sock, file_sock, prefix_length);
     if (prefix_length + strlen(".control.sock") >= control_sock_len) {
         fprintf(stderr, "Control socket path too long\n");
         return -1;
     }
+    memset(control_sock, 0, control_sock_len);
+    memcpy(control_sock, file_sock, prefix_length);
     strcat(control_sock + prefix_length, ".control.sock");
     return 0;
 }
@@ -96,13 +96,18 @@ static const char* get_key(const char* dev) {
     return result;
 }
 
+static void cleanup_close_fd(void *arg) {
+    int fd = *(int *)arg;
+    if (fd >= 0)
+        close(fd);
+}
+
 static void* control_thread(void *targ) {
-    // Create a socket to listen on control socket
     struct sockaddr_un control_addr, accept_addr;
-    int s = 0, a = 0, r = 0;
+    int s, a, r;
     char control_msg[MAX_CONTROL_MSG+1];
     const char* control_sock = (const char*)targ;
-    socklen_t len = 0;
+    socklen_t len;
     memset(&control_addr, 0, sizeof(control_addr));
     control_addr.sun_family = AF_UNIX;
     strncpy(control_addr.sun_path, control_sock, sizeof(control_addr.sun_path)-1);
@@ -113,6 +118,7 @@ static void* control_thread(void *targ) {
         fprintf(logfile, "Control socket error\n");
         pthread_exit("control socket");
     }
+    pthread_cleanup_push(cleanup_close_fd, &s);
     if (bind(s, (struct sockaddr *)&control_addr, sizeof(control_addr)) == -1) {
         perror("control bind");
         fprintf(logfile, "Control bind error\n");
@@ -124,6 +130,7 @@ static void* control_thread(void *targ) {
         pthread_exit("control listen");
     }
     while (thread_loop) {
+        len = sizeof(accept_addr);
         a = accept(s, (struct sockaddr *)&accept_addr, &len);
         if (a == -1) {
             perror("control accept");
@@ -171,6 +178,7 @@ static void* control_thread(void *targ) {
         pthread_mutex_unlock(&mutex);
         close(a);
     }
+    pthread_cleanup_pop(1);
     return NULL;
 }
 
@@ -288,11 +296,13 @@ int main(int argc, char* argv[]) {
 
     pthread_t thid;
     void* tret;
+    int thread_created = 0;
     umask(0077);
     if (pthread_create(&thid, NULL, control_thread, g_sock_control_file) != 0) {
         perror("pthread_create() error");
         goto efailure;
     }
+    thread_created = 1;
 
     memset(&sock_addr, 0, sizeof(sock_addr));
     sock_addr.sun_family = AF_UNIX;
@@ -324,6 +334,7 @@ int main(int argc, char* argv[]) {
                     WAIT_CONTROL_THREAD_TIMER);
             wait_control_thread = 0;
         }
+        len = sizeof(accept_addr);
         a = accept(s, (struct sockaddr *)&accept_addr, &len);
         if (a == -1) {
             perror("accept");
@@ -405,6 +416,11 @@ int main(int argc, char* argv[]) {
     }
     return EXIT_SUCCESS;
 efailure:
+    if (thread_created) {
+        thread_loop = 0;
+        pthread_cancel(thid);
+        pthread_join(thid, &tret);
+    }
     unlink(g_sock_file);
     unlink(g_sock_control_file);
     if(logfile) {

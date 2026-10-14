@@ -42,8 +42,12 @@ if ! luks2_supported; then
     skip_test "${TEST}: LUKS2 is not supported."
 fi
 
-if  ! luks2_existing_token_id_supported; then
+if ! luks2_existing_token_id_supported; then
     skip_test "${TEST}: Existing token ID not supported"
+fi
+
+if ! keyctl session - /bin/true >/dev/null 2>&1; then
+    skip_test "${TEST}: Session keyring is not usable (running in a container?)"
 fi
 
 trap 'on_exit' EXIT

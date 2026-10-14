@@ -71,7 +71,7 @@ if [ -n "${mechanism}" ]; then
 fi
 
 if ! clevis_valid_pkcs11_uri "${uri}"; then
-    echo "PKCS#11 URI with invalid format:[${uri}]" >&2
+    echo "PKCS#11 URI with invalid format:[$(clevis_sanitize_pkcs11_uri "${uri}")]" >&2
     echo "PKCS#11 URI expected format:[${URI_EXPECTED_FORMAT}]" >&2
     exit 1
 fi

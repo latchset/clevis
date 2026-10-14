@@ -309,3 +309,7 @@ clevis_get_pkcs11_final_slot_from_uri() {
     fi
     return 1
 }
+
+clevis_sanitize_pkcs11_uri() {
+    echo "$1" | sed 's/pin-value=[^;]*/pin-value=***/g'
+}

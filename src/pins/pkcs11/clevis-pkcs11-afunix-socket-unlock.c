@@ -309,16 +309,22 @@ int main(int argc, char* argv[]) {
             perror("accept");
             goto efailure;
         }
-        pathlen = len - offsetof(struct sockaddr_un, sun_path);
+        memset(&peer_addr, 0, sizeof(peer_addr));
         len = sizeof(peer_addr);
-        if (getpeername(a, (struct sockaddr *)&peer_addr, &len)== -1) {
+        if (getpeername(a, (struct sockaddr *)&peer_addr, &len) == -1) {
             perror("getpeername");
-            goto efailure;
+            close(a);
+            continue;
+        }
+        if (len <= offsetof(struct sockaddr_un, sun_path)) {
+            fprintf(logfile, "Ignoring unbound client connection\n");
+            close(a);
+            continue;
         }
         pathlen = len - offsetof(struct sockaddr_un, sun_path);
         char peer[pathlen];
         memset(peer, 0, pathlen);
-        strncpy(peer, peer_addr.sun_path+1, pathlen-1);
+        strncpy(peer, peer_addr.sun_path + 1, pathlen - 1);
         fprintf(logfile, "Try: [%u/%u]\n", ic, iterations);
         fprintf(logfile, "getpeername sun_path(peer): [%s]\n", peer);
         char* t = peer;

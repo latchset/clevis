@@ -125,7 +125,7 @@ do
                 pin=$(systemd-ask-password "${msg}Please, insert PIN for ${model} (${uuid}):")
             fi
             # Get key from PKCS11 pin here and feed AF_UNIX socket program
-            echo "${pin}" > /run/systemd/clevis-pkcs11.pin
+            (umask 0077; echo "${pin}" > /run/systemd/clevis-pkcs11.pin)
             if ! passphrase=$(clevis_luks_unlock_device "${mapped_device}") || [ -z "${passphrase}" ]; then
                 echo "Could not unlock device:${mapped_device}" >&2
                 msg="$(get_pkcs11_error)"

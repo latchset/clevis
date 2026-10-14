@@ -19,7 +19,7 @@ set -eo pipefail
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 PIN_NAME=pkcs11
-PIN_FILE="/run/systemd/clevis-pkcs11.pin"
+PIN_FILE="${CLEVIS_PKCS11_PIN_FILE:-/run/systemd/clevis-pkcs11.pin}"
 . clevis-pkcs11-common
 
 [ $# -eq 1 ] && [ "$1" == "--summary" ] && exit 2

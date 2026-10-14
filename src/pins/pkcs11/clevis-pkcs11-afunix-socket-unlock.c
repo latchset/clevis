@@ -399,6 +399,7 @@ int main(int argc, char* argv[]) {
     }
     unlink(g_sock_file);
     unlink(g_sock_control_file);
+    explicit_bzero(keys, sizeof(keys));
     if(logfile && logfile != stdout) {
         fclose(logfile);
     }
@@ -409,6 +410,7 @@ efailure:
         pthread_cancel(thid);
         pthread_join(thid, &tret);
     }
+    explicit_bzero(keys, sizeof(keys));
     unlink(g_sock_file);
     unlink(g_sock_control_file);
     if(logfile) {

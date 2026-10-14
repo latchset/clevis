@@ -1,7 +1,7 @@
 if systemd.found() and sd_reply_pass.found()
   systemd_data = configuration_data()
   systemd_data.merge_from(data)
-  systemd_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.path())
+  systemd_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.full_path())
 
   if not get_option('tpm1').disabled()
     systemd_data.set('TCSD_AFTER', 'After=tcsd.service')
@@ -11,7 +11,7 @@ if systemd.found() and sd_reply_pass.found()
     systemd_data.set('TCSD_WANTS', '')
   endif
 
-  unitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
+  unitdir = systemd.get_variable(pkgconfig : 'systemdsystemunitdir')
 
   configure_file(
     input: 'clevis-luks-askpass.service.in',

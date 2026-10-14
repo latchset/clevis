@@ -8,7 +8,7 @@ mans += join_paths(meson.current_source_dir(), 'clevis-encrypt-file.1')
 
 env = environment()
 env.append('PATH',
-  join_paths(meson.source_root(), 'src'),
+  join_paths(meson.project_source_root(), 'src'),
   meson.current_source_dir(),
   '/usr/libexec',
   libexecdir,
@@ -18,7 +18,7 @@ env.append('PATH',
 test('pin-file', find_program('./pin-file'), env: env)
 
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name() + '-pin-file'
+  dracutdir = dracut.get_variable(pkgconfig : 'dracutmodulesdir') + '/50' + meson.project_name() + '-pin-file'
   configure_file(
     input: 'dracut.module-setup.sh.in',
     output: 'module-setup.sh',

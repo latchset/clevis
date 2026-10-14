@@ -20,7 +20,7 @@ if curl.found()
 #%# Set up a test environment
   env = environment()
   env.append('PATH',
-    join_paths(meson.source_root(), 'src'),
+    join_paths(meson.project_source_root(), 'src'),
     meson.current_source_dir(),
     '/usr/libexec',
     libexecdir,
@@ -35,7 +35,7 @@ endif
 
 #%# dracut support
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name() + '-pin-@pin@'
+  dracutdir = dracut.get_variable(pkgconfig : 'dracutmodulesdir') + '/50' + meson.project_name() + '-pin-@pin@'
 #?# In general, substituation is not needed but it's better to
 #?# stay flexible.
   configure_file(

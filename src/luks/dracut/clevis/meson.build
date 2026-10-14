@@ -1,11 +1,11 @@
 dracut = dependency('dracut', required: false)
 
 if dracut.found()
-  dracutdir = dracut.get_pkgconfig_variable('dracutmodulesdir') + '/50' + meson.project_name()
+  dracutdir = dracut.get_variable(pkgconfig : 'dracutmodulesdir') + '/50' + meson.project_name()
 
   dracut_data = configuration_data()
   dracut_data.merge_from(data)
-  dracut_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.found() ? sd_reply_pass.path() : '')
+  dracut_data.set('SYSTEMD_REPLY_PASS', sd_reply_pass.found() ? sd_reply_pass.full_path() : '')
 
   configure_file(
     input: 'module-setup.sh.in',

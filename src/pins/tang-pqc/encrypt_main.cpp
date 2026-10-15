@@ -28,7 +28,6 @@ extern "C" {
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <unistd.h>
 
@@ -226,6 +225,24 @@ std::string readStdin()
     return result;
 }
 
+std::string readBoundedFile(const std::string& path)
+{
+    constexpr size_t maxSize = 1 << 20;
+    std::ifstream f(path);
+    if (!f)
+        throw PinError("File '" + path + "' not found!");
+    std::string result;
+    char buf[4096];
+    while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
+        result.append(buf,
+            static_cast<size_t>(f.gcount()));
+        if (result.size() > maxSize)
+            throw PinError(
+                "File '" + path + "' exceeds maximum size");
+    }
+    return result;
+}
+
 std::string hybridEncrypt(
     const json_t* tangEcPub,
     const json_t* tangKemPub,
@@ -354,14 +371,7 @@ int main(int argc, char* argv[])
         if (config.inlineAdv) {
             jws = std::move(config.inlineAdv);
         } else if (!config.advFile.empty()) {
-            auto f = std::ifstream(config.advFile);
-            if (!f)
-                throw PinError("Advertisement file '"
-                    + config.advFile + "' not found!");
-            std::string content(
-                (std::istreambuf_iterator<char>(f)),
-                std::istreambuf_iterator<char>());
-            jws = jsonParse(content);
+            jws = jsonParse(readBoundedFile(config.advFile));
         } else {
             jws = tang.fetchAdvertisement(config.thp);
             fetchedFromNetwork = true;
@@ -400,14 +410,8 @@ int main(int argc, char* argv[])
             if (config.inlineAdvKem) {
                 kemJws = std::move(config.inlineAdvKem);
             } else {
-                auto f = std::ifstream(config.advKemFile);
-                if (!f)
-                    throw PinError("KEM advertisement file '"
-                        + config.advKemFile + "' not found!");
-                std::string content(
-                    (std::istreambuf_iterator<char>(f)),
-                    std::istreambuf_iterator<char>());
-                kemJws = jsonParse(content);
+                kemJws = jsonParse(
+                    readBoundedFile(config.advKemFile));
             }
         } else {
             VersionInfo version = tang.fetchVersion();

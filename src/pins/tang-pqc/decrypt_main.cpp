@@ -27,7 +27,6 @@ extern "C" {
 
 #include <cstring>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <unistd.h>
 
@@ -266,10 +265,17 @@ CleansedString secureTransportRecover(
 
 std::string readCompactJwe()
 {
-    std::cin >> std::noskipws;
-    return std::string(
-        std::istream_iterator<char>(std::cin),
-        std::istream_iterator<char>());
+    constexpr size_t maxSize = 1 << 20;
+    std::string result;
+    char buf[4096];
+    while (std::cin.read(buf, sizeof(buf))
+           || std::cin.gcount() > 0) {
+        result.append(buf,
+            static_cast<size_t>(std::cin.gcount()));
+        if (result.size() > maxSize)
+            throw PinError("JWE input exceeds maximum size");
+    }
+    return result;
 }
 
 } // anonymous namespace

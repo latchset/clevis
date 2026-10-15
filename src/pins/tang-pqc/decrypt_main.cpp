@@ -205,17 +205,20 @@ EcmrRecoveryResult ecmrRecover(
     return {std::move(ecKey), std::move(serverPub)};
 }
 
-std::string secureTransportRecover(
+CleansedString secureTransportRecover(
     TangClient& tang,
     const JweHeader& hdr)
 {
-    auto clevisKemPriv = JoseWrapper::generateKey(
-        "{\"alg\":\"ML-KEM-768\"}");
+    CleansedJsonPtr clevisKemPriv(
+        JoseWrapper::generateKey(
+            "{\"alg\":\"ML-KEM-768\"}").release());
     auto clevisKemPub = JoseWrapper::publicKey(
         clevisKemPriv.get());
 
-    auto [clevisTransportCt, clevisTransportKey] =
+    auto [clevisTransportCt, clevisTransportKey_] =
         JoseWrapper::encapsulate(hdr.tangKemPub.get());
+    CleansedJsonPtr clevisTransportKey(
+        clevisTransportKey_.release());
 
     auto innerObj = makeJsonPtr(json_pack(
         "{s:s, s:O, s:s}",
@@ -225,7 +228,7 @@ std::string secureTransportRecover(
     if (!innerObj)
         throw PinError("Failed to build inner payload");
     auto innerPayloadDump = jsonDump(innerObj.get());
-    std::string innerPayload(innerPayloadDump.get());
+    CleansedString innerPayload(innerPayloadDump.get());
 
     auto blobJwe = jsonParse(
         "{\"protected\":{\"alg\":\"dir\",\"enc\":\"A256GCM\"}}");
@@ -239,33 +242,26 @@ std::string secureTransportRecover(
     auto kemResp = tang.kemRecover(
         hdr.kemKid, encryptedBlob, clevisTransportCt);
 
-    auto tangTransportKey = JoseWrapper::decapsulate(
-        clevisKemPriv.get(), kemResp.tangTransportCt);
+    CleansedJsonPtr tangTransportKey(
+        JoseWrapper::decapsulate(
+            clevisKemPriv.get(),
+            kemResp.tangTransportCt).release());
 
     auto tangEncJwe = JoseWrapper::jweFromCompact(
         kemResp.tangEncryptedKey);
-    auto encKeyBytes = JoseWrapper::jweDecrypt(
-        tangEncJwe.get(), tangTransportKey.get());
+    CleansedVector<uint8_t> encKeyBytes(
+        JoseWrapper::jweDecrypt(
+            tangEncJwe.get(), tangTransportKey.get()));
 
-    std::string encKeyJson(
+    CleansedString encKeyJson(
         encKeyBytes.begin(), encKeyBytes.end());
-    auto encKeyObj = jsonParse(encKeyJson);
+    CleansedJsonPtr encKeyObj(jsonParse(encKeyJson).release());
     auto kVal = json_string_value(
         json_object_get(encKeyObj.get(), "k"));
     if (!kVal)
         throw PinError("Recovered enc_key missing 'k' field");
 
-    std::string result(kVal);
-
-    OPENSSL_cleanse(&innerPayload[0], innerPayload.size());
-    OPENSSL_cleanse(&encKeyJson[0], encKeyJson.size());
-    OPENSSL_cleanse(encKeyBytes.data(), encKeyBytes.size());
-    cleanseJsonSecrets(clevisKemPriv.get());
-    cleanseJsonSecrets(clevisTransportKey.get());
-    cleanseJsonSecrets(tangTransportKey.get());
-    cleanseJsonSecrets(encKeyObj.get());
-
-    return result;
+    return CleansedString(kVal);
 }
 
 std::string readCompactJwe()
@@ -334,36 +330,36 @@ int main(int argc, char* argv[])
         if (!ephSpecJson)
             throw PinError("Failed to build ephemeral key spec");
         auto ephSpecDump = jsonDump(ephSpecJson.get());
-        auto ephemeral = JoseWrapper::generateKey(
-            ephSpecDump.get());
+        CleansedJsonPtr ephemeral(
+            JoseWrapper::generateKey(
+                ephSpecDump.get()).release());
 
-        auto [ecKey, serverPub] = ecmrRecover(
+        auto [ecKey_, serverPub] = ecmrRecover(
             tang, hdr.clientEcPub.get(), ephemeral.get(),
             serverPubHint.get(), hdr.kid, crv);
+        CleansedJsonPtr ecKey(ecKey_.release());
 
         auto ecX = json_string_value(
             json_object_get(ecKey.get(), "x"));
         if (!ecX)
             throw PinError("ECMR result missing x-coordinate");
 
-        auto encKeyK = secureTransportRecover(tang, hdr);
+        CleansedString encKeyK(
+            secureTransportRecover(tang, hdr));
 
-        auto encKey = KeyDeriver::deriveEncKey(
-            ecX, encKeyK, hdr.kid, hdr.kemKid);
+        CleansedJsonPtr encKey(
+            KeyDeriver::deriveEncKey(
+                ecX, encKeyK, hdr.kid,
+                hdr.kemKid).release());
 
-        OPENSSL_cleanse(&encKeyK[0], encKeyK.size());
-
-        auto plaintext = JoseWrapper::jweDecrypt(
-            jwe.get(), encKey.get());
+        CleansedVector<uint8_t> plaintext(
+            JoseWrapper::jweDecrypt(
+                jwe.get(), encKey.get()));
 
         std::cout.write(
             reinterpret_cast<const char*>(plaintext.data()),
             static_cast<std::streamsize>(plaintext.size()));
 
-        OPENSSL_cleanse(plaintext.data(), plaintext.size());
-        cleanseJsonSecrets(ecKey.get());
-        cleanseJsonSecrets(ephemeral.get());
-        cleanseJsonSecrets(encKey.get());
         return 0;
 
     } catch (const PinError& e) {

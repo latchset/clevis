@@ -239,34 +239,35 @@ std::string hybridEncrypt(
     if (!keySpecJson)
         throw PinError("Failed to build key spec");
     auto keySpecDump = jsonDump(keySpecJson.get());
-    auto clevisEcKey = JoseWrapper::generateKey(
-        keySpecDump.get());
+    CleansedJsonPtr clevisEcKey(
+        JoseWrapper::generateKey(
+            keySpecDump.get()).release());
     auto clevisEcPub = JoseWrapper::publicKey(clevisEcKey.get());
 
-    auto encEcKey = JoseWrapper::keyExchange(
-        clevisEcKey.get(), tangEcPub);
+    CleansedJsonPtr encEcKey(
+        JoseWrapper::keyExchange(
+            clevisEcKey.get(), tangEcPub).release());
     auto encEcX = json_string_value(
         json_object_get(encEcKey.get(), "x"));
     if (!encEcX)
         throw PinError("ECDH result missing x-coordinate");
-    std::string encEcXStr(encEcX);
+    CleansedString encEcXStr(encEcX);
 
-    auto [kemCt, kemSs] = JoseWrapper::encapsulate(tangKemPub);
+    auto [kemCt, kemSs_] = JoseWrapper::encapsulate(tangKemPub);
+    CleansedJsonPtr kemSs(kemSs_.release());
     auto kemK = json_string_value(
         json_object_get(kemSs.get(), "k"));
     if (!kemK)
         throw PinError("KEM shared secret missing 'k' field");
-    std::string kemKStr(kemK);
+    CleansedString kemKStr(kemK);
 
     auto ekDigest = JoseWrapper::thumbprint(kemSs.get(), "S256");
 
     auto kemKid = JoseWrapper::thumbprint(tangKemPub, DEFAULT_THP_ALG);
 
-    auto encKey = KeyDeriver::deriveEncKey(
-        encEcXStr, kemKStr, kid, kemKid);
-
-    OPENSSL_cleanse(&encEcXStr[0], encEcXStr.size());
-    OPENSSL_cleanse(&kemKStr[0], kemKStr.size());
+    CleansedJsonPtr encKey(
+        KeyDeriver::deriveEncKey(
+            encEcXStr, kemKStr, kid, kemKid).release());
 
     auto jwe = jsonParse(
         "{\"protected\":{"
@@ -310,11 +311,6 @@ std::string hybridEncrypt(
             jwe.get(), encKey.get(),
             plaintext.data(), plaintext.size()))
         throw PinError("JWE encryption failed");
-
-    cleanseJsonSecrets(clevisEcKey.get());
-    cleanseJsonSecrets(encEcKey.get());
-    cleanseJsonSecrets(kemSs.get());
-    cleanseJsonSecrets(encKey.get());
 
     return JoseWrapper::jweToCompact(jwe.get());
 }
@@ -432,12 +428,10 @@ int main(int argc, char* argv[])
                 "No ML-KEM key found in KEM advertisement. "
                 "Use clevis-encrypt-tang for classical mode.");
 
-        auto plaintext = readStdin();
+        CleansedString plaintext(readStdin());
         auto result = hybridEncrypt(
             tangEcPub.get(), tangKemPub.get(), kid,
             config, jwks.get(), hasTangPub, plaintext);
-
-        OPENSSL_cleanse(&plaintext[0], plaintext.size());
 
         std::cout << result;
         return 0;

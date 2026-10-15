@@ -106,6 +106,38 @@ inline void validateBase64Url(
     }
 }
 
+class CleansedString : public std::string {
+public:
+    using std::string::string;
+    using std::string::operator=;
+
+    CleansedString(std::string&& s) noexcept
+        : std::string(std::move(s)) {}
+
+    ~CleansedString() noexcept
+    {
+        if (!empty())
+            OPENSSL_cleanse(data(), size());
+    }
+};
+
+template<typename T>
+class CleansedVector : public std::vector<T> {
+public:
+    using std::vector<T>::vector;
+    using std::vector<T>::operator=;
+
+    CleansedVector(std::vector<T>&& v) noexcept
+        : std::vector<T>(std::move(v)) {}
+
+    ~CleansedVector() noexcept
+    {
+        if (!this->empty())
+            OPENSSL_cleanse(
+                this->data(), this->size() * sizeof(T));
+    }
+};
+
 inline void cleanseJsonSecrets(json_t* j) noexcept
 {
     if (!j)
@@ -133,6 +165,22 @@ inline void cleanseJsonSecrets(json_t* j) noexcept
         json_array_foreach(j, idx, value)
             cleanseJsonSecrets(value);
     }
+}
+
+struct CleansedJsonDeleter {
+    void operator()(json_t* j) const noexcept
+    {
+        cleanseJsonSecrets(j);
+        if (j)
+            json_decref(j);
+    }
+};
+
+using CleansedJsonPtr = std::unique_ptr<json_t, CleansedJsonDeleter>;
+
+inline CleansedJsonPtr makeCleansedJsonPtr(json_t* j)
+{
+    return CleansedJsonPtr(j);
 }
 
 } // namespace clevis

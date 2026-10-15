@@ -109,10 +109,20 @@ inline void validateBase64Url(
 class CleansedString : public std::string {
 public:
     using std::string::string;
-    using std::string::operator=;
 
     CleansedString(std::string&& s) noexcept
         : std::string(std::move(s)) {}
+
+    CleansedString(const CleansedString&) = delete;
+    CleansedString& operator=(const CleansedString&) = delete;
+
+    CleansedString(CleansedString&& o) noexcept
+        : std::string(std::move(o)) {}
+    CleansedString& operator=(CleansedString&& o) noexcept
+    {
+        std::string::operator=(std::move(o));
+        return *this;
+    }
 
     ~CleansedString() noexcept
     {
@@ -125,10 +135,20 @@ template<typename T>
 class CleansedVector : public std::vector<T> {
 public:
     using std::vector<T>::vector;
-    using std::vector<T>::operator=;
 
     CleansedVector(std::vector<T>&& v) noexcept
         : std::vector<T>(std::move(v)) {}
+
+    CleansedVector(const CleansedVector&) = delete;
+    CleansedVector& operator=(const CleansedVector&) = delete;
+
+    CleansedVector(CleansedVector&& o) noexcept
+        : std::vector<T>(std::move(o)) {}
+    CleansedVector& operator=(CleansedVector&& o) noexcept
+    {
+        std::vector<T>::operator=(std::move(o));
+        return *this;
+    }
 
     ~CleansedVector() noexcept
     {

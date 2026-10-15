@@ -80,6 +80,32 @@ class PinError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+inline void validateEcCurve(const char* crv)
+{
+    if (!crv)
+        throw PinError("EC curve is null");
+    if (std::strcmp(crv, "P-256") != 0
+        && std::strcmp(crv, "P-384") != 0
+        && std::strcmp(crv, "P-521") != 0)
+        throw PinError(
+            std::string("Unsupported EC curve: ") + crv);
+}
+
+inline void validateBase64Url(
+    const std::string& value, const char* fieldName)
+{
+    for (auto ch : value) {
+        bool ok = (ch >= 'A' && ch <= 'Z')
+               || (ch >= 'a' && ch <= 'z')
+               || (ch >= '0' && ch <= '9')
+               || ch == '-' || ch == '_';
+        if (!ok)
+            throw PinError(
+                std::string(fieldName)
+                + " contains invalid characters");
+    }
+}
+
 inline void cleanseJsonSecrets(json_t* j) noexcept
 {
     if (!j)

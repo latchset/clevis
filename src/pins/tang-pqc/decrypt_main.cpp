@@ -64,11 +64,14 @@ JweHeader parseHeader(const json_t* header)
     if (!kidVal)
         throw PinError("JWE missing required 'kid' header parameter!");
     hdr.kid = kidVal;
+    validateBase64Url(hdr.kid, "kid");
 
     auto kemKidVal = json_string_value(
         json_object_get(header, "kem_kid"));
-    if (kemKidVal)
+    if (kemKidVal) {
         hdr.kemKid = kemKidVal;
+        validateBase64Url(hdr.kemKid, "kem_kid");
+    }
 
     auto clevis = json_object_get(header, "clevis");
     auto tang = clevis ? json_object_get(clevis, "tang-pqc") : nullptr;
@@ -317,6 +320,7 @@ int main(int argc, char* argv[])
             json_object_get(hdr.clientEcPub.get(), "crv"));
         if (!crv)
             throw PinError("Unable to determine EPK's curve!");
+        validateEcCurve(crv);
 
         JsonPtr serverPubHint;
         if (hdr.advertisement)
@@ -325,10 +329,13 @@ int main(int argc, char* argv[])
 
         TangClient tang(hdr.url, hdr.tls);
 
-        std::string ephSpec =
-            "{\"alg\":\"ECMR\",\"crv\":\""
-            + std::string(crv) + "\"}";
-        auto ephemeral = JoseWrapper::generateKey(ephSpec);
+        auto ephSpecJson = makeJsonPtr(json_pack(
+            "{s:s, s:s}", "alg", "ECMR", "crv", crv));
+        if (!ephSpecJson)
+            throw PinError("Failed to build ephemeral key spec");
+        auto ephSpecDump = jsonDump(ephSpecJson.get());
+        auto ephemeral = JoseWrapper::generateKey(
+            ephSpecDump.get());
 
         auto [ecKey, serverPub] = ecmrRecover(
             tang, hdr.clientEcPub.get(), ephemeral.get(),

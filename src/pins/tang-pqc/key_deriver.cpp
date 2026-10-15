@@ -129,26 +129,26 @@ JsonPtr KeyDeriver::deriveEncKey(
     const std::string& kid,
     const std::string& kemKid)
 {
-    auto ecXBytes = JoseWrapper::base64UrlDecode(ecXBase64);
-    auto kemKBytes = JoseWrapper::base64UrlDecode(kemKBase64);
+    CleansedVector<uint8_t> ecXBytes(
+        JoseWrapper::base64UrlDecode(ecXBase64));
+    CleansedVector<uint8_t> kemKBytes(
+        JoseWrapper::base64UrlDecode(kemKBase64));
 
-    auto ikm = buildIkm(ecXBytes, kemKBytes);
-    OPENSSL_cleanse(ecXBytes.data(), ecXBytes.size());
-    OPENSSL_cleanse(kemKBytes.data(), kemKBytes.size());
+    CleansedVector<uint8_t> ikm(buildIkm(ecXBytes, kemKBytes));
     auto info = buildInfo(kid, kemKid);
-    auto derived = hkdfSha256(ikm, info);
+    CleansedVector<uint8_t> derived(hkdfSha256(ikm, info));
 
-    OPENSSL_cleanse(ikm.data(), ikm.size());
+    CleansedString kBase64(
+        JoseWrapper::base64UrlEncode(derived));
 
-    auto kBase64 = JoseWrapper::base64UrlEncode(derived);
-    OPENSSL_cleanse(derived.data(), derived.size());
-
-    std::string keyJson = "{\"alg\":\"A256GCM\",\"k\":\"" + kBase64
-                        + "\",\"kty\":\"oct\"}";
-    OPENSSL_cleanse(&kBase64[0], kBase64.size());
-    auto key = jsonParse(keyJson);
-    OPENSSL_cleanse(&keyJson[0], keyJson.size());
-    return key;
+    auto keyObj = makeJsonPtr(json_pack(
+        "{s:s, s:s, s:s}",
+        "alg", "A256GCM",
+        "k", kBase64.c_str(),
+        "kty", "oct"));
+    if (!keyObj)
+        throw PinError("Failed to build encryption key");
+    return keyObj;
 }
 
 } // namespace clevis

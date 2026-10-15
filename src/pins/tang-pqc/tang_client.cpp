@@ -41,11 +41,15 @@ struct SlistDeleter {
 
 using SlistPtr = std::unique_ptr<curl_slist, SlistDeleter>;
 
+constexpr size_t MAX_RESPONSE_SIZE = 1 << 20;
+
 size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp)
 {
     try {
         auto& response = *static_cast<std::string*>(userp);
         response.append(static_cast<char*>(contents), size * nmemb);
+        if (response.size() > MAX_RESPONSE_SIZE)
+            return 0;
         return size * nmemb;
     } catch (...) {
         return 0;
@@ -65,7 +69,7 @@ CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
     curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 30L);
 
     curl_easy_setopt(curl.get(), CURLOPT_MAXFILESIZE_LARGE,
-                     static_cast<curl_off_t>(1 << 20));
+                     static_cast<curl_off_t>(MAX_RESPONSE_SIZE));
 
 #if CURL_AT_LEAST_VERSION(7, 85, 0)
     curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, "http,https");

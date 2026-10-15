@@ -64,6 +64,9 @@ CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
     curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 30L);
 
+    curl_easy_setopt(curl.get(), CURLOPT_MAXFILESIZE_LARGE,
+                     static_cast<curl_off_t>(1 << 20));
+
 #if CURL_AT_LEAST_VERSION(7, 85, 0)
     curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, "http,https");
 #else

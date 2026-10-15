@@ -98,8 +98,11 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
     config.url = urlVal;
 
     auto thpVal = json_string_value(json_object_get(cfg.get(), "thp"));
-    if (thpVal)
+    if (thpVal) {
         config.thp = thpVal;
+        if (config.thp != "any")
+            validateBase64Url(config.thp, "thp");
+    }
 
     auto cacertVal = json_string_value(
         json_object_get(cfg.get(), "cacert"));
@@ -229,10 +232,15 @@ std::string hybridEncrypt(
         json_object_get(tangEcPub, "crv"));
     if (!crv)
         throw PinError("Tang EC key missing 'crv'");
+    validateEcCurve(crv);
 
-    std::string keySpec =
-        "{\"alg\":\"ECMR\",\"crv\":\"" + std::string(crv) + "\"}";
-    auto clevisEcKey = JoseWrapper::generateKey(keySpec);
+    auto keySpecJson = makeJsonPtr(json_pack(
+        "{s:s, s:s}", "alg", "ECMR", "crv", crv));
+    if (!keySpecJson)
+        throw PinError("Failed to build key spec");
+    auto keySpecDump = jsonDump(keySpecJson.get());
+    auto clevisEcKey = JoseWrapper::generateKey(
+        keySpecDump.get());
     auto clevisEcPub = JoseWrapper::publicKey(clevisEcKey.get());
 
     auto encEcKey = JoseWrapper::keyExchange(

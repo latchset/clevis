@@ -44,6 +44,10 @@ const char* VERSION = "v0.0.1";
 #define MAX_ENTRIES 1024
 #define MAX_KEY 1024
 
+#ifndef UNIX_PATH_MAX
+#define UNIX_PATH_MAX (sizeof(((struct sockaddr_un *)0)->sun_path))
+#endif
+
 const uint16_t DEFAULT_MAX_ITERATIONS = 3;
 const uint16_t MAX_PATH = 1024;
 const uint16_t MAX_CONTROL_MSG = 1024;
@@ -62,8 +66,8 @@ volatile sig_atomic_t thread_loop = 1;
 volatile sig_atomic_t control_thread_info = 0;
 pthread_mutex_t mutex;
 FILE* logfile = NULL;
-static char g_sock_file[1024];
-static char g_sock_control_file[1024];
+static char g_sock_file[UNIX_PATH_MAX];
+static char g_sock_control_file[UNIX_PATH_MAX];
 
 static int
 get_control_socket_name(const char* file_sock, char* control_sock, uint32_t control_sock_len) {
@@ -110,7 +114,7 @@ static void* control_thread(void *targ) {
     socklen_t len;
     memset(&control_addr, 0, sizeof(control_addr));
     control_addr.sun_family = AF_UNIX;
-    strncpy(control_addr.sun_path, control_sock, sizeof(control_addr.sun_path)-1);
+    snprintf(control_addr.sun_path, sizeof(control_addr.sun_path), "%s", control_sock);
     unlink(control_sock);
     s = socket(AF_UNIX, SOCK_STREAM, 0);
     if (s == -1) {
@@ -301,7 +305,7 @@ int main(int argc, char* argv[]) {
 
     memset(&sock_addr, 0, sizeof(sock_addr));
     sock_addr.sun_family = AF_UNIX;
-    strncpy(sock_addr.sun_path, g_sock_file, sizeof(sock_addr.sun_path)-1);
+    snprintf(sock_addr.sun_path, sizeof(sock_addr.sun_path), "%s", g_sock_file);
     s = socket(AF_UNIX, SOCK_STREAM, 0);
     if (s == -1) {
         perror("socket");

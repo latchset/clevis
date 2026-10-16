@@ -29,7 +29,7 @@ if curl.found()
 
 #%# Run the test.
   test('pin-@pin@', find_program('./pin-@pin@'), env: env)
-else
+elif get_option('dracut').auto()
   warning('Will not install @pin@ pin due to missing dependencies!')
 endif
 
@@ -44,7 +44,7 @@ if dracut.found()
     install_dir: dracutdir,
     configuration: data,
   )
-else
+elif get_option('initramfs_tools').auto()
   warning('Will not install dracut module clevis-pin-@pin@ due to missing dependencies!')
 endif
 
@@ -61,6 +61,6 @@ if initramfs_tools.found()
     install_dir: initramfs_hooks_dir,
     configuration: initramfs_data,
   )
-else
+elif get_option('initramfs_tools').auto()
   warning('Will not install initramfs module clevis-pin-@pin@ due to missing dependencies!')
 endif

@@ -34,7 +34,7 @@ SOCK="${TMP}/test.sock"
 CONTROL_SOCK="${TMP}/test.control.sock"
 LOG="${TMP}/daemon.log"
 
-# Start daemon: 1 iteration, no start delay
+# Start daemon: 3 iterations, no start delay
 clevis-pkcs11-afunix-socket-unlock \
     -f "${SOCK}" -c "${CONTROL_SOCK}" -l "${LOG}" -t 3 -s 0 &
 DAEMON_PID=$!
@@ -42,6 +42,19 @@ sleep 1
 
 # Verify daemon is running
 kill -0 "${DAEMON_PID}"
+
+if [ "$(id -u)" != 0 ]; then
+    # --- Non-root: verify the daemon rejects connections and stays alive ---
+    echo -n "test-device,test-passphrase" | \
+        socat UNIX-CONNECT:"${CONTROL_SOCK}" - 2>/dev/null || true
+    sleep 1
+    kill -0 "${DAEMON_PID}"
+    grep "Rejected control connection from UID $(id -u)" "${LOG}"
+    echo "Non-root rejection test passed"
+    exit 0
+fi
+
+# --- Root tests below ---
 
 # --- Test 1: normal device,passphrase ---
 echo -n "test-device,test-passphrase" | \

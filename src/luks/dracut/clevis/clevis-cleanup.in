@@ -32,4 +32,5 @@ clevis_kill_pid $pid
 
 rm -f /run/clevis.pid
 rm -f /run/clevis-online
+rm -f /run/clevis-network-timeout
 rm -rf /run/cryptroot-ask-pipes

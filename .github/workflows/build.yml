@@ -29,6 +29,8 @@ jobs:
             stable: false
           - os: ubuntu:devel
             stable: false
+          - os: quay.io/centos/centos:stream10
+            extra_cflags: "-O2"
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +45,7 @@ jobs:
           mkdir -p build && cd build
           export ninja=$(command -v ninja)
           [ -z "${ninja}" ] && export ninja=$(command -v ninja-build)
-          export CFLAGS="-g -coverage"
+          export CFLAGS="-g -coverage ${{ matrix.extra_cflags }}"
           meson .. || cat meson-logs/meson-log.txt >&2
           ${ninja}
 

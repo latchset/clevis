@@ -29,6 +29,13 @@ if dracut.found()
   )
 
   configure_file(
+    input: 'clevis-lib.sh.in',
+    output: 'clevis-lib.sh',
+    install_dir: dracutdir,
+    configuration: dracut_data,
+  )
+
+  configure_file(
     input: 'clevis-password-unlocker-prepare.in',
     output: 'clevis-password-unlocker-prepare',
     install_dir: dracutdir,

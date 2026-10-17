@@ -1,0 +1,73 @@
+CLEVIS-ZFS-UNLOCKERS(7)
+=======================
+:doctype: manpage
+
+== NAME
+
+clevis-zfs-unlockers - Overview of clevis zfs unlockers
+
+== OVERVIEW
+
+Clevis provides unlockers for ZFS encryption roots:
+
+  * clevis-zfs-unlock - Unlocks manually using the command line.
+  * dracut - Unlocks the root file system automatically during early boot.
+  * initramfs-tools - Unlocks the root file system automatically during early boot.
+  * systemd - Unlocks automatically during late boot.
+
+Once an encryption root is bound using *clevis zfs bind*, it can be unlocked
+using any of the above unlockers without using a password. The automatic
+unlockers only handle encryption roots with _keylocation=prompt_ and answer the
+regular password prompt of OpenZFS, so the password can still be typed in.
+
+== MANUAL UNLOCKING
+
+You can unlock an encryption root manually using the following command:
+
+    $ sudo clevis zfs unlock -d tank
+
+For more information, see link:clevis-zfs-unlock.1.adoc[*clevis-zfs-unlock*(1)].
+
+== EARLY BOOT UNLOCKING WITH DRACUT
+
+The OpenZFS dracut module has to be installed. If Clevis integration does not
+already ship in your initramfs, you may need to rebuild your initramfs with
+this command:
+
+    $ sudo dracut -f
+
+With systemd in the initramfs, the Clevis password agent answers the password
+prompt of OpenZFS. Without systemd, Clevis loads the key when OpenZFS asks for
+it on the console or through plymouth.
+
+Dracut brings up your network for tang bindings when the initramfs is built in
+host-only mode. Otherwise, add rd.neednet=1 to the kernel command line, or
+specify custom network parameters as described in the dracut documentation.
+
+== EARLY BOOT UNLOCKING WITH INITRAMFS-TOOLS
+
+OpenZFS 2.2 or newer is required. Clevis installs the key loading hook
+*/etc/zfs/initramfs-tools-load-key.d/clevis*, which the OpenZFS initramfs
+script runs before asking for the password. You may need to rebuild your
+initramfs with this command:
+
+    $ sudo update-initramfs -u
+
+Clevis brings up the network for tang bindings. Use the ip= kernel parameter to
+select the network interface or to configure it statically.
+
+To disable the unlocking, remove the key loading hook and rebuild the
+initramfs.
+
+== LATE BOOT UNLOCKING
+
+The encryption roots loaded by the units of *zfs-mount-generator*(8) ask for
+their password through systemd. You can let Clevis answer these prompts by
+executing the following command:
+
+    $ sudo systemctl enable clevis-luks-askpass.path
+
+== SEE ALSO
+
+link:clevis-zfs-unlock.1.adoc[*clevis-zfs-unlock*(1)],
+link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)]

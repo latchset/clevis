@@ -22,6 +22,11 @@ set -eu
 
 . clevis-luks-common-functions
 
+zfs=
+if . clevis-zfs-common-functions 2>/dev/null; then
+    zfs=true
+fi
+
 # Make sure to exit cleanly if SIGTERM is received.
 trap 'echo "Exiting due to SIGTERM" && exit 0' TERM
 
@@ -43,12 +48,27 @@ while true; do
 
         d=
         s=
+        zid=
+        zmsg=
         while read -r line; do
             case "$line" in
                 Id=cryptsetup:*) d="${line##Id=cryptsetup:}";;
+                Id=zfs:*) zid="${line##Id=zfs:}";;
+                "Message=Encrypted ZFS password for "*)
+                    zmsg="${line##Message=Encrypted ZFS password for }";;
                 Socket=*) s="${line##Socket=}";;
             esac
         done < "$question"
+
+        # Generator prompts carry an Id, the initramfs ones only a message
+        z="${zid:-${zmsg}}"
+        if [ -n "${zfs}" ] && [ -n "${z}" ] && [ -S "${s}" ]; then
+            if pt="$(zfs_recover_prompt_key "${z}")" && [ -n "${pt}" ] \
+                && printf '%s' "${pt}" | @SYSTEMD_REPLY_PASS@ 1 "${s}"; then
+                echo "Unlocked ZFS dataset ${z} successfully" >&2
+            fi
+            continue
+        fi
 
         [ -e "${d}" ] || continue
         [ -S "${s}" ] || continue

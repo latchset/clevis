@@ -302,35 +302,35 @@ std::string hybridEncrypt(
         "}}");
     auto prot = json_object_get(jwe.get(), "protected");
 
-    json_object_set_new(prot, "kid", json_string(kid.c_str()));
-    json_object_set_new(prot, "kem_kid",
-                        json_string(kemKid.c_str()));
+    jsonObjectSetChecked(prot, "kid", json_string(kid.c_str()));
+    jsonObjectSetChecked(prot, "kem_kid",
+                         json_string(kemKid.c_str()));
 
     auto tang = json_object_get(
         json_object_get(prot, "clevis"), "tang-pqc");
-    json_object_set_new(tang, "url",
-                        json_string(config.url.c_str()));
-    json_object_set_new(prot, "epk",
-                        json_deep_copy(clevisEcPub.get()));
-    json_object_set_new(tang, "clevis_kem_ct",
-                        json_string(kemCt.c_str()));
-    json_object_set_new(tang, "tang_kem_pub",
-                        json_deep_copy(tangKemPub));
-    json_object_set_new(tang, "ek_digest",
-                        json_string(ekDigest.c_str()));
+    jsonObjectSetChecked(tang, "url",
+                         json_string(config.url.c_str()));
+    jsonObjectSetChecked(prot, "epk",
+                         json_deep_copy(clevisEcPub.get()));
+    jsonObjectSetChecked(tang, "clevis_kem_ct",
+                         json_string(kemCt.c_str()));
+    jsonObjectSetChecked(tang, "tang_kem_pub",
+                         json_deep_copy(tangKemPub));
+    jsonObjectSetChecked(tang, "ek_digest",
+                         json_string(ekDigest.c_str()));
 
     if (!config.tls.cacert.empty())
-        json_object_set_new(tang, "cacert",
+        jsonObjectSetChecked(tang, "cacert",
             json_string(config.tls.cacert.c_str()));
     if (!config.tls.cert.empty())
-        json_object_set_new(tang, "cert",
+        jsonObjectSetChecked(tang, "cert",
             json_string(config.tls.cert.c_str()));
     if (!config.tls.key.empty())
-        json_object_set_new(tang, "key",
+        jsonObjectSetChecked(tang, "key",
             json_string(config.tls.key.c_str()));
 
     if (!hasTangPub && jwks)
-        json_object_set_new(tang, "adv", json_deep_copy(jwks));
+        jsonObjectSetChecked(tang, "adv", json_deep_copy(jwks));
 
     if (!JoseWrapper::jweEncrypt(
             jwe.get(), encKey.get(),

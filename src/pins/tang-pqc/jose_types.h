@@ -80,6 +80,14 @@ class PinError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+inline void jsonObjectSetChecked(
+    json_t* obj, const char* key, json_t* value)
+{
+    if (json_object_set_new(obj, key, value) != 0)
+        throw PinError(
+            std::string("Failed to set JSON field: ") + key);
+}
+
 inline void validateEcCurve(const char* crv)
 {
     if (!crv)

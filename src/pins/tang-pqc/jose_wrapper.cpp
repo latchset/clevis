@@ -25,6 +25,7 @@ extern "C" {
 #include <jose/jws.h>
 }
 
+#include <functional>
 #include <string_view>
 
 namespace clevis {
@@ -193,13 +194,14 @@ std::vector<uint8_t> JoseWrapper::jweDecrypt(
     if (!pt)
         throw PinError("JWE decryption failed");
 
+    auto guard = std::unique_ptr<void, std::function<void(void*)>>(
+        pt, [ptLen](void* p) {
+            OPENSSL_cleanse(p, ptLen);
+            std::free(p);
+        });
+
     auto bytes = static_cast<uint8_t*>(pt);
-    std::vector<uint8_t> result(bytes, bytes + ptLen);
-
-    OPENSSL_cleanse(pt, ptLen);
-    std::free(pt);
-
-    return result;
+    return std::vector<uint8_t>(bytes, bytes + ptLen);
 }
 
 bool JoseWrapper::jwsVerify(

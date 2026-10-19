@@ -102,6 +102,9 @@ inline void validateEcCurve(const char* crv)
 inline void validateBase64Url(
     const std::string& value, const char* fieldName)
 {
+    if (value.empty())
+        throw PinError(
+            std::string(fieldName) + " cannot be empty");
     for (auto ch : value) {
         bool ok = (ch >= 'A' && ch <= 'Z')
                || (ch >= 'a' && ch <= 'z')

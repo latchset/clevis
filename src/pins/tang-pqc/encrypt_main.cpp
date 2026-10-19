@@ -405,7 +405,7 @@ int main(int argc, char* argv[])
                 "together for offline binding.");
 
         JsonPtr kemJws;
-        bool hasTangPub = advOffline;
+        bool hasTangPub = false;
 
         if (advOffline) {
             if (config.inlineAdvKem) {

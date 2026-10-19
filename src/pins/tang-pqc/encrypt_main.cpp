@@ -25,6 +25,7 @@ extern "C" {
 #include <openssl/crypto.h>
 }
 
+#include <array>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -214,10 +215,10 @@ std::string readStdin()
 {
     constexpr size_t maxSize = 1 << 20;
     std::string result;
-    char buf[4096];
-    while (std::cin.read(buf, sizeof(buf))
+    std::array<char, 4096> buf{};
+    while (std::cin.read(buf.data(), buf.size())
            || std::cin.gcount() > 0) {
-        result.append(buf,
+        result.append(buf.data(),
             static_cast<size_t>(std::cin.gcount()));
         if (result.size() > maxSize)
             throw PinError("Input exceeds maximum size");
@@ -232,9 +233,9 @@ std::string readBoundedFile(const std::string& path)
     if (!f)
         throw PinError("File '" + path + "' not found!");
     std::string result;
-    char buf[4096];
-    while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
-        result.append(buf,
+    std::array<char, 4096> buf{};
+    while (f.read(buf.data(), buf.size()) || f.gcount() > 0) {
+        result.append(buf.data(),
             static_cast<size_t>(f.gcount()));
         if (result.size() > maxSize)
             throw PinError(

@@ -25,7 +25,7 @@ extern "C" {
 #include <jose/jws.h>
 }
 
-#include <cstring>
+#include <string_view>
 
 namespace clevis {
 
@@ -245,21 +245,25 @@ std::string JoseWrapper::jweToCompact(const json_t* jwe)
 
     if (!prot || !iv || !ct || !tag)
         throw PinError("JWE missing required fields for compact format");
-    if (!ekey)
-        ekey = "";
+
+    std::string_view protSv(prot);
+    std::string_view ekeySv(ekey ? ekey : "");
+    std::string_view ivSv(iv);
+    std::string_view ctSv(ct);
+    std::string_view tagSv(tag);
 
     std::string result;
-    result.reserve(std::strlen(prot) + std::strlen(ekey)
-        + std::strlen(iv) + std::strlen(ct) + std::strlen(tag) + 4);
-    result += prot;
+    result.reserve(protSv.size() + ekeySv.size()
+        + ivSv.size() + ctSv.size() + tagSv.size() + 4);
+    result += protSv;
     result += '.';
-    result += ekey;
+    result += ekeySv;
     result += '.';
-    result += iv;
+    result += ivSv;
     result += '.';
-    result += ct;
+    result += ctSv;
     result += '.';
-    result += tag;
+    result += tagSv;
     return result;
 }
 

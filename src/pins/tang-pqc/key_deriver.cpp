@@ -26,7 +26,7 @@ extern "C" {
 #include <openssl/crypto.h>
 }
 
-#include <cstring>
+
 
 namespace clevis {
 
@@ -108,8 +108,8 @@ std::vector<uint8_t> KeyDeriver::buildInfo(
     const std::string& kid, const std::string& kemKid)
 {
     std::vector<uint8_t> info;
-    auto labelLen = std::strlen(LABEL);
-    auto suiteLen = std::strlen(SUITE);
+    constexpr auto labelLen = std::char_traits<char>::length(LABEL);
+    constexpr auto suiteLen = std::char_traits<char>::length(SUITE);
     info.reserve(labelLen + VERSION_LEN + suiteLen
                  + 8 + kid.size() + kemKid.size());
 

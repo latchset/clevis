@@ -128,6 +128,8 @@ std::string TangClient::httpPost(
 
     std::string ctHeader = "Content-Type: " + contentType;
     SlistPtr headers(curl_slist_append(nullptr, ctHeader.c_str()));
+    if (!headers)
+        throw PinError("Failed to allocate HTTP header list");
     curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
 
     curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, body.c_str());

@@ -57,7 +57,7 @@ JsonPtr JoseWrapper::keyExchange(const json_t* local, const json_t* remote)
 JsonPtr JoseWrapper::ecmrExchange(const json_t* local, const json_t* remote)
 {
     auto localCopy = jsonDeepCopy(local);
-    json_object_set_new(localCopy.get(), "alg", json_string("ECMR"));
+    jsonObjectSetChecked(localCopy.get(), "alg", json_string("ECMR"));
     auto result = jose_jwk_exc(nullptr, localCopy.get(), remote);
     if (!result)
         throw PinError("ECMR exchange failed");
@@ -273,26 +273,30 @@ JsonPtr JoseWrapper::jweFromCompact(const std::string& compact)
 {
     size_t dots[4];
     int n = 0;
-    for (size_t i = 0; i < compact.size() && n < 4; ++i) {
-        if (compact[i] == '.')
+    for (size_t i = 0; i < compact.size(); ++i) {
+        if (compact[i] == '.') {
+            if (n >= 4)
+                throw PinError(
+                    "Invalid compact JWE: too many segments");
             dots[n++] = i;
+        }
     }
     if (n != 4)
-        throw PinError("Invalid compact JWE: expected 4 dots");
+        throw PinError("Invalid compact JWE: expected 5 segments");
 
     auto jwe = makeJsonPtr(json_object());
-    json_object_set_new(jwe.get(), "protected",
+    jsonObjectSetChecked(jwe.get(), "protected",
         json_stringn(compact.c_str(), dots[0]));
-    json_object_set_new(jwe.get(), "encrypted_key",
+    jsonObjectSetChecked(jwe.get(), "encrypted_key",
         json_stringn(compact.c_str() + dots[0] + 1,
                      dots[1] - dots[0] - 1));
-    json_object_set_new(jwe.get(), "iv",
+    jsonObjectSetChecked(jwe.get(), "iv",
         json_stringn(compact.c_str() + dots[1] + 1,
                      dots[2] - dots[1] - 1));
-    json_object_set_new(jwe.get(), "ciphertext",
+    jsonObjectSetChecked(jwe.get(), "ciphertext",
         json_stringn(compact.c_str() + dots[2] + 1,
                      dots[3] - dots[2] - 1));
-    json_object_set_new(jwe.get(), "tag",
+    jsonObjectSetChecked(jwe.get(), "tag",
         json_string(compact.c_str() + dots[3] + 1));
     return jwe;
 }

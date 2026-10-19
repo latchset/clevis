@@ -25,6 +25,7 @@ extern "C" {
 #include <openssl/crypto.h>
 }
 
+#include <array>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -267,10 +268,10 @@ std::string readCompactJwe()
 {
     constexpr size_t maxSize = 1 << 20;
     std::string result;
-    char buf[4096];
-    while (std::cin.read(buf, sizeof(buf))
+    std::array<char, 4096> buf{};
+    while (std::cin.read(buf.data(), buf.size())
            || std::cin.gcount() > 0) {
-        result.append(buf,
+        result.append(buf.data(),
             static_cast<size_t>(std::cin.gcount()));
         if (result.size() > maxSize)
             throw PinError("JWE input exceeds maximum size");

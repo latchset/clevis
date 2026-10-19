@@ -54,8 +54,8 @@ static void testDeriveProducesKey()
     auto kty = json_string_value(json_object_get(key.get(), "kty"));
     check(kty && std::strcmp(kty, "oct") == 0, "key type is oct");
 
-    auto k = json_string_value(json_object_get(key.get(), "k"));
-    check(k != nullptr && std::strlen(k) > 0,
+    auto kObj = json_object_get(key.get(), "k");
+    check(json_is_string(kObj) && json_string_length(kObj) > 0,
           "key has non-empty k field");
 }
 
@@ -157,8 +157,8 @@ static void testDeriveWithRealKeys()
     auto encKey = KeyDeriver::deriveEncKey(ecX, kemK, kid, kemKid);
     check(encKey != nullptr, "derivation with real keys succeeds");
 
-    auto k = json_string_value(json_object_get(encKey.get(), "k"));
-    check(k != nullptr && std::strlen(k) > 0,
+    auto kObj2 = json_object_get(encKey.get(), "k");
+    check(json_is_string(kObj2) && json_string_length(kObj2) > 0,
           "derived key has non-empty k field");
 }
 

@@ -167,7 +167,7 @@ inline void cleanseJsonSecrets(json_t* j) noexcept
         auto s = json_string_value(j);
         if (s)
             OPENSSL_cleanse(
-                const_cast<char*>(s), std::strlen(s));
+                const_cast<char*>(s), json_string_length(j));
         return;
     }
 

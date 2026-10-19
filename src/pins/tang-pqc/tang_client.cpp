@@ -46,11 +46,14 @@ constexpr size_t MAX_RESPONSE_SIZE = 1 << 20;
 size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp)
 {
     try {
-        auto& response = *static_cast<std::string*>(userp);
-        response.append(static_cast<char*>(contents), size * nmemb);
-        if (response.size() > MAX_RESPONSE_SIZE)
+        if (size != 0 && nmemb > SIZE_MAX / size)
             return 0;
-        return size * nmemb;
+        auto totalBytes = size * nmemb;
+        auto& response = *static_cast<std::string*>(userp);
+        if (response.size() + totalBytes > MAX_RESPONSE_SIZE)
+            return 0;
+        response.append(static_cast<char*>(contents), totalBytes);
+        return totalBytes;
     } catch (...) {
         return 0;
     }

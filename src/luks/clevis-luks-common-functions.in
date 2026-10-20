@@ -205,7 +205,13 @@ clevis_luks_print_pin_config() {
     tang-pqc)
         local url
         url="$(jose fmt -j- -g url -u- <<< "${content}")"
-        pin=$(printf '{"url":"%s"}' "${url}")
+        local alg
+        alg="$(jose fmt -j- -g alg -u- <<< "${content}" 2>/dev/null)" || alg=
+        if [ -n "${alg}" ]; then
+            pin=$(printf '{"url":"%s","alg":"%s"}' "${url}" "${alg}")
+        else
+            pin=$(printf '{"url":"%s"}' "${url}")
+        fi
         printf "tang-pqc '%s'" "${pin}"
         ;;
     tpm1)

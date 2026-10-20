@@ -128,6 +128,22 @@ static void testDeriveDomainSeparation()
     check(k2 != k3, "all three keys are distinct");
 }
 
+static void testDeriveAlgorithmDomainSeparation()
+{
+    std::cerr << "== testDeriveAlgorithmDomainSeparation ==\n";
+    auto key1 = KeyDeriver::deriveEncKey(
+        "dGVzdC1lYy14", "dGVzdC1rZW0taw",
+        "kid-abc", "kem-kid-xyz", "ML-KEM-768");
+    auto key2 = KeyDeriver::deriveEncKey(
+        "dGVzdC1lYy14", "dGVzdC1rZW0taw",
+        "kid-abc", "kem-kid-xyz", "ML-KEM-1024");
+
+    auto k1 = extractK(key1.get());
+    auto k2 = extractK(key2.get());
+    check(!k1.empty() && !k2.empty() && k1 != k2,
+          "different KEM alg produces different key");
+}
+
 static void testDeriveWithRealKeys()
 {
     std::cerr << "== testDeriveWithRealKeys ==\n";
@@ -171,6 +187,7 @@ int main()
     testDeriveDifferentEcInput();
     testDeriveDifferentKemInput();
     testDeriveDomainSeparation();
+    testDeriveAlgorithmDomainSeparation();
     testDeriveWithRealKeys();
 
     std::cerr << "\n";

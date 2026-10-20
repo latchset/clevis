@@ -159,9 +159,12 @@ JsonPtr TangClient::fetchAdvertisement(const std::string& thp)
     return jsonParse(body);
 }
 
-JsonPtr TangClient::fetchKemAdvertisement()
+JsonPtr TangClient::fetchKemAdvertisement(const std::string& alg)
 {
-    auto body = httpGet("/adv-kem");
+    std::string path = "/adv-kem";
+    if (!alg.empty())
+        path += "?alg=" + alg;
+    auto body = httpGet(path);
     return jsonParse(body);
 }
 

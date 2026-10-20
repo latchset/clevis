@@ -105,17 +105,18 @@ std::vector<uint8_t> KeyDeriver::buildIkm(
 }
 
 std::vector<uint8_t> KeyDeriver::buildInfo(
-    const std::string& kid, const std::string& kemKid)
+    const std::string& kid, const std::string& kemKid,
+    const std::string& kemAlg)
 {
+    std::string suite = "ECMR+" + kemAlg;
     std::vector<uint8_t> info;
     constexpr auto labelLen = std::char_traits<char>::length(LABEL);
-    constexpr auto suiteLen = std::char_traits<char>::length(SUITE);
-    info.reserve(labelLen + VERSION_LEN + suiteLen
+    info.reserve(labelLen + VERSION_LEN + suite.size()
                  + 8 + kid.size() + kemKid.size());
 
     info.insert(info.end(), LABEL, LABEL + labelLen);
     info.insert(info.end(), VERSION, VERSION + VERSION_LEN);
-    info.insert(info.end(), SUITE, SUITE + suiteLen);
+    info.insert(info.end(), suite.begin(), suite.end());
     appendUint32BE(info, static_cast<uint32_t>(kid.size()));
     info.insert(info.end(), kid.begin(), kid.end());
     appendUint32BE(info, static_cast<uint32_t>(kemKid.size()));
@@ -127,7 +128,8 @@ JsonPtr KeyDeriver::deriveEncKey(
     const std::string& ecXBase64,
     const std::string& kemKBase64,
     const std::string& kid,
-    const std::string& kemKid)
+    const std::string& kemKid,
+    const std::string& kemAlg)
 {
     CleansedVector<uint8_t> ecXBytes(
         JoseWrapper::base64UrlDecode(ecXBase64));
@@ -135,7 +137,7 @@ JsonPtr KeyDeriver::deriveEncKey(
         JoseWrapper::base64UrlDecode(kemKBase64));
 
     CleansedVector<uint8_t> ikm(buildIkm(ecXBytes, kemKBytes));
-    auto info = buildInfo(kid, kemKid);
+    auto info = buildInfo(kid, kemKid, kemAlg);
     CleansedVector<uint8_t> derived(hkdfSha256(ikm, info));
 
     CleansedString kBase64(

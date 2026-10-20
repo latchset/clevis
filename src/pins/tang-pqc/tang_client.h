@@ -44,7 +44,7 @@ public:
     TangClient(const std::string& url, const TlsConfig& tls = {});
 
     JsonPtr fetchAdvertisement(const std::string& thp = "");
-    JsonPtr fetchKemAdvertisement();
+    JsonPtr fetchKemAdvertisement(const std::string& alg = "");
     VersionInfo fetchVersion();
 
     JsonPtr ecmrRecover(

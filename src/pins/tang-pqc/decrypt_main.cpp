@@ -38,10 +38,26 @@ namespace {
 
 using namespace clevis;
 
+static constexpr const char* DEFAULT_KEM_ALG = "ML-KEM-768";
+
+static constexpr std::array<const char*, 3> VALID_KEM_ALGS = {{
+    "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024"
+}};
+
+void validateKemAlg(const std::string& alg)
+{
+    for (auto valid : VALID_KEM_ALGS) {
+        if (alg == valid)
+            return;
+    }
+    throw PinError("Unsupported KEM algorithm: " + alg);
+}
+
 struct JweHeader {
     JsonPtr clientEcPub;
     std::string kid;
     std::string kemKid;
+    std::string kemAlg = DEFAULT_KEM_ALG;
     std::string clevisKemCt;
     std::string url;
     std::string ekDigest;
@@ -93,6 +109,12 @@ JweHeader parseHeader(const json_t* header)
         json_object_get(tang, "ek_digest"));
     if (ekDigVal)
         hdr.ekDigest = ekDigVal;
+
+    auto algVal = json_string_value(json_object_get(tang, "alg"));
+    if (algVal) {
+        hdr.kemAlg = algVal;
+        validateKemAlg(hdr.kemAlg);
+    }
 
     auto kemPub = json_object_get(tang, "tang_kem_pub");
     if (kemPub)
@@ -209,9 +231,14 @@ CleansedString secureTransportRecover(
     TangClient& tang,
     const JweHeader& hdr)
 {
+    auto kemKeySpecJson = makeJsonPtr(
+        json_pack("{s:s}", "alg", hdr.kemAlg.c_str()));
+    if (!kemKeySpecJson)
+        throw PinError("Failed to build KEM key spec");
+    auto kemKeySpecDump = jsonDump(kemKeySpecJson.get());
     CleansedJsonPtr clevisKemPriv(
         JoseWrapper::generateKey(
-            "{\"alg\":\"ML-KEM-768\"}").release());
+            kemKeySpecDump.get()).release());
     auto clevisKemPub = JoseWrapper::publicKey(
         clevisKemPriv.get());
 
@@ -357,7 +384,7 @@ int main(int argc, char* argv[])
         CleansedJsonPtr encKey(
             KeyDeriver::deriveEncKey(
                 ecX, encKeyK, hdr.kid,
-                hdr.kemKid).release());
+                hdr.kemKid, hdr.kemAlg).release());
 
         CleansedVector<uint8_t> plaintext(
             JoseWrapper::jweDecrypt(

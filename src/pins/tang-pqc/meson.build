@@ -19,6 +19,8 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
     override_options: ['cpp_std=c++17'],
   )
 
+  mans += join_paths(meson.current_source_dir(), 'clevis-encrypt-tang-pqc.1')
+
   executable('clevis-decrypt-tang-pqc',
     tang_pqc_common + ['decrypt_main.cpp'],
     dependencies: tang_pqc_deps,

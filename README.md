@@ -79,6 +79,17 @@ The pin produces JWE tokens with `"pin":"tang-pqc"` in the header. Decryption
 uses a bidirectional KEM-secured transport channel to recover the encryption
 key from the Tang server.
 
+Tang PQC pin allows setting PQC algorithm selection between next values:
+- ML-KEM-512
+- ML-KEM-768 (default)
+- ML-KEM-1024
+
+```bash
+$ echo hi | clevis encrypt tang-pqc '{"url": "http://tang.local", "alg": "ML-KEM-1024"}' -y > hi.jwe
+$ clevis decrypt < hi.jwe
+hi
+```
+
 ##### Dependencies
 
 The tang-pqc pin requires the following libraries **with post-quantum support**:

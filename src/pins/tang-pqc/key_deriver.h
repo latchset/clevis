@@ -30,7 +30,7 @@ public:
     static constexpr const char* LABEL = "NBDE-HYBRID-v1";
     static constexpr const char* VERSION = "\x00\x01";
     static constexpr size_t VERSION_LEN = 2;
-    static constexpr const char* SUITE = "ECMR+ML-KEM-768";
+    static constexpr const char* DEFAULT_KEM_ALG = "ML-KEM-768";
     static constexpr size_t OUTPUT_LEN = 32;
 
     static std::vector<uint8_t> hkdfSha256(
@@ -44,13 +44,15 @@ public:
 
     static std::vector<uint8_t> buildInfo(
         const std::string& kid,
-        const std::string& kemKid);
+        const std::string& kemKid,
+        const std::string& kemAlg = DEFAULT_KEM_ALG);
 
     static JsonPtr deriveEncKey(
         const std::string& ecXBase64,
         const std::string& kemKBase64,
         const std::string& kid,
-        const std::string& kemKid);
+        const std::string& kemKid,
+        const std::string& kemAlg = DEFAULT_KEM_ALG);
 };
 
 } // namespace clevis

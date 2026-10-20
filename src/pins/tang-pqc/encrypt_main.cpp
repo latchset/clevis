@@ -67,6 +67,8 @@ void printUsage()
         << "  adv_kem: <object>  A trusted KEM advertisement "
            "(raw JSON)\n"
         << "\n"
+        << "  alg: <string>     KEM algorithm (default: ML-KEM-768)\n"
+        << "\n"
         << "  cacert: <string>  CA bundle for verifying Tang's TLS "
            "certificate\n"
         << "  cert: <string>    Client TLS certificate for mTLS\n"
@@ -75,9 +77,12 @@ void printUsage()
         << "\n";
 }
 
+static constexpr const char* DEFAULT_KEM_ALG = "ML-KEM-768";
+
 struct Config {
     std::string url;
     std::string thp;
+    std::string kemAlg = DEFAULT_KEM_ALG;
     TlsConfig tls;
     JsonPtr inlineAdv;
     std::string advFile;
@@ -130,6 +135,10 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
             config.thp = "any";
     }
 
+    auto algVal = json_string_value(json_object_get(cfg.get(), "alg"));
+    if (algVal)
+        config.kemAlg = algVal;
+
     auto advKem = json_object_get(cfg.get(), "adv_kem");
     if (advKem && json_is_object(advKem)) {
         config.inlineAdvKem = jsonDeepCopy(advKem);
@@ -140,7 +149,7 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
     return config;
 }
 
-JsonPtr findKemKey(json_t* jwks)
+JsonPtr findKemKey(json_t* jwks, const std::string& kemAlg)
 {
     auto keysArray = json_object_get(jwks, "keys");
     if (!keysArray)
@@ -150,8 +159,12 @@ JsonPtr findKemKey(json_t* jwks)
     json_t* key;
     json_array_foreach(keysArray, idx, key) {
         auto kty = json_string_value(json_object_get(key, "kty"));
-        if (kty && std::strcmp(kty, "AKP") == 0)
-            return jsonDeepCopy(key);
+        if (!kty || std::strcmp(kty, "AKP") != 0)
+            continue;
+        auto alg = json_string_value(json_object_get(key, "alg"));
+        if (alg && kemAlg != alg)
+            continue;
+        return jsonDeepCopy(key);
     }
     return nullptr;
 }
@@ -292,7 +305,8 @@ std::string hybridEncrypt(
 
     CleansedJsonPtr encKey(
         KeyDeriver::deriveEncKey(
-            encEcXStr, kemKStr, kid, kemKid).release());
+            encEcXStr, kemKStr, kid, kemKid,
+            config.kemAlg).release());
 
     auto jwe = jsonParse(
         "{\"protected\":{"
@@ -318,6 +332,8 @@ std::string hybridEncrypt(
                          json_deep_copy(tangKemPub));
     jsonObjectSetChecked(tang, "ek_digest",
                          json_string(ekDigest.c_str()));
+    jsonObjectSetChecked(tang, "alg",
+                         json_string(config.kemAlg.c_str()));
 
     if (!config.tls.cacert.empty())
         jsonObjectSetChecked(tang, "cacert",
@@ -424,7 +440,7 @@ int main(int argc, char* argv[])
                     "mode.");
 
             hasTangPub = version.tangPub;
-            kemJws = tang.fetchKemAdvertisement();
+            kemJws = tang.fetchKemAdvertisement(config.kemAlg);
         }
 
         if (!JoseWrapper::jwsVerify(
@@ -434,11 +450,12 @@ int main(int argc, char* argv[])
                 "failed!");
 
         auto kemJwks = JoseWrapper::jwsPayload(kemJws.get());
-        auto tangKemPub = findKemKey(kemJwks.get());
+        auto tangKemPub = findKemKey(kemJwks.get(), config.kemAlg);
         if (!tangKemPub)
             throw PinError(
-                "No ML-KEM key found in KEM advertisement. "
-                "Use clevis-encrypt-tang for classical mode.");
+                "No " + config.kemAlg + " key found in KEM "
+                "advertisement. Use clevis-encrypt-tang for "
+                "classical mode.");
 
         CleansedString plaintext(readStdin());
         auto result = hybridEncrypt(

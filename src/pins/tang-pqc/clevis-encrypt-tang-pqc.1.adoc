@@ -1,0 +1,136 @@
+CLEVIS-ENCRYPT-TANG-PQC(1)
+==========================
+:doctype: manpage
+
+
+== NAME
+
+clevis-encrypt-tang-pqc - Encrypts using a Tang hybrid post-quantum binding server policy
+
+
+== SYNOPSIS
+
+*clevis encrypt tang-pqc* CONFIG [-y] < PT > JWE
+
+
+== OVERVIEW
+
+The *clevis encrypt tang-pqc* command encrypts using a Tang binding server
+policy with hybrid post-quantum cryptography.  It combines classical elliptic
+curve key exchange (ECMR) with a post-quantum Key Encapsulation Mechanism
+(ML-KEM, formerly known as CRYSTALS-Kyber) to provide defense against both
+classical and quantum computing attacks.  Its only argument is the JSON
+configuration object.
+
+Encrypting data using the Tang PQC pin works like this:
+
+    $ clevis encrypt tang-pqc '{"url":"http://tang.srv"}' < PT > JWE
+    The advertisement contains the following signing keys:
+
+    _OsIk0T-E2l6qjfdDiwVmidoZjA
+
+    Do you wish to trust these keys? [ynYN] y
+
+To decrypt the data, just pass it to the *clevis decrypt* command:
+
+    $ clevis decrypt < JWE > PT
+
+This pin requires a Tang server that advertises hybrid PQC support via its
+*/version* endpoint (*features.hybrid_recovery*).  If the server does not
+support hybrid mode, encryption will fail with an error message suggesting
+the classical *clevis encrypt tang* command instead.
+
+
+== ALGORITHM SELECTION
+
+By default the pin uses *ML-KEM-768* (NIST security level 3).  You can select
+a different ML-KEM parameter set with the *alg* configuration property:
+
+    $ clevis encrypt tang-pqc '{"url":"http://tang.srv","alg":"ML-KEM-1024"}' < PT > JWE
+
+Supported values are *ML-KEM-512* (security level 1), *ML-KEM-768* (security
+level 3) and *ML-KEM-1024* (security level 5).  The selected algorithm must be
+supported by both the jose library and the Tang server.
+
+The algorithm is stored in the JWE header so that decryption automatically uses
+the correct parameter set.  Existing JWEs created before algorithm selection
+was introduced default to *ML-KEM-768*.
+
+
+== OFFLINE BINDING
+
+The Tang PQC pin supports entirely offline encryption if you pre-share both
+the classical and KEM server advertisements.  Fetch them while you have network
+access:
+
+    $ curl -f $URL/adv     > adv.jws
+    $ curl -f $URL/adv-kem > adv-kem.jws
+
+Then provide both at encryption time:
+
+    $ cfg='{"url":"...","adv":"adv.jws","adv_kem":"adv-kem.jws"}'
+    $ clevis encrypt tang-pqc "$cfg" < PT > JWE
+
+Both *adv* and *adv_kem* must be provided together for offline binding.
+Providing only one of them will result in an error.
+
+
+== CONFIG
+
+This command uses the following configuration properties:
+
+* *url* (string) :
+  The base URL of the Tang server (REQUIRED)
+
+* *alg* (string) :
+  The KEM algorithm to use.  Supported values: *ML-KEM-512*, *ML-KEM-768*,
+  *ML-KEM-1024*.  Defaults to *ML-KEM-768* if omitted.
+
+* *adv* (string) :
+  A filename containing a trusted classical advertisement
+
+* *adv* (object) :
+  A trusted classical advertisement (raw JSON)
+
+* *adv_kem* (string) :
+  A filename containing a trusted KEM advertisement
+
+* *adv_kem* (object) :
+  A trusted KEM advertisement (raw JSON)
+
+== CRYPTOGRAPHIC DETAILS
+
+The hybrid encryption scheme combines two independent key exchanges:
+
+1. *ECMR* (Elliptic Curve Multiplication and Recovery): a classical elliptic
+   curve Diffie-Hellman exchange with the Tang server, using the same mechanism
+   as the standard Tang pin.
+
+2. *ML-KEM* (Module-Lattice Key Encapsulation Mechanism): a post-quantum KEM
+   defined in FIPS 203 that produces a shared secret via encapsulation against
+   the server's KEM public key.
+
+The two shared secrets are combined using HKDF-SHA256 with a domain-separated
+info string that includes the protocol label (*NBDE-HYBRID-v1*), the suite
+identifier (*ECMR+<alg>*), and both key identifiers (classical and KEM
+thumbprints).  The resulting derived key encrypts the plaintext as a JWE with
+*A256GCM*.
+
+During decryption, the KEM shared secret is recovered via a secure transport
+protocol with the Tang server, while the ECMR shared secret is recovered using
+the same blinding mechanism as classical Tang.
+
+
+== OPTIONS
+
+* *-y* :
+  Automatically answer yes for all questions.  Use this option for skipping
+  the advertisement trust check.  This can be useful in automated deployments:
+
+    $ clevis encrypt tang-pqc '{"url":"..."}' -y < PT > JWE
+
+
+== SEE ALSO
+
+link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

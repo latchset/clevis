@@ -133,8 +133,30 @@ if tang_pub="$(jose fmt -j- -Og tang_pub -Oo- <<< "$full_rep" 2>/dev/null)"; the
     fi
 fi
 
+# Fallback: fetch /adv and look up the exchange key by kid thumbprint.
+# This handles the case where adv was not stored (tang_pub mode) but
+# the server did not return tang_pub in the /rec response (downgrade,
+# mixed-version pool, or proxy stripping the field).
 if [ -z "$srv" ]; then
-    echo "Unable to determine server exchange key from tang_pub in recovery response" >&2
+    if adv_jws="$(curl -sfg "${curl_opts[@]}" "${url}/adv" 2>/dev/null)"; then
+        if adv_keys="$(jose fmt -j- -Og payload -Su- <<< "$adv_jws" \
+                       | jose b64 dec -i- \
+                       | jose fmt -j- -Og keys -AUo- 2>/dev/null)"; then
+            srv="$(jose jwk thp -i- -f "${kid}" -a "${CLEVIS_DEFAULT_THP_ALG}" \
+                   <<< "$adv_keys" 2>/dev/null)" || true
+            if [ -z "$srv" ]; then
+                for alg in ${CLEVIS_ALTERNATIVE_THP_ALGS}; do
+                    srv="$(jose jwk thp -i- -f "$kid" -a "${alg}" \
+                           <<< "$adv_keys" 2>/dev/null)" \
+                        && break
+                done
+            fi
+        fi
+    fi
+fi
+
+if [ -z "$srv" ]; then
+    echo "Unable to determine server exchange key" >&2
     exit 1
 fi
 

@@ -79,6 +79,19 @@ void printUsage()
 
 static constexpr const char* DEFAULT_KEM_ALG = "ML-KEM-768";
 
+static constexpr std::array<const char*, 3> VALID_KEM_ALGS = {{
+    "ML-KEM-512", "ML-KEM-768", "ML-KEM-1024"
+}};
+
+void validateKemAlg(const std::string& alg)
+{
+    for (auto valid : VALID_KEM_ALGS) {
+        if (alg == valid)
+            return;
+    }
+    throw PinError("Unsupported KEM algorithm: " + alg);
+}
+
 struct Config {
     std::string url;
     std::string thp;
@@ -136,8 +149,10 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
     }
 
     auto algVal = json_string_value(json_object_get(cfg.get(), "alg"));
-    if (algVal)
+    if (algVal) {
         config.kemAlg = algVal;
+        validateKemAlg(config.kemAlg);
+    }
 
     auto advKem = json_object_get(cfg.get(), "adv_kem");
     if (advKem && json_is_object(advKem)) {

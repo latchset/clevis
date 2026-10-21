@@ -207,6 +207,17 @@ EcmrRecoveryResult ecmrRecover(
         serverPub = jsonDeepCopy(serverPubHint);
     }
 
+    if (!serverPub) {
+        try {
+            auto advJws = tang.fetchAdvertisement("");
+            auto advJwks = JoseWrapper::jwsPayload(advJws.get());
+            serverPub = findServerKeyInAdv(advJwks.get(), kid);
+        } catch (const std::exception& e) {
+            std::cerr << "Fallback /adv fetch failed: "
+                      << e.what() << std::endl;
+        }
+    }
+
     if (!serverPub)
         throw PinError(
             "Unable to determine server exchange key");

@@ -248,12 +248,17 @@ clevis_luks_decode_pin_config() {
     clevis_luks_print_pin_config "${P}" "${decoded}"
 }
 
+# clevis_luks_extract_pin_config() will extract the pin config from a
+# clevis_luks_print_pin_config() printout line.
+clevis_luks_extract_pin_config() {
+    echo "${1}" | sed -E "s/^[^:]*: [^ ]* '(.*)'$/\1/"
+}
+
 # clevis_luks_join_sss_cfg() will receive a list of configurations for a given
 # pin and returns it as list, in the format PIN [cfg1, cfg2, ..., cfgN].
 clevis_luks_join_sss_cfg() {
     local pin="${1}"
-    local cfg="${2}"
-    cfg=$(echo "${cfg}" | tr -d "'" | sed -e 's/^,//')
+    local cfg="${2#,}"
     printf '"%s":[%s]' "${pin}" "${cfg}"
 }
 
@@ -280,6 +285,9 @@ clevis_luks_process_sss_pin() {
             continue
         fi
         read -r pin cfg <<< "${pin_cfg}"
+        cfg=${cfg#\'}
+        cfg=${cfg%\'}
+
         case "${pin}" in
         null)
             sss_null="${sss_null},${cfg}"

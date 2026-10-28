@@ -71,7 +71,7 @@ if ! pin_cfg="$(clevis luks list -d "${DEV}" -s "${SLT}")" \
 fi
 
 pin="$(echo "${pin_cfg}" | cut -d' ' -f2)"
-cfg="$(echo "${pin_cfg}" | cut -d' ' -f3 | sed -e "s/'//g")"
+cfg="$(clevis_luks_extract_pin_config "${pin_cfg}")"
 if [ -z "${pin}" ] || [ -z "${cfg}" ]; then
     echo "Invalid pin or configuration" >&2
     exit 1

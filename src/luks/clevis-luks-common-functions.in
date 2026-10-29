@@ -221,6 +221,9 @@ clevis_luks_print_pin_config() {
         pin=${pin/#,/}
         printf "tpm2 '{%s}'" "${pin}"
         ;;
+    trustee)
+        printf "trustee '%s'" "${content}"
+        ;;
     *)
         printf "unknown pin '%s'" "${P}"
         ;;
@@ -265,6 +268,7 @@ clevis_luks_process_sss_pin() {
     local sss_tang
     local sss_tpm1
     local sss_tpm2
+    local sss_trustee
     local sss
     local pin_cfg
     local pin
@@ -295,6 +299,9 @@ clevis_luks_process_sss_pin() {
         sss)
             sss="${sss},${cfg}"
             ;;
+        trustee)
+            sss_trustee="${sss_trustee},${cfg}"
+            ;;
         esac
     done
 
@@ -317,6 +324,10 @@ clevis_luks_process_sss_pin() {
 
     if [ -n "${sss_pkcs11}" ]; then
         cfg="${cfg},"$(clevis_luks_join_sss_cfg "pkcs11" "${sss_pkcs11}")
+    fi
+
+    if [ -n "${sss_trustee}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "trustee" "${sss_trustee}")
     fi
 
     if [ -n "${sss}" ]; then

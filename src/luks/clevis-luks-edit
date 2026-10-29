@@ -111,7 +111,7 @@ if ! binding="$(clevis luks list -d "${DEV}" -s "${SLT}" 2>/dev/null)" \
 fi
 
 pin="$(echo "${binding}" | cut -d' ' -f2)"
-cfg="$(echo "${binding}" | cut -d' ' -f3 | sed -e "s/'//g")"
+cfg="$(echo "${binding}" | sed -E "s/^[^:]*: [^ ]* '(.*)'$/\1/")"
 
 if ! pretty_cfg="$(printf '%s' "${cfg}" | jq --monochrome-output .)" \
                    || [ -z "${pretty_cfg}" ]; then

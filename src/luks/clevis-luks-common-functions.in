@@ -221,6 +221,9 @@ clevis_luks_print_pin_config() {
         pin=${pin/#,/}
         printf "tpm2 '{%s}'" "${pin}"
         ;;
+    trustee)
+        printf "trustee '%s'" "${content}"
+        ;;
     *)
         printf "unknown pin '%s'" "${P}"
         ;;

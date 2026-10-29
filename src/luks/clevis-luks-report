@@ -142,7 +142,7 @@ report_decode() {
     fi
 
     case "${pin}" in
-    tang)
+    tang|tang-pqc)
         report_tang "${content}" "${data}"
         ;;
     sss)

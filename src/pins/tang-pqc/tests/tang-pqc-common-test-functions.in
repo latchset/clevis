@@ -1,0 +1,51 @@
+#!/bin/bash -ex
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tang-common-test-functions
+
+tang_pqc_sanity_check() {
+    tang_sanity_check
+    command -v clevis-encrypt-tang-pqc >/dev/null 2>&1 \
+        || skip_test "tang-pqc pin is not installed"
+    command -v clevis-decrypt-tang-pqc >/dev/null 2>&1 \
+        || skip_test "tang-pqc pin is not installed"
+}
+
+tang_pqc_check_version() {
+    local port="${1}"
+    [ -z "${port}" ] && error "tang_pqc_check_version: please specify 'port'"
+
+    local ver
+    ver="$(curl -sf "http://localhost:${port}/version")" \
+        || return 1
+
+    local hybrid
+    hybrid="$(jose fmt -j- -Og features -Og hybrid_recovery -o- \
+              <<< "${ver}" 2>/dev/null)" || return 1
+
+    [ "${hybrid}" = "true" ]
+}
+
+tang_pqc_get_adv_kem() {
+    local port="${1}"
+    local adv_kem="${2:-/dev/stdout}"
+    [ -z "${port}" ] && error "tang_pqc_get_adv_kem: please specify 'port'"
+    curl -L -o "${adv_kem}" "http://localhost:${port}/adv-kem"
+}

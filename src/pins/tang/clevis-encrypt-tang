@@ -138,10 +138,11 @@ elif ! jws="$(curl -sfg "${curl_opts[@]}" "$url/adv/$thp")"; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1
 else
-    if ver_resp="$(curl -sfg "${curl_opts[@]}" "$url/version" 2>/dev/null)" \
-       && [ "$(jose fmt -j- -Og features -Og tang_pub -o- \
-              <<< "$ver_resp" 2>/dev/null)" = "true" ]; then
-        has_tang_pub=yes
+    if ver_resp="$(curl -sfg "${curl_opts[@]}" "$url/version" 2>/dev/null)"; then
+        if [ "$(jose fmt -j- -Og features -Og tang_pub -o- \
+               <<< "$ver_resp" 2>/dev/null)" = "true" ]; then
+            has_tang_pub=yes
+        fi
     fi
 fi
 

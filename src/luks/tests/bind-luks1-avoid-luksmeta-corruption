@@ -48,9 +48,14 @@ for ADV_NU in $(seq 0 ${ADV_AMOUNT}); do
 done
 tang_new_keys "${TMP}"
 
-CFG=$(printf '{"url":"%s"}' "${url}")
+adv="${TMP}/adv"
+tang_get_adv "${port}" "${adv}"
+
+# Use adv file to force storing adv in the JWE header, bypassing
+# the tang_pub optimization that would skip it.
+CFG=$(printf '{"url":"%s","adv":"%s"}' "${url}" "${adv}")
 
 # At this point, luks bind must return an error. If not, test fails
-if clevis luks bind -y -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
+if clevis luks bind -f -d "${DEV}" tang "${CFG}" <<< "${DEFAULT_PASS}"; then
     error "${TEST}: Binding is expected to fail when given a too long adv"
 fi

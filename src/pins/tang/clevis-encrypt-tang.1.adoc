@@ -122,6 +122,24 @@ first place. You may also prefer installing the Tang server's CA into the
 system trust store (for example with *update-ca-trust* or
 *update-ca-certificates*) and omitting *cacert*.
 
+== ADVERTISEMENT STORAGE
+
+At bind time, when the advertisement is fetched from the Tang server, Clevis
+calls *GET /version* on the server to check for *features.tang_pub*.  When
+the server reports this capability, the server exchange key can be obtained at
+decryption time directly from the recovery response, so Clevis skips storing
+the advertisement (*clevis.tang.adv*) in the JWE header.  This reduces the
+metadata written to the LUKS header.
+
+If the server does not expose */version*, or *features.tang_pub* is not
+present, or the advertisement is provided offline (via the *adv* configuration
+property), the advertisement is stored in the JWE header as before, maintaining
+full backward compatibility.
+
+Running *clevis luks regen* against an existing binding will re-query the
+server and automatically migrate to the new format when the server supports
+*tang_pub*.
+
 == OPTIONS
 
 * *-y* :

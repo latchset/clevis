@@ -119,6 +119,7 @@ curl_opts=()
 [ -n "$key" ]    && curl_opts+=(--key "$key")
 
 ### Get the advertisement
+has_tang_pub=
 if jws="$(jose fmt -j- -g adv -Oo- <<< "$cfg")"; then
     thp="${thp:-any}"
 elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
@@ -136,6 +137,12 @@ elif jws="$(jose fmt -j- -g adv -Su- <<< "$cfg")"; then
 elif ! jws="$(curl -sfg "${curl_opts[@]}" "$url/adv/$thp")"; then
     echo "Unable to fetch advertisement: '$url/adv/$thp'!" >&2
     exit 1
+else
+    if ver_resp="$(curl -sfg "${curl_opts[@]}" "$url/version" 2>/dev/null)" \
+       && [ "$(jose fmt -j- -Og features -Og tang_pub -o- \
+              <<< "$ver_resp" 2>/dev/null)" = "true" ]; then
+        has_tang_pub=yes
+    fi
 fi
 
 if ! jwks="$(jose fmt --json="${jws}" -Og payload -SyOg keys \
@@ -202,5 +209,7 @@ jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$url" -s url -UUUUo
 [ -n "$cacert" ] && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cacert" -s cacert -UUUUo-)"
 [ -n "$cert" ]   && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$cert" -s cert -UUUUo-)"
 [ -n "$key" ]    && jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -q "$key" -s key -UUUUo-)"
-jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks")"
+if [ -z "$has_tang_pub" ]; then
+    jwe="$(jose fmt -j "$jwe" -g protected -g clevis -g tang -j- -s adv -UUUUo- <<< "$jwks")"
+fi
 exec jose jwe enc -i- -k- -I- -c < <(echo -n "$jwe$jwk"; /bin/cat)

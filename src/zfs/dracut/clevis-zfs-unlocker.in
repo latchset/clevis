@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+# Copyright (c) 2026 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. /lib/dracut-lib.sh
+
+. clevis-zfs-common-functions
+. clevis-luks-common-functions
+
+# The mount-zfs.sh pipes the plymouth prompt into zfs load-key and waits for
+# both, so end the prompt once clevis has loaded the key
+end_plymouth_prompt() {
+    local root="$1"
+    local cmdline pid args i prompt
+
+    for cmdline in /proc/[0-9]*/cmdline; do
+        mapfile -d '' -t args < "${cmdline}" 2>/dev/null || continue
+        if [ "${args[0]##*/}" != "plymouth" ] || [ "${args[1]}" != "ask-for-password" ]; then
+            continue
+        fi
+
+        prompt=
+        for ((i = 2; i < ${#args[@]}; i++)); do
+            case "${args[i]}" in
+                --prompt) prompt="${args[i + 1]}";;
+                --prompt=*) prompt="${args[i]#--prompt=}";;
+            esac
+        done
+
+        case "${prompt}" in
+            "Encrypted ZFS password for ${root}"|"Encrypted ZFS password for ${root}:"*)
+                pid="${cmdline#/proc/}"
+                kill "${pid%/cmdline}" 2>/dev/null
+                ;;
+        esac
+    done
+}
+
+root="$(zfs_get_prompt_encryptionroot "$1")" || exit 1
+
+# With systemd, tcsd.service provides the TCSD
+pins=$(zfs_read_used_pins "${root}")
+if [[ " $pins " == *" tpm1 "* ]] && [ ! -d /run/systemd/system ]; then
+    . /lib/dracut-clevis-lib.sh
+    do_configure_tpm1
+fi
+
+ret=1
+if key="$(zfs_recover_key "${root}")" && zfs_load_key "${root}" <<< "${key}"; then
+    info "ZFS: Unlocked ${root} with clevis"
+    end_plymouth_prompt "${root}"
+    ret=0
+fi
+
+exit "$ret"

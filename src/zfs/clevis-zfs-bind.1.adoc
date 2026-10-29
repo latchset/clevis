@@ -1,0 +1,75 @@
+CLEVIS-ZFS-BIND(1)
+==================
+:doctype: manpage
+
+
+== NAME
+
+clevis-zfs-bind - Bind a ZFS encryption root using the specified policy
+
+== SYNOPSIS
+
+*clevis zfs bind* [-f] [-y] [-k KEY] -d DATASET [-l LABEL] PIN CFG
+
+== OVERVIEW
+
+The *clevis zfs bind* command binds a ZFS encryption root using the specified
+policy. This is accomplished with a simple command:
+
+    $ clevis zfs bind -d rpool tang '{"url":...}'
+
+This command performs three steps:
+
+1. Asks for the existing passphrase or key of the encryption root and checks it.
+2. Encrypts the existing passphrase or key with Clevis.
+3. Stores the Clevis JWE in user properties of the encryption root and checks
+   that it unlocks the encryption root.
+
+The encryption root can now be unlocked with your existing passphrase as well
+as with the Clevis policy. You will additionally need one or more of the
+Clevis ZFS unlockers. See link:clevis-zfs-unlockers.7.adoc[*clevis-zfs-unlockers*(7)].
+
+An encryption root can have several bindings, each stored under its own label.
+
+== OPTIONS
+
+* *-f* :
+  Overwrite an existing binding with the same label
+
+* *-y* :
+  Automatically answer yes for all questions. When using _tang_, it
+  causes the advertisement trust check to be skipped, which can be
+  useful in automated deployments
+
+* *-d* _DATASET_ :
+  The ZFS encryption root on which to perform binding
+
+* *-l* _LABEL_ :
+  The label of the binding, _default_ if not given. Valid characters are
+  lowercase letters, numbers, underscores, dots and hyphens
+
+* *-k* _KEY_ :
+  Non-interactively read the ZFS passphrase or key from KEY file
+
+* *-k* - :
+  Non-interactively read the ZFS passphrase or key from standard input
+
+== CAVEATS
+
+ZFS has a single wrapping key for each encryption root, so Clevis stores the
+existing passphrase or key itself, encrypted by the Clevis policy. After
+changing it with *zfs change-key*, bind the encryption root again with *-f*.
+
+Only the _passphrase_ and _hex_ key formats are supported.
+
+The bindings are stored in the user properties _latchset.clevis:labels_ and
+_latchset.clevis.label:LABEL_. Large bindings are split into several
+numbered properties.
+
+== SEE ALSO
+
+link:clevis-zfs-unlockers.7.adoc[*clevis-zfs-unlockers*(7)],
+link:clevis-zfs-unbind.1.adoc[*clevis-zfs-unbind*(1)],
+link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
+link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

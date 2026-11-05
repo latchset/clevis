@@ -35,14 +35,12 @@
  * Interfaces.
  */
 
-#define _GNU_SOURCE
 #include "sss.h"
 
 #include <openssl/crypto.h>
 #include <jose/b64.h>
 #include <jose/jwe.h>
 
-#include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 

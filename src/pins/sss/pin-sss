@@ -22,3 +22,9 @@ e="$(echo hi | clevis encrypt sss '{"t":2,"pins":{"null":[{"fail":true},{"fail":
 ! echo "$e" | clevis decrypt
 
 ! e="$(echo hi | clevis encrypt sss '{"t":1,"pins":{"tang":[{"url":"foo bar"}]}}')"
+
+# An empty pin array spawns no children, so the decryptor must refuse it
+# rather than wait on an empty descriptor set.  This one cannot be produced
+# by clevis-encrypt-sss, which rejects t > the number of pins.
+h="$(printf '%s' '{"alg":"dir","enc":"A256GCM","clevis":{"pin":"sss","sss":{"t":1,"p":"AAAA","jwe":[]}}}' | jose b64 enc -I- -o-)"
+! printf '%s..AAAA.AAAA.AAAA' "$h" | clevis decrypt

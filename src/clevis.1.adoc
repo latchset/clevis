@@ -42,6 +42,32 @@ the server advertisement. Decryption, too works like our first example:
 
 For more information, see link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)].
 
+== TANG PQC BINDING
+
+Clevis also provides a hybrid post-quantum variant of the Tang pin. This
+combines the classical elliptic curve key exchange with a post-quantum Key
+Encapsulation Mechanism (ML-KEM) to provide defense against both classical and
+quantum computing attacks:
+
+    $ clevis encrypt tang-pqc '{"url":"http://tang.srv"}' < PT > JWE
+    The advertisement contains the following signing keys:
+
+    _OsIk0T-E2l6qjfdDiwVmidoZjA
+
+    Do you wish to trust these keys? [ynYN] y
+
+By default the pin uses ML-KEM-768 (NIST security level 3). A different
+parameter set can be selected via the *alg* configuration property:
+
+    $ clevis encrypt tang-pqc '{"url":"http://tang.srv","alg":"ML-KEM-1024"}' < PT > JWE
+
+Decryption works as usual:
+
+    $ clevis decrypt < JWE > PT
+
+This pin requires a Tang server that advertises hybrid PQC support. For more
+information, see link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)].
+
 == TPM2 BINDING
 
 Clevis provides support to encrypt a key in a Trusted Platform Module 2.0 (TPM2)
@@ -83,6 +109,11 @@ For example, let's create a high-availability setup using Tang:
     $ cfg='{"t":1,"pins":{"tang":[{"url":...},{"url":...}]}}'
     $ clevis encrypt sss "$cfg" < PT > JWE
 
+You can also mix classical and post-quantum Tang pins in a single SSS policy:
+
+    $ cfg='{"t":1,"pins":{"tang":[{"url":...}],"tang-pqc":[{"url":...}]}}'
+    $ clevis encrypt sss "$cfg" < PT > JWE
+
 In this policy, we are declaring that we have a threshold of 1, but that there
 are multiple key fragments encrypted using different Tang servers. Since our
 threshold is 1, so long as any of the Tang servers are available, decryption
@@ -117,6 +148,7 @@ For more information, see link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)].
 == SEE ALSO
 
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)],
 link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)],
 link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
 link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)],

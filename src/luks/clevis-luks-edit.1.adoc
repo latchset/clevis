@@ -67,3 +67,4 @@ passphrase for the device.
 == SEE ALSO
 
 link:clevis-luks-list.1.adoc[*clevis-luks-list*(1)],
+link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)],

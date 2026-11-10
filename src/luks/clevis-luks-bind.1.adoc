@@ -18,6 +18,10 @@ policy. This is accomplished with a simple command:
 
     $ clevis luks bind -d /dev/sda tang '{"url":...}'
 
+For hybrid post-quantum protection, the *tang-pqc* pin can be used instead:
+
+    $ clevis luks bind -d /dev/sda tang-pqc '{"url":...}'
+
 This command performs four steps:
 
 1. Creates a new key with the same entropy as the LUKS master key -- maximum entropy bits is 256.
@@ -35,9 +39,9 @@ Clevis LUKS unlockers. See link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlock
   Do not prompt for LUKSMeta initialization
 
 * *-y* :
-  Automatically answer yes for all questions. When using _tang_, it
-  causes the advertisement trust check to be skipped, which can be
-  useful in automated deployments
+  Automatically answer yes for all questions. When using _tang_ or
+  _tang-pqc_, it causes the advertisement trust check to be skipped,
+  which can be useful in automated deployments
 
 * *-d* _DEV_ :
   The LUKS device on which to perform binding
@@ -76,5 +80,6 @@ The images cannot be shared without also sharing a master key.
 
 link:clevis-luks-unlockers.7.adoc[*clevis-luks-unlockers*(7)],
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
+link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)],
 link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
 link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

@@ -106,6 +106,70 @@ report_tang() {
     fi
 }
 
+report_tang_pqc() {
+    local content="${1}"
+    local header="${2}"
+    [ -z "${content}" ] && return 1
+
+    local url
+    if ! url="$(jose fmt --json="${content}" --get url --unquote=-)" \
+                || [ -z "${url}" ]; then
+        echo "Invalid tang-pqc metadata; URL not found" >&2
+        return 1
+    fi
+
+    local keys=""
+
+    # Check EC key rotation via /adv.
+    local kid
+    if [ -n "${header}" ]; then
+        kid="$(jose fmt --json="${header}" --get kid --unquote=-)" 2>/dev/null
+    fi
+    if [ -n "${kid}" ]; then
+        local jws
+        if jws="$(curl -sfg "${url}/adv")"; then
+            local adv_keys
+            if adv_keys="$(jose fmt --json="${jws}" --object --get payload \
+                           --string --b64load --object --get keys \
+                           --array --unwind --output=-)"; then
+                if ! printf '%s' "${adv_keys}" | jose jwk thp --input=- \
+                                                      --find "${kid}" \
+                                                      >/dev/null 2>&1; then
+                    keys="$(printf '%s %s' "${keys}" "${kid}")"
+                fi
+            fi
+        else
+            echo "Unable to fetch advertisement (${url}/adv)" >&2
+        fi
+    fi
+
+    # Check KEM key rotation via /adv-kem.
+    local kem_kid
+    if [ -n "${header}" ]; then
+        kem_kid="$(jose fmt --json="${header}" --get kem_kid \
+                   --unquote=-)" 2>/dev/null
+    fi
+    if [ -n "${kem_kid}" ]; then
+        local kem_jws
+        if kem_jws="$(curl -sfg "${url}/adv-kem")"; then
+            local kem_keys
+            if kem_keys="$(jose fmt --json="${kem_jws}" --object \
+                           --get payload --string --b64load --object \
+                           --get keys --array --unwind --output=-)"; then
+                if ! printf '%s' "${kem_keys}" | jose jwk thp --input=- \
+                                                      --find "${kem_kid}" \
+                                                      >/dev/null 2>&1; then
+                    keys="$(printf '%s %s' "${keys}" "${kem_kid}")"
+                fi
+            fi
+        else
+            echo "Unable to fetch KEM advertisement (${url}/adv-kem)" >&2
+        fi
+    fi
+
+    printf '%s' "${keys}"
+}
+
 report_sss() {
     local content="${1}"
     [ -z "${content}" ] && return 1
@@ -142,8 +206,11 @@ report_decode() {
     fi
 
     case "${pin}" in
-    tang|tang-pqc)
+    tang)
         report_tang "${content}" "${data}"
+        ;;
+    tang-pqc)
+        report_tang_pqc "${content}" "${data}"
         ;;
     sss)
         report_sss "${content}"

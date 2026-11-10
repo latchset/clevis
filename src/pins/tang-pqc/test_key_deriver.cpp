@@ -144,6 +144,49 @@ static void testDeriveAlgorithmDomainSeparation()
           "different KEM alg produces different key");
 }
 
+static void testDeriveKnownAnswerVector()
+{
+    std::cerr << "== testDeriveKnownAnswerVector ==\n";
+
+    // Fixed inputs:
+    //   ecX  = base64url("test-ec-x")  = "dGVzdC1lYy14"
+    //   kemK = base64url("test-kem-k") = "dGVzdC1rZW0taw"
+    //   kid     = "kid-abc"
+    //   kemKid  = "kem-kid-xyz"
+    //   kemAlg  = "ML-KEM-768"
+    //
+    // IKM  = uint32BE(9) || "test-ec-x" || uint32BE(10) || "test-kem-k"
+    // Info = "NBDE-HYBRID-v1" || 0x0001
+    //        || "ECMR+ML-KEM-768"
+    //        || uint32BE(7)  || "kid-abc"
+    //        || uint32BE(11) || "kem-kid-xyz"
+    //
+    // Expected output (HKDF-SHA256, 32 bytes) verified independently
+    // with: openssl kdf -keylen 32 -kdfopt digest:SHA256
+    //         -kdfopt hexkey:<ikm> -kdfopt hexinfo:<info> HKDF
+    static constexpr uint8_t expected[] = {
+        0xf4, 0x17, 0x06, 0xf2, 0x01, 0x64, 0xfa, 0x0b,
+        0x76, 0xfb, 0x6f, 0x0a, 0x78, 0xcf, 0x57, 0xc6,
+        0x9f, 0xf1, 0xb2, 0xd7, 0xa0, 0x69, 0xb5, 0xcc,
+        0xa6, 0x35, 0x8b, 0x23, 0xa1, 0x1d, 0x4a, 0x56
+    };
+
+    auto key = KeyDeriver::deriveEncKey(
+        "dGVzdC1lYy14", "dGVzdC1rZW0taw",
+        "kid-abc", "kem-kid-xyz", "ML-KEM-768");
+    check(key != nullptr, "KAT derivation succeeds");
+
+    auto kB64 = extractK(key.get());
+    check(!kB64.empty(), "KAT key has k field");
+
+    auto derived = JoseWrapper::base64UrlDecode(kB64);
+    check(derived.size() == sizeof(expected),
+          "KAT output is 32 bytes");
+    check(std::memcmp(derived.data(), expected,
+                      sizeof(expected)) == 0,
+          "KAT output matches expected vector");
+}
+
 static void testDeriveWithRealKeys()
 {
     std::cerr << "== testDeriveWithRealKeys ==\n";
@@ -188,6 +231,7 @@ int main()
     testDeriveDifferentKemInput();
     testDeriveDomainSeparation();
     testDeriveAlgorithmDomainSeparation();
+    testDeriveKnownAnswerVector();
     testDeriveWithRealKeys();
 
     std::cerr << "\n";

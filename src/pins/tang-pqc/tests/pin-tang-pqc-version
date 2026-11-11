@@ -56,7 +56,7 @@ test "$hybrid" = "true" \
     || skip_test "Tang server does not have PQC keys (hybrid_recovery=false)"
 
 # /adv-kem endpoint must be reachable and return a JWS.
-adv_kem="$(curl -sf "${url}/adv-kem")"
+adv_kem="$(curl -sf "${url}/adv-kem?alg=ML-KEM-768")"
 [ -n "$adv_kem" ]
 
 # KEM advertisement must contain a payload with an AKP key.

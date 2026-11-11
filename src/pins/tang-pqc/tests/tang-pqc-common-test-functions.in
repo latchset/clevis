@@ -46,6 +46,7 @@ tang_pqc_check_version() {
 tang_pqc_get_adv_kem() {
     local port="${1}"
     local adv_kem="${2:-/dev/stdout}"
+    local alg="${3:-ML-KEM-768}"
     [ -z "${port}" ] && error "tang_pqc_get_adv_kem: please specify 'port'"
-    curl -L -o "${adv_kem}" "http://localhost:${port}/adv-kem"
+    curl -sfL -o "${adv_kem}" "http://localhost:${port}/adv-kem?alg=${alg}"
 }

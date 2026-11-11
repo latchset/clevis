@@ -58,6 +58,9 @@ thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
 cfg="$(printf '{"url":"%s","thp":"%s"}' "$url" "$thp")"
 enc="$(echo -n "tamper test" | clevis encrypt tang-pqc "$cfg")"
 
-# Flip a character in the ciphertext portion (fifth dot-separated field).
-tampered="$(echo -n "$enc" | sed 's/\(.*\.\)\(.\)\(.*\)/\1X\3/')"
+# Flip a character in the authentication tag (last dot-separated field).
+tag="${enc##*.}"
+first="${tag:0:1}"
+if [ "$first" = "A" ]; then flip="B"; else flip="A"; fi
+tampered="${enc%.*}.${flip}${tag:1}"
 ! echo -n "$tampered" | clevis decrypt

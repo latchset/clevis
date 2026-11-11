@@ -45,6 +45,7 @@ public:
 
     JsonPtr fetchAdvertisement(const std::string& thp = "");
     JsonPtr fetchKemAdvertisement(const std::string& alg = "");
+    JsonPtr fetchKemKeyByThumbprint(const std::string& kemKid);
     VersionInfo fetchVersion();
 
     JsonPtr ecmrRecover(

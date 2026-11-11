@@ -168,6 +168,12 @@ JsonPtr TangClient::fetchKemAdvertisement(const std::string& alg)
     return jsonParse(body);
 }
 
+JsonPtr TangClient::fetchKemKeyByThumbprint(const std::string& kemKid)
+{
+    auto body = httpGet("/adv-kem/" + kemKid);
+    return jsonParse(body);
+}
+
 VersionInfo TangClient::fetchVersion()
 {
     VersionInfo info;

@@ -63,6 +63,13 @@ test "$pin" == "tang-pqc"
 # Verify clevis.tang-pqc header is present.
 jose fmt -j- -Og clevis -g tang-pqc -Oo- <<< "$jhd" >/dev/null
 
+# tang_kem_pub must NOT be stored in the binding.
+! jose fmt -j- -Og clevis -g tang-pqc -g tang_kem_pub -o- <<< "$jhd" \
+    >/dev/null 2>&1
+
+# kem_kid must be present in the header.
+jose fmt -j- -Og kem_kid -u- <<< "$jhd" >/dev/null
+
 # Server down must cause decrypt to fail.
 tang_stop "${TMP}"
 ! echo "$enc" | clevis decrypt

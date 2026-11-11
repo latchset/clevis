@@ -343,8 +343,6 @@ std::string hybridEncrypt(
                          json_deep_copy(clevisEcPub.get()));
     jsonObjectSetChecked(tang, "clevis_kem_ct",
                          json_string(kemCt.c_str()));
-    jsonObjectSetChecked(tang, "tang_kem_pub",
-                         json_deep_copy(tangKemPub));
     jsonObjectSetChecked(tang, "ek_digest",
                          json_string(ekDigest.c_str()));
     jsonObjectSetChecked(tang, "alg",

@@ -61,7 +61,6 @@ struct JweHeader {
     std::string clevisKemCt;
     std::string url;
     std::string ekDigest;
-    JsonPtr tangKemPub;
     JsonPtr advertisement;
     TlsConfig tls;
 };
@@ -115,10 +114,6 @@ JweHeader parseHeader(const json_t* header)
         hdr.kemAlg = algVal;
         validateKemAlg(hdr.kemAlg);
     }
-
-    auto kemPub = json_object_get(tang, "tang_kem_pub");
-    if (kemPub)
-        hdr.tangKemPub = jsonDeepCopy(kemPub);
 
     auto adv = json_object_get(tang, "adv");
     if (adv)
@@ -238,9 +233,44 @@ EcmrRecoveryResult ecmrRecover(
     return {std::move(ecKey), std::move(serverPub)};
 }
 
+JsonPtr fetchKemKey(
+    TangClient& tang,
+    const std::string& kemKid,
+    const json_t* verKeys)
+{
+    auto kemJws = tang.fetchKemKeyByThumbprint(kemKid);
+
+    if (!JoseWrapper::jwsVerify(kemJws.get(), verKeys, true))
+        throw PinError(
+            "KEM key signature verification failed "
+            "(possible MITM)!");
+
+    auto kemJwks = JoseWrapper::jwsPayload(kemJws.get());
+
+    auto keysArr = json_object_get(kemJwks.get(), "keys");
+    if (!keysArr)
+        keysArr = kemJwks.get();
+
+    size_t idx;
+    json_t* key;
+    json_array_foreach(keysArr, idx, key) {
+        try {
+            if (JoseWrapper::thumbprint(key, DEFAULT_THP_ALG) == kemKid)
+                return jsonDeepCopy(key);
+        } catch (...) {}
+        try {
+            if (JoseWrapper::thumbprint(key, ALT_THP_ALG) == kemKid)
+                return jsonDeepCopy(key);
+        } catch (...) {}
+    }
+
+    throw PinError("KEM key not found in server response");
+}
+
 CleansedString secureTransportRecover(
     TangClient& tang,
-    const JweHeader& hdr)
+    const JweHeader& hdr,
+    const json_t* tangKemPub)
 {
     auto kemKeySpecJson = makeJsonPtr(
         json_pack("{s:s}", "alg", hdr.kemAlg.c_str()));
@@ -254,7 +284,7 @@ CleansedString secureTransportRecover(
         clevisKemPriv.get());
 
     auto [clevisTransportCt, clevisTransportKey_] =
-        JoseWrapper::encapsulate(hdr.tangKemPub.get());
+        JoseWrapper::encapsulate(tangKemPub);
     CleansedJsonPtr clevisTransportKey(
         clevisTransportKey_.release());
 
@@ -370,6 +400,16 @@ int main(int argc, char* argv[])
 
         TangClient tang(hdr.url, hdr.tls);
 
+        JsonPtr advJwks;
+        if (hdr.advertisement) {
+            advJwks = jsonDeepCopy(hdr.advertisement.get());
+        } else {
+            auto advJws = tang.fetchAdvertisement("");
+            advJwks = JoseWrapper::jwsPayload(advJws.get());
+        }
+        auto verKeys = JoseWrapper::filterKeysByUse(
+            advJwks.get(), "verify");
+
         auto ephSpecJson = makeJsonPtr(json_pack(
             "{s:s, s:s}", "alg", "ECMR", "crv", crv));
         if (!ephSpecJson)
@@ -389,8 +429,12 @@ int main(int argc, char* argv[])
         if (!ecX)
             throw PinError("ECMR result missing x-coordinate");
 
+        auto tangKemPub = fetchKemKey(
+            tang, hdr.kemKid, verKeys.get());
+
         CleansedString encKeyK(
-            secureTransportRecover(tang, hdr));
+            secureTransportRecover(
+                tang, hdr, tangKemPub.get()));
 
         CleansedJsonPtr encKey(
             KeyDeriver::deriveEncKey(

@@ -23,7 +23,6 @@
 
 extern "C" {
 #include <openssl/crypto.h>
-#include <openssl/evp.h>
 }
 
 #include <array>
@@ -268,20 +267,6 @@ JsonPtr fetchKemKey(
     throw PinError("KEM key not found in server response");
 }
 
-std::string computeSha256B64Url(const std::string& input)
-{
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int digestLen = 0;
-
-    if (!EVP_Digest(
-            input.data(), input.size(),
-            digest, &digestLen,
-            EVP_sha256(), nullptr))
-        throw PinError("SHA-256 computation failed");
-
-    return JoseWrapper::base64UrlEncode(digest, digestLen);
-}
-
 void validateStringField(
     const json_t* hdr,
     const char* field,
@@ -293,30 +278,14 @@ void validateStringField(
             std::string("Response header: ") + field + " mismatch");
 }
 
-void validateReqDigest(
-    const json_t* hdr, const std::string& reqProtB64)
-{
-    auto reqDigest = json_string_value(
-        json_object_get(hdr, "req_digest"));
-    if (!reqDigest)
-        throw PinError("Response header: missing req_digest");
-
-    auto expected = computeSha256B64Url(reqProtB64);
-    if (expected != reqDigest)
-        throw PinError(
-            "Response header: req_digest mismatch "
-            "(possible replay/reflection)");
-}
-
 void validateCritFieldsPresence(const json_t* hdr)
 {
     auto crit = json_object_get(hdr, "crit");
     if (!crit || !json_is_array(crit))
         throw PinError("Response header: missing crit array");
 
-    static constexpr std::array<const char*, 6> REQUIRED = {{
-        "kem_ver", "suite", "kid", "kem_kid",
-        "msg_dir", "req_digest"
+    static constexpr std::array<const char*, 5> REQUIRED = {{
+        "kem_ver", "suite", "kid", "kem_kid", "msg_dir"
     }};
     for (auto field : REQUIRED) {
         bool found = false;
@@ -338,7 +307,6 @@ void validateCritFieldsPresence(const json_t* hdr)
 
 void validateResponseHeader(
     const json_t* respJwe,
-    const std::string& reqProtB64,
     const std::string& kid,
     const std::string& kemKid,
     const std::string& kemAlg)
@@ -362,7 +330,6 @@ void validateResponseHeader(
     validateStringField(hdr.get(), "msg_dir", "tang-to-clevis");
     validateStringField(hdr.get(), "kid", kid);
     validateStringField(hdr.get(), "kem_kid", kemKid);
-    validateReqDigest(hdr.get(), reqProtB64);
 }
 
 CleansedString secureTransportRecover(
@@ -418,12 +385,6 @@ CleansedString secureTransportRecover(
             innerPayload.data(), innerPayload.size()))
         throw PinError("Failed to encrypt inner payload");
 
-    auto reqProtB64 = json_string_value(
-        json_object_get(blobJwe.get(), "protected"));
-    if (!reqProtB64)
-        throw PinError("Failed to extract request protected header");
-    std::string reqProtB64Str(reqProtB64);
-
     auto encryptedBlob = JoseWrapper::jweToCompact(blobJwe.get());
 
     auto kemResp = tang.kemRecover(
@@ -438,8 +399,7 @@ CleansedString secureTransportRecover(
         kemResp.tangEncryptedKey);
 
     validateResponseHeader(
-        tangEncJwe.get(), reqProtB64Str,
-        hdr.kid, hdr.kemKid, hdr.kemAlg);
+        tangEncJwe.get(), hdr.kid, hdr.kemKid, hdr.kemAlg);
 
     CleansedVector<uint8_t> encKeyBytes(
         JoseWrapper::jweDecrypt(

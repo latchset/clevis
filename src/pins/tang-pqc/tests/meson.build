@@ -9,9 +9,11 @@ tang_pqc_test_env.prepend('PATH',
   join_paths(meson.source_root(), 'src'),
   join_paths(meson.source_root(), 'src', 'pins', 'tang'),
   join_paths(meson.source_root(), 'src', 'pins', 'tang-pqc'),
+  join_paths(meson.source_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang-pqc'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang-pqc', 'tests'),
+  join_paths(meson.build_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'luks', 'tests'),
   separator: ':'
 )

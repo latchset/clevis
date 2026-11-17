@@ -1,0 +1,132 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies that `clevis luks regen` rebinds a LUKS2 device bound with
+# the hybrid (ECMR + ML-KEM) tang-pqc pin: the pin and its url/alg
+# configuration must round-trip through `clevis luks list`, and the
+# regenerated slot must carry fresh key material that still decrypts
+# through the hybrid recovery path.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+KEM_ALG="ML-KEM-768"
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+binding_url="http://localhost:${port}"
+signing_key_thumbprint="$(jose jwk thp -i "${TMP}/db/sig.jwk")"
+
+bind_hybrid_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","thp":"%s","alg":"%s"}' \
+          "${binding_url}" "${signing_key_thumbprint}" "${KEM_ALG}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Bind with tang-pqc should have succeeded."
+    fi
+}
+
+remove_fallback_passphrase() {
+    if ! cryptsetup luksRemoveKey --batch-mode "${DEV}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Error removing the default password from ${DEV}."
+    fi
+}
+
+expect_single_clevis_slot() {
+    local enabled
+    enabled=$(clevis_luks_used_slots "${DEV}" | wc -l)
+    if [ "${enabled}" -ne 1 ]; then
+        error "${TEST}: We should have only one slot enabled (${enabled})."
+    fi
+}
+
+expect_hybrid_binding_listed() {
+    # `clevis luks list` reconstructs url and alg only; the trust
+    # thumbprint is intentionally not part of the rebinding config.
+    local expected listing
+    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"alg\":\"%s\"}'" \
+              "${SLOT}" "${binding_url}" "${KEM_ALG}")
+    if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
+        error "${TEST}: Unable to list the bindings in ${DEV}."
+    fi
+    if [ "${listing}" != "${expected}" ]; then
+        error "${TEST}: Expected listing [${expected}], got [${listing}]."
+    fi
+}
+
+passphrase_bound_to_slot() {
+    clevis_luks_unlock_device_by_slot "${DEV}" "${SLOT}"
+}
+
+regenerate_binding() {
+    if ! clevis luks regen -q -d "${DEV}" -s "${SLOT}"; then
+        error "${TEST}: clevis luks regen failed."
+    fi
+}
+
+expect_passphrase_rotated() {
+    local before_regen="${1}"
+    local after_regen
+    after_regen="$(passphrase_bound_to_slot)"
+    if [ "${before_regen}" = "${after_regen}" ]; then
+        error "${TEST}: The passphrases should be different."
+    fi
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_hybrid_pin
+remove_fallback_passphrase
+expect_single_clevis_slot
+expect_hybrid_binding_listed
+
+passphrase_before_regen="$(passphrase_bound_to_slot)"
+
+regenerate_binding
+
+expect_hybrid_binding_listed
+expect_passphrase_rotated "${passphrase_before_regen}"

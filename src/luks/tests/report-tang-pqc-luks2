@@ -1,0 +1,158 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies `clevis luks report` on a LUKS2 device bound with the hybrid
+# (ECMR + ML-KEM) tang-pqc pin: a healthy binding reports no rotation,
+# rotating every server key reports both the ECMR key and the KEM key,
+# rotating only the KEM keys reports the KEM key alone, and report -r
+# regenerates the binding back to health.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+KEM_ALG="ML-KEM-768"
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+binding_url="http://localhost:${port}"
+signing_key_thumbprint="$(jose jwk thp -i "${TMP}/db/sig.jwk")"
+
+bind_hybrid_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","thp":"%s"}' \
+          "${binding_url}" "${signing_key_thumbprint}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Bind with tang-pqc should have succeeded."
+    fi
+}
+
+kid_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og kid -u-
+}
+
+kem_kid_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og kem_kid -u-
+}
+
+report_quietly() {
+    clevis luks report -q -d "${DEV}" -s "${SLOT}"
+}
+
+expect_report_clean() {
+    if ! report_quietly; then
+        error "${TEST}: Report should have succeeded; no keys were rotated."
+    fi
+}
+
+expect_report_lists_rotation_of() {
+    local expected_kid="${1}"
+    local omitted_kid="${2}"
+    local output
+    if output="$(report_quietly 2>/dev/null)"; then
+        error "${TEST}: Report should have indicated keys were rotated."
+    fi
+    if ! grep -q "${expected_kid}" <<< "${output}"; then
+        error "${TEST}: Report should have listed ${expected_kid}."
+    fi
+    if [ -n "${omitted_kid}" ] \
+            && grep -q "${omitted_kid}" <<< "${output}"; then
+        error "${TEST}: Report should not have listed ${omitted_kid}."
+    fi
+}
+
+regenerate_binding_through_report() {
+    if ! clevis luks report -q -r -d "${DEV}" -s "${SLOT}"; then
+        error "${TEST}: Report with regen should have succeeded."
+    fi
+}
+
+rotate_all_keys() {
+    tang_new_keys "${TMP}" "rotate-keys"
+}
+
+rotate_kem_keys_only() {
+    # Hide the advertised KEM keys and create a fresh one, keeping the
+    # ECMR and the signing keys in place. Tang does not advertise
+    # hidden (dot-prefixed) keys.
+    local f alg
+    for f in "${TMP}"/db/*.jwk; do
+        alg="$(jose fmt -j "${f}" -Og alg -u- 2>/dev/null)" || alg=
+        case "${alg}" in
+        ML-KEM-*) mv "${f}" "${TMP}/db/.rotated-$(basename "${f}")" ;;
+        esac
+    done
+    jose jwk gen -i "{\"alg\":\"${KEM_ALG}\"}" \
+        -o "${TMP}/db/rotated-kem.jwk"
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_hybrid_pin
+
+# A healthy binding reports no rotation.
+expect_report_clean
+
+# Rotating every server key reports both the ECMR key and the KEM key.
+kid="$(kid_of_binding)"
+kem_kid="$(kem_kid_of_binding)"
+rotate_all_keys
+expect_report_lists_rotation_of "${kid}"
+expect_report_lists_rotation_of "${kem_kid}"
+
+# Regenerating through the report restores a healthy binding.
+regenerate_binding_through_report
+expect_report_clean
+
+# Rotating only the KEM keys reports the KEM key alone; the ECMR key is
+# still advertised and must not be listed.
+rotate_kem_keys_only
+expect_report_lists_rotation_of "$(kem_kid_of_binding)" "$(kid_of_binding)"
+
+# Regenerating through the report restores a healthy binding again.
+regenerate_binding_through_report
+expect_report_clean

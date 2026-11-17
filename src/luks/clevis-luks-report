@@ -118,32 +118,59 @@ report_tang_pqc() {
         return 1
     fi
 
+    local alg
+    if ! alg="$(jose fmt --json="${content}" --get alg --unquote=-)" \
+              || [ -z "${alg}" ]; then
+        echo "Invalid tang-pqc metadata; KEM algorithm not found" >&2
+        return 1
+    fi
+
+    # Fetch and validate the current advertisement; it provides both the
+    # ECMR exchange keys and the signing keys used to validate the KEM
+    # advertisement.
+    local jws
+    if ! jws="$(curl -sfg "${url}/adv")"; then
+        echo "Unable to fetch advertisement (${url}/adv)" >&2
+        return 1
+    fi
+
+    local adv_keys
+    if ! adv_keys="$(jose fmt --json="${jws}" --object --get payload \
+                     --string --b64load --object --get keys \
+                     --array --unwind --output=-)"; then
+        echo "Advertisement is malformed" >&2
+        return 1
+    fi
+
+    local ver_keys
+    if ! ver_keys="$(printf '%s' "${adv_keys}" | jose jwk use --input=- \
+                                                --required \
+                                                --use=verify \
+                                                --output=-)" \
+        || ! printf '%s' "${ver_keys}" | jose jws ver --input="${jws}" \
+                                             --key=- --all; then
+        echo "Unable to validate advertisement" >&2
+        return 1
+    fi
+
     local keys=""
 
-    # Check EC key rotation via /adv.
+    # Check EC key rotation: the binding's kid must still be advertised.
     local kid
     if [ -n "${header}" ]; then
         kid="$(jose fmt --json="${header}" --get kid --unquote=-)" 2>/dev/null
     fi
     if [ -n "${kid}" ]; then
-        local jws
-        if jws="$(curl -sfg "${url}/adv")"; then
-            local adv_keys
-            if adv_keys="$(jose fmt --json="${jws}" --object --get payload \
-                           --string --b64load --object --get keys \
-                           --array --unwind --output=-)"; then
-                if ! printf '%s' "${adv_keys}" | jose jwk thp --input=- \
-                                                      --find "${kid}" \
-                                                      >/dev/null 2>&1; then
-                    keys="$(printf '%s %s' "${keys}" "${kid}")"
-                fi
-            fi
-        else
-            echo "Unable to fetch advertisement (${url}/adv)" >&2
+        if ! printf '%s' "${adv_keys}" | jose jwk thp --input=- \
+                                              --find "${kid}" \
+                                              >/dev/null 2>&1; then
+            keys="$(printf '%s %s' "${keys}" "${kid}")"
         fi
     fi
 
-    # Check KEM key rotation via /adv-kem.
+    # Check KEM key rotation via /adv-kem. The server requires the
+    # explicit alg parameter, and the KEM advertisement is validated
+    # with the signing keys from the regular advertisement.
     local kem_kid
     if [ -n "${header}" ]; then
         kem_kid="$(jose fmt --json="${header}" --get kem_kid \
@@ -151,19 +178,30 @@ report_tang_pqc() {
     fi
     if [ -n "${kem_kid}" ]; then
         local kem_jws
-        if kem_jws="$(curl -sfg "${url}/adv-kem")"; then
-            local kem_keys
-            if kem_keys="$(jose fmt --json="${kem_jws}" --object \
-                           --get payload --string --b64load --object \
-                           --get keys --array --unwind --output=-)"; then
-                if ! printf '%s' "${kem_keys}" | jose jwk thp --input=- \
-                                                      --find "${kem_kid}" \
-                                                      >/dev/null 2>&1; then
-                    keys="$(printf '%s %s' "${keys}" "${kem_kid}")"
-                fi
-            fi
-        else
-            echo "Unable to fetch KEM advertisement (${url}/adv-kem)" >&2
+        if ! kem_jws="$(curl -sfg "${url}/adv-kem?alg=${alg}")"; then
+            echo "Unable to fetch KEM advertisement (${url}/adv-kem?alg=${alg})" >&2
+            return 1
+        fi
+
+        local kem_keys
+        if ! kem_keys="$(jose fmt --json="${kem_jws}" --object \
+                         --get payload --string --b64load --object \
+                         --get keys --array --unwind --output=-)"; then
+            echo "KEM advertisement is malformed" >&2
+            return 1
+        fi
+
+        if ! printf '%s' "${ver_keys}" | jose jws ver \
+                                        --input="${kem_jws}" \
+                                        --key=- --all; then
+            echo "Unable to validate KEM advertisement" >&2
+            return 1
+        fi
+
+        if ! printf '%s' "${kem_keys}" | jose jwk thp --input=- \
+                                               --find "${kem_kid}" \
+                                               >/dev/null 2>&1; then
+            keys="$(printf '%s %s' "${keys}" "${kem_kid}")"
         fi
     fi
 

@@ -20,6 +20,7 @@
 
 #include <curl/curl.h>
 
+#include <cctype>
 #include <stdexcept>
 
 namespace clevis {
@@ -59,6 +60,51 @@ size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp)
     }
 }
 
+// Returns a short printable excerpt of the server-provided error body
+// so failures carry actionable diagnostics. The body is untrusted
+// server input, so it is truncated and stripped of non-printable
+// characters before being embedded in the error message.
+std::string responseExcerpt(const std::string& body)
+{
+    constexpr size_t MAX_EXCERPT = 128;
+    std::string excerpt;
+    for (auto ch : body) {
+        if (excerpt.size() >= MAX_EXCERPT)
+            break;
+        if (std::isprint(static_cast<unsigned char>(ch)))
+            excerpt += ch;
+    }
+    return excerpt;
+}
+
+[[noreturn]] void throwHttpResponseError(
+    const char* method,
+    const std::string& path,
+    long code,
+    const std::string& body)
+{
+    if (code == 400) {
+        // The hardened tang server answers HTTP 400 when the request
+        // protocol parameters disagree with the server's own view --
+        // for /rec-kem, a suite/kid/kem_kid/alg mismatch. Surface it
+        // as a distinct, actionable error instead of a generic
+        // transport failure.
+        auto msg =
+            std::string("Tang rejected the request with HTTP 400 on ")
+            + method + " " + path
+            + ": protocol parameter mismatch (suite/kid/kem_kid/alg"
+              " disagreement; possible downgrade attempt or stale"
+              " advertisement)";
+        auto excerpt = responseExcerpt(body);
+        if (!excerpt.empty())
+            msg += " [server said: " + excerpt + "]";
+        throw PinError(msg);
+    }
+
+    throw PinError("HTTP " + std::string(method) + " failed: " + path
+                   + " (HTTP " + std::to_string(code) + ")");
+}
+
 CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
 {
     CurlPtr curl(curl_easy_init());
@@ -66,7 +112,10 @@ CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
         throw PinError("Failed to initialize curl");
 
     curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 1L);
+    // HTTP status codes are inspected manually after the transfer so
+    // that error responses (e.g. 400 from /rec-kem) can be reported
+    // with their status code and body instead of a generic failure.
+    curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 0L);
     curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 30L);
@@ -111,6 +160,14 @@ std::string TangClient::httpGet(const std::string& path)
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
 
     CURLcode res = curl_easy_perform(curl.get());
+
+    long code = 0;
+    if (res == CURLE_OK
+        && curl_easy_getinfo(
+               curl.get(), CURLINFO_RESPONSE_CODE, &code) == CURLE_OK
+        && code >= 400)
+        throwHttpResponseError("GET", path, code, response);
+
     if (res != CURLE_OK)
         throw PinError("HTTP GET failed: " + std::string(path)
                        + " (" + curl_easy_strerror(res) + ")");
@@ -141,6 +198,13 @@ std::string TangClient::httpPost(
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
 
     CURLcode res = curl_easy_perform(curl.get());
+
+    long code = 0;
+    if (res == CURLE_OK
+        && curl_easy_getinfo(
+               curl.get(), CURLINFO_RESPONSE_CODE, &code) == CURLE_OK
+        && code >= 400)
+        throwHttpResponseError("POST", path, code, response);
 
     if (res != CURLE_OK)
         throw PinError("HTTP POST failed: " + std::string(path)

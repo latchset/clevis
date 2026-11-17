@@ -1,0 +1,232 @@
+#!/bin/bash -xe
+# vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# Client-side anti-downgrade tests for the hybrid /rec-kem recovery,
+# mirroring the /rec-kem coverage of the tang test suite (tests/rec in
+# the tang repository).
+
+. tang-pqc-common-test-functions
+
+CANNED_PID=""
+
+on_exit() {
+    exit_status=$?
+    [ -n "${CANNED_PID}" ] && kill -9 "${CANNED_PID}" 2>/dev/null || :
+    tang_stop "${TMP}"
+    [ -d "$TMP" ] && rm -rf "$TMP"
+    exit "${exit_status}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+url="http://localhost:${port}"
+thp="$(jose jwk thp -i "$TMP/db/sig.jwk")"
+
+# ---------------------------------------------------------------------------
+# Part 1: clevis round trip for every AKP key variant the server holds
+# (mirrors the happy path of rec_kem_test in tang's tests/rec). The suite
+# used by clevis is derived from the advertised key, so every variant the
+# hardened server advertises must round-trip cleanly.
+# ---------------------------------------------------------------------------
+tested=0
+for f in "$TMP"/db/*.jwk; do
+    kty="$(jose fmt -j "$f" -Og kty -u- 2>/dev/null)" || continue
+    [ "$kty" = "AKP" ] || continue
+
+    kem_alg="$(jose fmt -j "$f" -Og alg -u-)"
+    echo "Testing /rec-kem round trip with ${kem_alg}" >&2
+
+    cfg="$(printf '{"url":"%s","thp":"%s","alg":"%s"}' \
+           "$url" "$thp" "$kem_alg")"
+    msg="hybrid recovery ${kem_alg}"
+    enc="$(echo -n "$msg" | clevis encrypt tang-pqc "$cfg")"
+    dec="$(echo -n "$enc" | clevis decrypt)"
+    test "$dec" = "$msg"
+
+    # The stored 'alg' must be the alg of the key selected from the
+    # verified advertisement (derive, don't trust).
+    hdr="$(echo -n "$enc" | cut -d. -f1)"
+    jhd="$(jose b64 dec -i- <<< "$hdr")"
+    alg_hdr="$(jose fmt -j- -Og clevis -g tang-pqc -g alg -u- <<< "$jhd")"
+    test "$alg_hdr" = "$kem_alg"
+
+    # kem_kid must be the S256 thumbprint of the advertised KEM key.
+    kem_kid_hdr="$(jose fmt -j- -Og kem_kid -u- <<< "$jhd")"
+    kem_kid_srv="$(jose jwk thp -i "$f" -a S256)"
+    test "$kem_kid_hdr" = "$kem_kid_srv"
+
+    tested=$((tested + 1))
+done
+
+[ "${tested}" -gt 0 ] \
+    || skip_test "No ML-KEM key found in server db"
+
+echo "Successfully tested /rec-kem round trip with ${tested} AKP key(s)" >&2
+
+# ---------------------------------------------------------------------------
+# Part 2: raw /rec-kem exchange (mirrors rec_kem_test in tang's tests/rec):
+# build the request exactly like clevis does, validate the response
+# protected header, and confirm the hardened server rejects a suite
+# disagreement with HTTP 400.
+# ---------------------------------------------------------------------------
+exc_kid="$(jose jwk thp -i "$TMP/db/exc.jwk")"
+
+kem_jwk=""
+for f in "$TMP"/db/*.jwk; do
+    kty="$(jose fmt -j "$f" -Og kty -u- 2>/dev/null)" || continue
+    [ "$kty" = "AKP" ] || continue
+    kem_jwk="$f"
+    break
+done
+
+kem_alg="$(jose fmt -j "$kem_jwk" -Og alg -u-)"
+kem_kid="$(jose jwk thp -i "$kem_jwk" -a S256)"
+jose jwk pub -i "$kem_jwk" -o "$TMP/kem.pub.jwk"
+
+# Step 1: simulate the stored KEM binding.
+stored_encap="$(jose jwk encap -i "$TMP/kem.pub.jwk")"
+enc_key="$(printf '%s' "$stored_encap" | jose fmt -j- -Og ss -o-)"
+clevis_kem_ct="$(printf '%s' "$stored_encap" | jose fmt -j- -Og ct -u-)"
+printf '%s' "$enc_key" > "$TMP/enc_key.jwk"
+ek_digest="$(jose jwk thp -i "$TMP/enc_key.jwk" -a S256)"
+
+# Step 2: ephemeral client KEM keypair with the SAME alg as the tang key.
+jose jwk gen -i "{\"alg\":\"$kem_alg\"}" -o "$TMP/clevis_kem_priv.jwk"
+jose jwk pub -i "$TMP/clevis_kem_priv.jwk" -o "$TMP/clevis_kem_pub.jwk"
+
+# Step 3: forward-channel encapsulation to the tang KEM key.
+fwd_encap="$(jose jwk encap -i "$TMP/kem.pub.jwk")"
+clevis_transport_ct="$(printf '%s' "$fwd_encap" | jose fmt -j- -Og ct -u-)"
+printf '%s' "$fwd_encap" | jose fmt -j- -Og ss -o- \
+    > "$TMP/clevis_transport_key.jwk"
+
+# Step 4: inner payload.
+clevis_kem_pub="$(cat "$TMP/clevis_kem_pub.jwk")"
+printf '{"clevis_kem_ct":"%s","clevis_kem_pub":%s,"ek_digest":"%s"}' \
+    "$clevis_kem_ct" "$clevis_kem_pub" "$ek_digest" \
+    > "$TMP/inner_payload.json"
+
+# Step 5: encrypt the inner payload with the enriched protected header
+# (suite derived from the advertised key's alg).
+enriched_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kid","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
+    "$kem_alg" "$exc_kid" "$kem_kid")"
+clevis_encrypted_blob="$(jose jwe enc \
+    -i "$enriched_hdr" \
+    -I "$TMP/inner_payload.json" \
+    -k "$TMP/clevis_transport_key.jwk" -c)"
+
+# Step 6: POST to /rec-kem.
+req_body="$(printf '{"clevis_encrypted_blob":"%s","clevis_transport_ct":"%s"}' \
+    "$clevis_encrypted_blob" "$clevis_transport_ct")"
+server_resp="$(curl -sf -X POST \
+    -H "Content-Type: application/json" \
+    -d "$req_body" \
+    "http://localhost:${port}/rec-kem/${kem_kid}")"
+
+tang_encrypted_key="$(printf '%s' "$server_resp" \
+    | jose fmt -j- -Og tang_encrypted_key -u-)"
+tang_transport_ct="$(printf '%s' "$server_resp" \
+    | jose fmt -j- -Og tang_transport_ct -u-)"
+
+# Step 7: decapsulate the return channel and recover the enc key.
+tang_transport_key="$(jose jwk decap -i "$TMP/clevis_kem_priv.jwk" \
+    -c "$tang_transport_ct")"
+printf '%s' "$tang_transport_key" > "$TMP/tang_transport_key.jwk"
+
+IFS='.' read -r prot ekey iv ct tag <<< "$tang_encrypted_key"
+printf '{"protected":"%s","encrypted_key":"%s","iv":"%s","ciphertext":"%s","tag":"%s"}' \
+    "$prot" "$ekey" "$iv" "$ct" "$tag" > "$TMP/resp_jwe.json"
+recovered_enc_key="$(jose jwe dec -i "$TMP/resp_jwe.json" \
+    -k "$TMP/tang_transport_key.jwk")"
+
+# Step 8: validate the response protected header (this is exactly what
+# clevis now enforces client-side before using tang_transport_key).
+resp_hdr="$(printf '%s' "$prot" | jose b64 dec -i-)"
+printf '%s' "$resp_hdr" | jose fmt -j- -Og kem_ver -Sq "hybrid-v1" -E
+printf '%s' "$resp_hdr" | jose fmt -j- -Og suite -Sq "ECMR+$kem_alg" -E
+printf '%s' "$resp_hdr" | jose fmt -j- -Og kem_kid -Sq "$kem_kid" -E
+printf '%s' "$resp_hdr" | jose fmt -j- -Og msg_dir -Sq "tang-to-clevis" -E
+printf '%s' "$resp_hdr" | jose fmt -j- -Og kid -Sq "$exc_kid" -E
+
+# Step 9: the recovered enc key must match the original one.
+enc_key_k="$(printf '%s' "$enc_key" | jose fmt -j- -Og k -u-)"
+recovered_enc_key_k="$(printf '%s' "$recovered_enc_key" | jose fmt -j- -Og k -u-)"
+[ "$enc_key_k" = "$recovered_enc_key_k" ]
+
+# Step 10: a request declaring a suite that disagrees with the alg of the
+# KEM key selected via the URL path must be rejected with HTTP 400 (the
+# server-side half of the anti-downgrade protection). The mismatching
+# suite is derived from the selected key's alg so it is always wrong.
+case "$kem_alg" in
+    ML-KEM-512) bad_alg="ML-KEM-768" ;;
+    *) bad_alg="ML-KEM-512" ;;
+esac
+bad_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kid","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
+    "$bad_alg" "$exc_kid" "$kem_kid")"
+bad_blob="$(jose jwe enc \
+    -i "$bad_hdr" \
+    -I "$TMP/inner_payload.json" \
+    -k "$TMP/clevis_transport_key.jwk" -c)"
+bad_req="$(printf '{"clevis_encrypted_blob":"%s","clevis_transport_ct":"%s"}' \
+    "$bad_blob" "$clevis_transport_ct")"
+code="$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d "$bad_req" \
+    "http://localhost:${port}/rec-kem/${kem_kid}")"
+[ "$code" = "400" ]
+
+# ---------------------------------------------------------------------------
+# Part 3: an HTTP 400 must surface on the client as a distinct, actionable
+# error, not as a generic failure.
+# ---------------------------------------------------------------------------
+tang_stop "${TMP}"
+
+RESP="${TMP}/http400"
+printf 'HTTP/1.0 400 Bad Request\n\n{"error":"parameter mismatch"}\n' \
+    > "${RESP}"
+
+# Serve the canned 400 response on the same port the Part 1 binding
+# points at, and try to decrypt that binding: the client must fail with
+# the distinct HTTP 400 diagnostics.
+"${SOCAT}" TCP4-LISTEN:${port},reuseaddr,bind=localhost \
+           "SYSTEM:cat ${RESP}!!OPEN:/dev/null" &
+CANNED_PID=$!
+process_wait_until_port_ready "${CANNED_PID}"
+
+! echo -n "$enc" | clevis decrypt 2>"${TMP}/stderr"
+
+# The distinct HTTP 400 diagnostics must be part of the error output.
+grep -q "HTTP 400" "${TMP}/stderr"
+grep -q "parameter mismatch" "${TMP}/stderr"
+
+kill -9 "${CANNED_PID}" 2>/dev/null || :
+CANNED_PID=""
+
+echo "Successfully tested /rec-kem client-side anti-downgrade validation" >&2

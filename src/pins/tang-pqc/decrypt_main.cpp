@@ -19,6 +19,7 @@
 #include "jose_wrapper.h"
 #include "jose_types.h"
 #include "key_deriver.h"
+#include "response_validator.h"
 #include "tang_client.h"
 
 extern "C" {
@@ -267,78 +268,19 @@ JsonPtr fetchKemKey(
     throw PinError("KEM key not found in server response");
 }
 
-void validateStringField(
-    const json_t* hdr,
-    const char* field,
-    const std::string& expected)
-{
-    auto val = json_string_value(json_object_get(hdr, field));
-    if (!val || expected != val)
-        throw PinError(
-            std::string("Response header: ") + field + " mismatch");
-}
-
-void validateCritFieldsPresence(const json_t* hdr)
-{
-    auto crit = json_object_get(hdr, "crit");
-    if (!crit || !json_is_array(crit))
-        throw PinError("Response header: missing crit array");
-
-    static constexpr std::array<const char*, 5> REQUIRED = {{
-        "kem_ver", "suite", "kid", "kem_kid", "msg_dir"
-    }};
-    for (auto field : REQUIRED) {
-        bool found = false;
-        size_t idx;
-        json_t* val;
-        json_array_foreach(crit, idx, val) {
-            auto s = json_string_value(val);
-            if (s && std::strcmp(s, field) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found)
-            throw PinError(
-                std::string("Response header: crit missing '")
-                + field + "'");
-    }
-}
-
-void validateResponseHeader(
-    const json_t* respJwe,
-    const std::string& kid,
-    const std::string& kemKid,
-    const std::string& kemAlg)
-{
-    auto protB64 = json_string_value(
-        json_object_get(respJwe, "protected"));
-    if (!protB64)
-        return;
-
-    auto protBytes = JoseWrapper::base64UrlDecode(protB64);
-    std::string protStr(protBytes.begin(), protBytes.end());
-    auto hdr = jsonParse(protStr);
-
-    if (!json_object_get(hdr.get(), "kem_ver"))
-        return;
-
-    std::string expectedSuite = "ECMR+" + kemAlg;
-    validateCritFieldsPresence(hdr.get());
-    validateStringField(hdr.get(), "kem_ver", "hybrid-v1");
-    validateStringField(hdr.get(), "suite", expectedSuite);
-    validateStringField(hdr.get(), "msg_dir", "tang-to-clevis");
-    validateStringField(hdr.get(), "kid", kid);
-    validateStringField(hdr.get(), "kem_kid", kemKid);
-}
-
 CleansedString secureTransportRecover(
     TangClient& tang,
     const JweHeader& hdr,
-    const json_t* tangKemPub)
+    const json_t* tangKemPub,
+    const std::string& kemAlg,
+    const std::string& requestKid)
 {
+    // The ephemeral client KEM keypair MUST use the same ML-KEM variant
+    // as the tang key selected from the verified advertisement: the
+    // server rejects a clevis_kem_pub whose 'alg' differs from its own
+    // key, and a weaker variant would be a parameter downgrade.
     auto kemKeySpecJson = makeJsonPtr(
-        json_pack("{s:s}", "alg", hdr.kemAlg.c_str()));
+        json_pack("{s:s}", "alg", kemAlg.c_str()));
     if (!kemKeySpecJson)
         throw PinError("Failed to build KEM key spec");
     auto kemKeySpecDump = jsonDump(kemKeySpecJson.get());
@@ -347,6 +289,13 @@ CleansedString secureTransportRecover(
             kemKeySpecDump.get()).release());
     auto clevisKemPub = JoseWrapper::publicKey(
         clevisKemPriv.get());
+
+    auto pubAlg = json_string_value(
+        json_object_get(clevisKemPub.get(), "alg"));
+    if (!pubAlg || kemAlg != pubAlg)
+        throw PinError(
+            "Client KEM public key 'alg' does not match the tang KEM "
+            "key algorithm (" + kemAlg + ")");
 
     auto [clevisTransportCt, clevisTransportKey_] =
         JoseWrapper::encapsulate(tangKemPub);
@@ -363,16 +312,19 @@ CleansedString secureTransportRecover(
     auto innerPayloadDump = jsonDump(innerObj.get());
     CleansedString innerPayload(innerPayloadDump.get());
 
-    std::string suite = "ECMR+" + hdr.kemAlg;
+    // Derive, don't trust: the suite is built strictly from the alg of
+    // the verified tang KEM key, never from stored metadata or server
+    // hints.
+    std::string suite = deriveRecKemSuite(kemAlg);
     auto blobProt = makeJsonPtr(json_pack(
         "{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:[s,s,s,s,s]}",
         "alg", "dir",
         "enc", "A256GCM",
-        "kem_ver", "hybrid-v1",
+        "kem_ver", REC_KEM_VERSION,
         "suite", suite.c_str(),
-        "kid", hdr.kid.c_str(),
+        "kid", requestKid.c_str(),
         "kem_kid", hdr.kemKid.c_str(),
-        "msg_dir", "clevis-to-tang",
+        "msg_dir", REC_KEM_MSG_DIR_REQUEST,
         "crit", "kem_ver", "suite", "kid", "kem_kid", "msg_dir"));
     if (!blobProt)
         throw PinError("Failed to build transport protected header");
@@ -390,16 +342,22 @@ CleansedString secureTransportRecover(
     auto kemResp = tang.kemRecover(
         hdr.kemKid, encryptedBlob, clevisTransportCt);
 
+    auto tangEncJwe = JoseWrapper::jweFromCompact(
+        kemResp.tangEncryptedKey);
+
+    // Fail closed: validate the response protected header BEFORE
+    // decapsulating tang_transport_ct or using tang_transport_key (and
+    // the recovered key) in any way.
+    RecKemResponseExpectations expectations;
+    expectations.ecmrKid = requestKid;
+    expectations.kemKid = hdr.kemKid;
+    expectations.kemAlg = kemAlg;
+    validateRecKemResponse(tangEncJwe.get(), expectations);
+
     CleansedJsonPtr tangTransportKey(
         JoseWrapper::decapsulate(
             clevisKemPriv.get(),
             kemResp.tangTransportCt).release());
-
-    auto tangEncJwe = JoseWrapper::jweFromCompact(
-        kemResp.tangEncryptedKey);
-
-    validateResponseHeader(
-        tangEncJwe.get(), hdr.kid, hdr.kemKid, hdr.kemAlg);
 
     CleansedVector<uint8_t> encKeyBytes(
         JoseWrapper::jweDecrypt(
@@ -508,6 +466,17 @@ int main(int argc, char* argv[])
             serverPubHint.get(), hdr.kid, crv);
         CleansedJsonPtr ecKey(ecKey_.release());
 
+        // Derive, don't trust: the request 'kid' is the S256 thumbprint
+        // of tang's ECMR key that was actually used for the recovery.
+        // It must match the kid stored in the binding; a mismatch means
+        // the exchange key does not correspond to the bound kid.
+        auto requestKid = JoseWrapper::thumbprint(
+            serverPub.get(), DEFAULT_THP_ALG);
+        if (requestKid != hdr.kid)
+            throw PinError(
+                "ECMR key thumbprint does not match the binding's "
+                "'kid' (possible downgrade or MITM attack)");
+
         auto ecX = json_string_value(
             json_object_get(ecKey.get(), "x"));
         if (!ecX)
@@ -516,14 +485,34 @@ int main(int argc, char* argv[])
         auto tangKemPub = fetchKemKey(
             tang, hdr.kemKid, verKeys.get());
 
+        // Derive, don't trust: the recovery suite and the ephemeral
+        // client KEM keypair are derived from the 'alg' of the tang KEM
+        // key fetched from the verified advertisement -- never from
+        // stored metadata or server hints. A disagreement with the
+        // stored binding is a parameter mismatch (possible downgrade
+        // attempt) and MUST abort the recovery.
+        auto tangKemAlgVal = json_string_value(
+            json_object_get(tangKemPub.get(), "alg"));
+        if (!tangKemAlgVal)
+            throw PinError(
+                "Tang KEM key is missing the 'alg' field");
+        std::string tangKemAlg = tangKemAlgVal;
+        validateKemAlg(tangKemAlg);
+        if (hdr.kemAlg != tangKemAlg)
+            throw PinError(
+                "KEM algorithm mismatch: binding uses " + hdr.kemAlg
+                + " but the server key for kem_kid '" + hdr.kemKid
+                + "' is " + tangKemAlg
+                + " (possible downgrade attempt)");
+
         CleansedString encKeyK(
             secureTransportRecover(
-                tang, hdr, tangKemPub.get()));
+                tang, hdr, tangKemPub.get(), tangKemAlg, requestKid));
 
         CleansedJsonPtr encKey(
             KeyDeriver::deriveEncKey(
                 ecX, encKeyK, hdr.kid,
-                hdr.kemKid, hdr.kemAlg).release());
+                hdr.kemKid, tangKemAlg).release());
 
         CleansedVector<uint8_t> plaintext(
             JoseWrapper::jweDecrypt(

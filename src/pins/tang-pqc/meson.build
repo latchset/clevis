@@ -7,6 +7,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
     'key_deriver.cpp',
     'tang_client.cpp',
     'ecmr_ops.cpp',
+    'response_validator.cpp',
   ]
 
   tang_pqc_deps = [jansson, jose, libcrypto, libcurl]
@@ -52,9 +53,17 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
     install: false,
   )
 
+  test_response_validator = executable('test-tang-pqc-response-validator',
+    ['jose_wrapper.cpp', 'response_validator.cpp', 'test_response_validator.cpp'],
+    dependencies: tang_pqc_test_deps,
+    override_options: ['cpp_std=c++17'],
+    install: false,
+  )
+
   test('tang-pqc-jose-wrapper', test_jose_wrapper)
   test('tang-pqc-key-deriver', test_key_deriver)
   test('tang-pqc-ecmr-ops', test_ecmr_ops)
+  test('tang-pqc-response-validator', test_response_validator)
 
   subdir('tests')
 else

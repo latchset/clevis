@@ -23,3 +23,4 @@ test('pin-tang-pqc-version', find_program('pin-tang-pqc-version'), env: tang_pqc
 test('pin-tang-pqc-offline', find_program('pin-tang-pqc-offline'), env: tang_pqc_test_env)
 test('pin-tang-pqc-sss', find_program('pin-tang-pqc-sss'), env: tang_pqc_test_env)
 test('pin-tang-pqc-errors', find_program('pin-tang-pqc-errors'), env: tang_pqc_test_env)
+test('pin-tang-pqc-rec-kem', find_program('pin-tang-pqc-rec-kem'), env: tang_pqc_test_env)

@@ -176,8 +176,11 @@ JsonPtr findKemKey(json_t* jwks, const std::string& kemAlg)
         auto kty = json_string_value(json_object_get(key, "kty"));
         if (!kty || std::strcmp(kty, "AKP") != 0)
             continue;
+        // The 'alg' field is mandatory: the hybrid suite is derived
+        // from it, so a key without an explicit algorithm must never
+        // be selected.
         auto alg = json_string_value(json_object_get(key, "alg"));
-        if (alg && kemAlg != alg)
+        if (!alg || kemAlg != alg)
             continue;
         return jsonDeepCopy(key);
     }
@@ -276,6 +279,7 @@ std::string hybridEncrypt(
     const json_t* tangEcPub,
     const json_t* tangKemPub,
     const std::string& kid,
+    const std::string& kemAlg,
     const Config& config,
     const json_t* jwks,
     bool hasTangPub,
@@ -320,8 +324,7 @@ std::string hybridEncrypt(
 
     CleansedJsonPtr encKey(
         KeyDeriver::deriveEncKey(
-            encEcXStr, kemKStr, kid, kemKid,
-            config.kemAlg).release());
+            encEcXStr, kemKStr, kid, kemKid, kemAlg).release());
 
     auto jwe = jsonParse(
         "{\"protected\":{"
@@ -346,7 +349,7 @@ std::string hybridEncrypt(
     jsonObjectSetChecked(tang, "ek_digest",
                          json_string(ekDigest.c_str()));
     jsonObjectSetChecked(tang, "alg",
-                         json_string(config.kemAlg.c_str()));
+                         json_string(kemAlg.c_str()));
 
     if (!config.tls.cacert.empty())
         jsonObjectSetChecked(tang, "cacert",
@@ -470,9 +473,20 @@ int main(int argc, char* argv[])
                 "advertisement. Use clevis-encrypt-tang for "
                 "classical mode.");
 
+        // Derive, don't trust: the stored 'alg' (and, at recovery
+        // time, the suite) comes from the key selected out of the
+        // VERIFIED KEM advertisement, not from the user-provided
+        // configuration value.
+        auto tangKemAlgVal = json_string_value(
+            json_object_get(tangKemPub.get(), "alg"));
+        if (!tangKemAlgVal)
+            throw PinError(
+                "Selected KEM key is missing the 'alg' field");
+        std::string tangKemAlg = tangKemAlgVal;
+
         CleansedString plaintext(readStdin());
         auto result = hybridEncrypt(
-            tangEcPub.get(), tangKemPub.get(), kid,
+            tangEcPub.get(), tangKemPub.get(), kid, tangKemAlg,
             config, jwks.get(), hasTangPub, plaintext);
 
         std::cout << result;

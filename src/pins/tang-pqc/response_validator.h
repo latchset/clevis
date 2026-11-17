@@ -1,0 +1,56 @@
+// vim: set tabstop=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+//
+// Copyright (c) 2026 Red Hat, Inc.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#pragma once
+
+#include "jose_types.h"
+
+#include <string>
+
+namespace clevis {
+
+// Protocol constants of the hybrid (ECMR + ML-KEM) recovery exchange.
+inline constexpr const char* REC_KEM_VERSION = "hybrid-v1";
+inline constexpr const char* REC_KEM_SUITE_PREFIX = "ECMR+";
+inline constexpr const char* REC_KEM_MSG_DIR_REQUEST = "clevis-to-tang";
+inline constexpr const char* REC_KEM_MSG_DIR_RESPONSE = "tang-to-clevis";
+
+// Expected values for the /rec-kem response JWE protected header. Every
+// value MUST be derived locally by clevis -- from the verified
+// advertisement and the keys it selected -- and never taken from stored
+// metadata, user input, or server hints.
+struct RecKemResponseExpectations {
+    std::string ecmrKid; // 'kid': S256 thumbprint of tang's ECMR key
+    std::string kemKid;  // 'kem_kid': KEM kid used in the request URL
+    std::string kemAlg;  // 'alg' of the verified tang KEM key
+};
+
+// Derives the hybrid suite name ("ECMR+" + kemAlg) from the algorithm
+// of the tang KEM key selected from the verified advertisement.
+std::string deriveRecKemSuite(const std::string& kemAlg);
+
+// Validates the /rec-kem response JWE protected header. Fails closed:
+// throws PinError on any missing or malformed protected header, on any
+// missing 'crit' entry, on any crit entry clevis does not understand,
+// and on any crit-listed field that does not match the locally derived
+// expectations. This MUST be called before the response transport key
+// or the recovered key are used in any way.
+void validateRecKemResponse(
+    const json_t* responseJwe,
+    const RecKemResponseExpectations& expected);
+
+} // namespace clevis

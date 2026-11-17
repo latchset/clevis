@@ -164,6 +164,34 @@ Config parseConfig(const std::string& configStr, bool autoTrust)
     return config;
 }
 
+void validateTlsFileExists(
+    const std::string& path, const char* description)
+{
+    if (!path.empty() && access(path.c_str(), F_OK) != 0)
+        throw PinError(std::string(description) + " file '" + path
+                       + "' not found!");
+}
+
+// Validates the (m)TLS configuration up front, matching the checks in
+// clevis-encrypt-tang. Otherwise a typo'd path either surfaces as a
+// misleading fetch error, or -- when binding offline with inline
+// 'adv'/'adv_kem', so curl is never called -- gets baked into the JWE
+// header and only fails at decrypt time.
+void validateTlsConfig(const TlsConfig& tls, const std::string& url)
+{
+    validateTlsFileExists(tls.cacert, "CA cert");
+    validateTlsFileExists(tls.cert, "Client cert");
+    validateTlsFileExists(tls.key, "Client key");
+
+    if (!tls.key.empty() && tls.cert.empty())
+        throw PinError("'key' requires 'cert' to also be set!");
+
+    if ((!tls.cacert.empty() || !tls.cert.empty())
+        && url.rfind("https://", 0) != 0)
+        throw PinError(
+            "TLS options (cacert/cert/key) require an https:// URL!");
+}
+
 JsonPtr findKemKey(json_t* jwks, const std::string& kemAlg)
 {
     auto keysArray = json_object_get(jwks, "keys");
@@ -395,6 +423,7 @@ int main(int argc, char* argv[])
         bool autoTrust = (argc >= 3
                           && std::strcmp(argv[2], "-y") == 0);
         auto config = parseConfig(argv[1], autoTrust);
+        validateTlsConfig(config.tls, config.url);
 
         TangClient tang(config.url, config.tls);
 

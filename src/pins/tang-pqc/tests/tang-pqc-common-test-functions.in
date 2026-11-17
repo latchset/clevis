@@ -30,10 +30,25 @@ tang_pqc_sanity_check() {
 
 tang_pqc_check_version() {
     local port="${1}"
+    local cacert="${2:-}"
+    local cert="${3:-}"
+    local key="${4:-}"
     [ -z "${port}" ] && error "tang_pqc_check_version: please specify 'port'"
 
+    # Optional mTLS: with a CA bundle the probe must speak https and
+    # authenticate with the client certificate when one is given.
+    local scheme="http"
+    local curl_opts=()
+    if [ -n "${cacert}" ]; then
+        scheme="https"
+        curl_opts+=(--cacert "${cacert}")
+    fi
+    [ -n "${cert}" ] && curl_opts+=(--cert "${cert}")
+    [ -n "${key}" ] && curl_opts+=(--key "${key}")
+
     local ver
-    ver="$(curl -sf "http://localhost:${port}/version")" \
+    ver="$(curl -sf ${curl_opts[@]+"${curl_opts[@]}"} \
+        "${scheme}://localhost:${port}/version")" \
         || return 1
 
     local hybrid

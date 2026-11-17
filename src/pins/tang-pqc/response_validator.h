@@ -45,10 +45,14 @@ std::string deriveRecKemSuite(const std::string& kemAlg);
 
 // Validates the /rec-kem response JWE protected header. Fails closed:
 // throws PinError on any missing or malformed protected header, on any
-// missing 'crit' entry, on any crit entry clevis does not understand,
-// and on any crit-listed field that does not match the locally derived
-// expectations. This MUST be called before the response transport key
-// or the recovered key are used in any way.
+// crit-listed field that does not match the locally derived
+// expectations, and -- per RFC 7515 section 4.1.11, enforced
+// client-side -- on a 'crit' that is present but not an array of
+// strings drawn from the known extension parameters. 'crit' itself is
+// optional: only membership is checked, not presence or length. The
+// standard JOSE header 'kid' is not an extension parameter and is
+// never a valid crit entry. This MUST be called before the response
+// transport key or the recovered key are used in any way.
 void validateRecKemResponse(
     const json_t* responseJwe,
     const RecKemResponseExpectations& expected);

@@ -134,8 +134,10 @@ printf '{"clevis_kem_ct":"%s","clevis_kem_pub":%s,"ek_digest":"%s"}' \
     > "$TMP/inner_payload.json"
 
 # Step 5: encrypt the inner payload with the enriched protected header
-# (suite derived from the advertised key's alg).
-enriched_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kid","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
+# (suite derived from the advertised key's alg; crit lists exactly the
+# four extension parameters -- the standard 'kid' header is never
+# crit'd per RFC 7515 section 4.1.11).
+enriched_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
     "$kem_alg" "$exc_kid" "$kem_kid")"
 clevis_encrypted_blob="$(jose jwe enc \
     -i "$enriched_hdr" \
@@ -175,6 +177,17 @@ printf '%s' "$resp_hdr" | jose fmt -j- -Og kem_kid -Sq "$kem_kid" -E
 printf '%s' "$resp_hdr" | jose fmt -j- -Og msg_dir -Sq "tang-to-clevis" -E
 printf '%s' "$resp_hdr" | jose fmt -j- -Og kid -Sq "$exc_kid" -E
 
+# The response crit must carry exactly the extension parameters and
+# must NOT crit the standard 'kid' header.
+resp_crit="$(printf '%s' "$resp_hdr" | jose fmt -j- -Og crit -o-)"
+for m in kem_ver suite kem_kid msg_dir; do
+    printf '%s' "$resp_crit" | grep -q "\"$m\""
+done
+if printf '%s' "$resp_crit" | grep -q '"kid"'; then
+    echo "Response crit must not include the standard 'kid' header" >&2
+    exit 1
+fi
+
 # Step 9: the recovered enc key must match the original one.
 enc_key_k="$(printf '%s' "$enc_key" | jose fmt -j- -Og k -u-)"
 recovered_enc_key_k="$(printf '%s' "$recovered_enc_key" | jose fmt -j- -Og k -u-)"
@@ -188,7 +201,7 @@ case "$kem_alg" in
     ML-KEM-512) bad_alg="ML-KEM-768" ;;
     *) bad_alg="ML-KEM-512" ;;
 esac
-bad_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kid","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
+bad_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","suite","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
     "$bad_alg" "$exc_kid" "$kem_kid")"
 bad_blob="$(jose jwe enc \
     -i "$bad_hdr" \
@@ -199,6 +212,23 @@ bad_req="$(printf '{"clevis_encrypted_blob":"%s","clevis_transport_ct":"%s"}' \
 code="$(curl -s -o /dev/null -w "%{http_code}" -X POST \
     -H "Content-Type: application/json" \
     -d "$bad_req" \
+    "http://localhost:${port}/rec-kem/${kem_kid}")"
+[ "$code" = "400" ]
+
+# Step 11: a request critting the standard 'kid' header violates RFC
+# 7515 section 4.1.11 (crit is reserved for extension parameters) and
+# must be rejected with HTTP 400.
+kid_crit_hdr="$(printf '{"protected":{"alg":"dir","enc":"A256GCM","crit":["kem_ver","kid","suite","kem_kid","msg_dir"],"kem_ver":"hybrid-v1","suite":"ECMR+%s","kid":"%s","kem_kid":"%s","msg_dir":"clevis-to-tang"}}' \
+    "$kem_alg" "$exc_kid" "$kem_kid")"
+kid_crit_blob="$(jose jwe enc \
+    -i "$kid_crit_hdr" \
+    -I "$TMP/inner_payload.json" \
+    -k "$TMP/clevis_transport_key.jwk" -c)"
+kid_crit_req="$(printf '{"clevis_encrypted_blob":"%s","clevis_transport_ct":"%s"}' \
+    "$kid_crit_blob" "$clevis_transport_ct")"
+code="$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d "$kid_crit_req" \
     "http://localhost:${port}/rec-kem/${kem_kid}")"
 [ "$code" = "400" ]
 

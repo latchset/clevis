@@ -25,19 +25,26 @@ namespace clevis {
 
 namespace {
 
-// Every 'crit' entry clevis understands. A response carrying any crit
-// entry outside this list MUST be rejected: clevis cannot know which
-// semantics the server attached to it.
-constexpr std::array<const char*, 5> CRIT_FIELDS = {{
-    "kem_ver", "suite", "kid", "kem_kid", "msg_dir"
+// The extension parameters clevis understands as crit entries
+// (RFC 7515 section 4.1.11). The standard JOSE header 'kid' is NOT an
+// extension parameter and is therefore not a valid crit entry. A
+// response carrying any crit entry outside this list MUST be rejected:
+// clevis cannot know which semantics the server attached to it.
+constexpr std::array<const char*, 4> KNOWN_CRIT_FIELDS = {{
+    "kem_ver", "suite", "kem_kid", "msg_dir"
 }};
 
 void validateCritEntries(const json_t* hdr)
 {
+    // 'crit' is optional: only membership in the known extension set is
+    // enforced, not presence, completeness, or length.
     auto crit = json_object_get(hdr, "crit");
-    if (!crit || !json_is_array(crit) || json_array_size(crit) == 0)
+    if (!crit)
+        return;
+
+    if (!json_is_array(crit))
         throw PinError(
-            "Rec-kem response: 'crit' must be a non-empty array");
+            "Rec-kem response: 'crit' must be an array");
 
     size_t idx;
     json_t* val;
@@ -47,32 +54,17 @@ void validateCritEntries(const json_t* hdr)
             throw PinError(
                 "Rec-kem response: 'crit' contains a non-string entry");
 
-        bool understood = false;
-        for (auto field : CRIT_FIELDS) {
+        bool known = false;
+        for (auto field : KNOWN_CRIT_FIELDS) {
             if (std::strcmp(entry, field) == 0) {
-                understood = true;
+                known = true;
                 break;
             }
         }
-        if (!understood)
+        if (!known)
             throw PinError(
                 std::string("Rec-kem response: non-understood 'crit' "
                             "entry: '") + entry + "'");
-    }
-
-    for (auto field : CRIT_FIELDS) {
-        bool found = false;
-        json_array_foreach(crit, idx, val) {
-            auto entry = json_string_value(val);
-            if (entry && std::strcmp(entry, field) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found)
-            throw PinError(
-                std::string("Rec-kem response: 'crit' is missing '")
-                + field + "'");
     }
 }
 

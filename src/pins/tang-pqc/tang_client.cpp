@@ -85,16 +85,17 @@ std::string responseExcerpt(const std::string& body)
 {
     if (code == 400) {
         // The hardened tang server answers HTTP 400 when the request
-        // protocol parameters disagree with the server's own view --
-        // for /rec-kem, a suite/kid/kem_kid/alg mismatch. Surface it
-        // as a distinct, actionable error instead of a generic
-        // transport failure.
+        // violates the protocol: an unknown or invalid 'crit' entry
+        // (e.g. critting the standard 'kid' header, RFC 7515 section
+        // 4.1.11) or a suite/kem_kid/alg disagreement on /rec-kem.
+        // Surface it as a distinct protocol mismatch, not a transient
+        // error to be retried.
         auto msg =
             std::string("Tang rejected the request with HTTP 400 on ")
             + method + " " + path
-            + ": protocol parameter mismatch (suite/kid/kem_kid/alg"
-              " disagreement; possible downgrade attempt or stale"
-              " advertisement)";
+            + ": protocol mismatch (invalid 'crit' extension"
+              " parameters or suite/kem_kid/alg disagreement; possible"
+              " downgrade attempt or stale advertisement)";
         auto excerpt = responseExcerpt(body);
         if (!excerpt.empty())
             msg += " [server said: " + excerpt + "]";

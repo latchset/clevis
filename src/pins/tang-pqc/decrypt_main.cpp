@@ -314,10 +314,13 @@ CleansedString secureTransportRecover(
 
     // Derive, don't trust: the suite is built strictly from the alg of
     // the verified tang KEM key, never from stored metadata or server
-    // hints.
+    // hints. The crit list names exactly the extension parameters --
+    // the standard JOSE header 'kid' MUST NOT be crit'd (RFC 7515
+    // section 4.1.11); tang rejects requests critting unknown
+    // parameters with HTTP 400.
     std::string suite = deriveRecKemSuite(kemAlg);
     auto blobProt = makeJsonPtr(json_pack(
-        "{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:[s,s,s,s,s]}",
+        "{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:[s,s,s,s]}",
         "alg", "dir",
         "enc", "A256GCM",
         "kem_ver", REC_KEM_VERSION,
@@ -325,7 +328,7 @@ CleansedString secureTransportRecover(
         "kid", requestKid.c_str(),
         "kem_kid", hdr.kemKid.c_str(),
         "msg_dir", REC_KEM_MSG_DIR_REQUEST,
-        "crit", "kem_ver", "suite", "kid", "kem_kid", "msg_dir"));
+        "crit", "kem_ver", "suite", "kem_kid", "msg_dir"));
     if (!blobProt)
         throw PinError("Failed to build transport protected header");
     auto blobJwe = makeJsonPtr(json_pack(

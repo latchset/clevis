@@ -109,6 +109,7 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)
   test('report-sss-luks2', find_program('report-sss-luks2'), env: env, timeout: 120)
   test('edit-tang-luks2', find_program('edit-tang-luks2'), env: env, timeout: 210)
+  test('edit-tang-pqc-luks2', find_program('edit-tang-pqc-luks2'), env: env, timeout: 210)
 
   test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
   test('pass-tang-luks2', find_program('pass-tang-luks2'), env: env, timeout: 60)

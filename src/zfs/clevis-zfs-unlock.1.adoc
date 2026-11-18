@@ -1,0 +1,38 @@
+CLEVIS-ZFS-UNLOCK(1)
+====================
+:doctype: manpage
+
+
+== NAME
+
+clevis-zfs-unlock - Unlocks a ZFS encryption root bound with a Clevis policy
+
+== SYNOPSIS
+
+*clevis zfs unlock* [-t] [-l LABEL] -d DATASET
+
+== OVERVIEW
+
+The *clevis zfs unlock* command loads the key of a ZFS encryption root using
+its already provisioned Clevis policy. For example:
+
+    $ clevis zfs unlock -d rpool
+
+The bindings are tried one after another until one of them unlocks the
+encryption root.
+
+== OPTIONS
+
+* *-d* _DATASET_ :
+  The ZFS encryption root to unlock
+
+* *-l* _LABEL_ :
+  Use only the binding with this label
+
+* *-t* :
+  Test the bindings without loading the key
+
+== SEE ALSO
+
+link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)],
+link:clevis-zfs-unlockers.7.adoc[*clevis-zfs-unlockers*(7)]

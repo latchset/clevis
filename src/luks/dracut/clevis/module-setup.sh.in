@@ -50,6 +50,7 @@ install() {
         inst_script "$moddir"/clevis-cleanup /bin/clevis-cleanup
         inst_script "$moddir"/clevis-password-unlocker /bin/clevis-password-unlocker
         inst_script "$moddir"/clevis-password-unlocker-prepare /bin/clevis-password-unlocker-prepare
+        inst_simple "$moddir"/clevis-lib.sh /lib/dracut-clevis-lib.sh
         inst_multiple \
             clevis-luks-unlock \
             chmod \

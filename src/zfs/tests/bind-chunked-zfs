@@ -1,0 +1,55 @@
+#!/bin/bash -ex
+#
+# Copyright (c) 2026 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+TEST=$(basename "${0}")
+. zfs-common-test-functions
+
+zfs_check_requirements
+
+on_exit() {
+    zfs_destroy_pool "${POOL}"
+    [ -d "${TMP}" ] && rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+POOL="$(zfs_new_pool "${TMP}")"
+DS="${POOL}/enc"
+P="${ZFS_TEST_PASSPHRASE}"
+zfs_new_encryptionroot "${DS}"
+
+# Many pins make the binding exceed the ZFS property value limit
+cfg=$(printf '{"t":1,"pins":{"null":[%s{}]}}' "$(printf '{},%.0s' $(seq 1 60))")
+clevis zfs bind -k - -d "${DS}" -l big sss "${cfg}" <<< "${P}" \
+    || error "${TEST}: Binding failed"
+
+chunks=$(zfs_clevis_properties "${DS}" | grep -c '^latchset\.clevis\.label:big:' || :)
+[ "${chunks}" -gt 1 ] || error "${TEST}: The binding is not split into chunks"
+[ "$(clevis zfs list -d "${DS}")" = "big:$((chunks - 1))" ] \
+    || error "${TEST}: The chunked label is not listed"
+
+zfs unload-key "${DS}" || error "${TEST}: Unable to unload the key"
+clevis zfs unlock -d "${DS}" || error "${TEST}: Unlocking failed"
+
+clevis zfs unbind -k - -d "${DS}" -l big <<< "${P}" \
+    || error "${TEST}: Unbinding failed"
+[ -z "$(zfs_clevis_properties "${DS}")" ] \
+    || error "${TEST}: Clevis properties are left after unbinding"

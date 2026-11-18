@@ -1,0 +1,68 @@
+#!/bin/bash
+#
+# Copyright (c) 2026 Oldřich Jedlička
+#
+# Author: Oldřich Jedlička <oldium.pro@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+. tests-common-functions
+
+ZFS_TEST_PASSPHRASE="clevis-test-passphrase"
+
+# Skips unless the ZFS tools work with the loaded module, as root
+zfs_check_requirements() {
+    if ! command -v zfs >/dev/null || ! command -v zpool >/dev/null; then
+        skip_test "${TEST}: ZFS tools are not installed"
+    fi
+    zfs version >/dev/null 2>&1 || skip_test "${TEST}: ZFS module is not loaded"
+    [ "$(id -u)" -eq 0 ] || skip_test "${TEST}: ZFS tests need root"
+}
+
+# Creates a pool on a sparse file in the directory and prints its name
+zfs_new_pool() {
+    local dir="${1}"
+    local pool="clevis-test-$$-${RANDOM}"
+
+    truncate -s 128M "${dir}/${pool}.img"
+    zpool create -O mountpoint=none "${pool}" "${dir}/${pool}.img" >&2 \
+        || error "${TEST}: Unable to create pool ${pool}"
+    echo "${pool}"
+}
+
+zfs_destroy_pool() {
+    [ -n "${1}" ] && zpool destroy -f "${1}" 2>/dev/null
+    return 0
+}
+
+# Creates an unmounted encryption root with the test passphrase, passing the
+# additional options to zfs create
+zfs_new_encryptionroot() {
+    local dataset="${1}"
+    shift
+
+    zfs create -o encryption=on -o keyformat=passphrase \
+        -o keylocation=prompt -o mountpoint=none "$@" "${dataset}" \
+        <<< "${ZFS_TEST_PASSPHRASE}" || error "${TEST}: Unable to create ${dataset}"
+}
+
+zfs_keystatus() {
+    zfs get -H -o value keystatus "${1}"
+}
+
+# Prints the local clevis properties of the dataset
+zfs_clevis_properties() {
+    zfs get -H -o property -s local all "${1}" | grep '^latchset\.clevis' || :
+}

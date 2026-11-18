@@ -115,8 +115,6 @@ clevisloop() {
     local sleep_time
     local CRYPTTAB_SOURCE
     local OLD_CRYPTTAB_SOURCE=""
-    local netcfg_attempted=0
-    local tpm1cfg_attempted=0
     local pins
     local PASSFIFO
 
@@ -150,12 +148,10 @@ EOM
         [ "$CRYPTTAB_SOURCE" = "$OLD_CRYPTTAB_SOURCE" ] && continue
         OLD_CRYPTTAB_SOURCE="$CRYPTTAB_SOURCE"
 
-        if [[ " $pins " == *" tang "* ]] && [ $netcfg_attempted -eq 0 ]; then
-            netcfg_attempted=1
+        if [[ " $pins " == *" tang "* ]]; then
             do_configure_networking
         fi
-        if [[ " $pins " == *" tpm1 "* ]] && [ $tpm1cfg_attempted -eq 0 ]; then
-            tpm1cfg_attempted=1
+        if [[ " $pins " == *" tpm1 "* ]]; then
             do_configure_tpm1
         fi
 
@@ -175,134 +171,8 @@ EOM
 }
 
 . /scripts/functions
+. /scripts/clevis-functions
 . clevis-luks-common-functions
-
-# This is a copy  of 'all_netbootable_devices/all_non_enslaved_devices' for
-# platforms that might not provide it.
-clevis_all_netbootable_devices() {
-    for device in /sys/class/net/*; do
-        if [ ! -e "$device/flags" ]; then
-            continue
-        fi
-
-        loop=$(($(cat "$device/flags") & 0x8 && 1 || 0))
-        bc=$(($(cat "$device/flags") & 0x2 && 1 || 0))
-        ptp=$(($(cat "$device/flags") & 0x10 && 1 || 0))
-
-        # Skip any device that is a loopback
-        if [ $loop = 1 ]; then
-            continue
-        fi
-
-        # Skip any device that isn't a broadcast
-        # or point-to-point.
-        if [ $bc = 0 ] && [ $ptp = 0 ]; then
-            continue
-        fi
-
-        # Skip any enslaved device (has "master" link
-        # attribute on it)
-        device=$(basename "$device")
-        ip -o link show "$device" | grep -q -w master && continue
-        if [ -z "$DEVICE" ]; then
-            DEVICE="$device"
-        else
-            DEVICE="$DEVICE $device"
-        fi
-    done
-    echo "$DEVICE"
-}
-
-get_specified_device() {
-    local dev="$(echo $IP | awk -F: '{ print $6 }')"
-    [ -z "$dev" ] || echo $dev
-}
-
-# Workaround configure_networking() not waiting long enough for an interface
-# to appear. This code can be removed once that has been fixed in all the
-# distro releases we care about.
-wait_for_device() {
-    local device
-    local ret=0
-
-    device=$(get_specified_device)
-
-    if [ -n "$device" ]; then
-        log_begin_msg "clevis: Waiting for interface ${device} to become available"
-        local netdev_wait=0
-        while [ $netdev_wait -lt 10 ]; do
-            if [ -e "/sys/class/net/${device}" ]; then
-                break
-            fi
-            netdev_wait=$((netdev_wait + 1))
-            sleep 1
-        done
-        if [ ! -e "/sys/class/net/${device}" ]; then
-            log_failure_msg "clevis: Interface ${device} did not appear in time"
-            ret=1
-        fi
-        log_end_msg
-    fi
-
-    wait_for_udev 10
-
-    return $ret
-}
-
-do_configure_networking() {
-    # Make sure networking is set up: if booting via nfs, it already is
-    if [ "$boot" != nfs ] && wait_for_device; then
-        clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
-        if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
-            echo ""
-            echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
-        fi
-        configure_networking
-
-        # Add DNS servers from configure_networking to /etc/resolv.conf
-        if [ ! -e /etc/resolv.conf ]; then
-            touch /etc/resolv.conf
-            for intf in /run/net-*.conf; do
-                . "${intf}"
-                if [ ! -z "${IPV4DNS0}" ] && [ "${IPV4DNS0}" != "0.0.0.0" ]; then
-                    echo nameserver "${IPV4DNS0}" >> /etc/resolv.conf
-                fi
-                if [ ! -z "${IPV4DNS1}" ] && [ "${IPV4DNS1}" != "0.0.0.0" ]; then
-                    echo nameserver "${IPV4DNS1}" >> /etc/resolv.conf
-                fi
-                if [ ! -z "${IPV6DNS0}" ]; then
-                    echo nameserver "${IPV6DNS0}" >> /etc/resolv.conf
-                fi
-            done
-        fi
-    fi
-}
-
-do_configure_tpm1() {
-    local tcsd_output=
-
-    [ -x @bindir@/clevis-decrypt-tpm1 ] && [ -f @libexecdir@/clevis-luks-tpm1-functions ] || return
-
-    . @libexecdir@/clevis-luks-tpm1-functions
-
-    log_begin_msg "clevis: Starting TCSD daemon"
-
-    wait_for_udev 10
-
-    # shellcheck disable=SC2034 # setting default value
-    TCSD_NO_PRIVILEGE_DROP=0
-    [ -f /conf/conf.d/clevis ] && . /conf/conf.d/clevis
-
-    if ! tcsd_output=$(start_tcsd 2>&1); then
-        if [ -n "$tcsd_output" ]; then
-            log_failure_msg "failed to start TCSD: $tcsd_output"
-        else
-            log_failure_msg "failed to start TCSD"
-        fi
-    fi
-
-    log_end_msg
-}
 
 mkdir -p /var/cache/clevis-disks
 chmod 0700 /var/cache/clevis-disks

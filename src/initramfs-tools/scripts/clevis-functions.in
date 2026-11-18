@@ -1,0 +1,179 @@
+#!/bin/bash
+#
+# Copyright (c) 2017 Red Hat, Inc.
+# Copyright (c) 2017 Shawn Rose
+# Copyright (c) 2017 Guilhem Moulin
+#
+# Author: Harald Hoyer <harald@redhat.com>
+# Author: Nathaniel McCallum <npmccallum@redhat.com>
+# Author: Shawn Rose <shawnandrewrose@gmail.com>
+# Author: Guilhem Moulin <guilhem@guilhem.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+# Networking and TCSD setup for the clevis unlockers, needs /scripts/functions
+
+# This is a copy  of 'all_netbootable_devices/all_non_enslaved_devices' for
+# platforms that might not provide it.
+clevis_all_netbootable_devices() {
+    for device in /sys/class/net/*; do
+        if [ ! -e "$device/flags" ]; then
+            continue
+        fi
+
+        loop=$(($(cat "$device/flags") & 0x8 && 1 || 0))
+        bc=$(($(cat "$device/flags") & 0x2 && 1 || 0))
+        ptp=$(($(cat "$device/flags") & 0x10 && 1 || 0))
+
+        # Skip any device that is a loopback
+        if [ $loop = 1 ]; then
+            continue
+        fi
+
+        # Skip any device that isn't a broadcast
+        # or point-to-point.
+        if [ $bc = 0 ] && [ $ptp = 0 ]; then
+            continue
+        fi
+
+        # Skip any enslaved device (has "master" link
+        # attribute on it)
+        device=$(basename "$device")
+        ip -o link show "$device" | grep -q -w master && continue
+        if [ -z "$DEVICE" ]; then
+            DEVICE="$device"
+        else
+            DEVICE="$DEVICE $device"
+        fi
+    done
+    echo "$DEVICE"
+}
+
+get_specified_device() {
+    local dev
+    dev="$(echo $IP | awk -F: '{ print $6 }')"
+    [ -z "$dev" ] || echo $dev
+}
+
+# Workaround configure_networking() not waiting long enough for an interface
+# to appear. This code can be removed once that has been fixed in all the
+# distro releases we care about.
+wait_for_device() {
+    local device
+    local ret=0
+
+    device=$(get_specified_device)
+
+    if [ -n "$device" ]; then
+        log_begin_msg "clevis: Waiting for interface ${device} to become available"
+        local netdev_wait=0
+        while [ $netdev_wait -lt 10 ]; do
+            if [ -e "/sys/class/net/${device}" ]; then
+                break
+            fi
+            netdev_wait=$((netdev_wait + 1))
+            sleep 1
+        done
+        if [ ! -e "/sys/class/net/${device}" ]; then
+            log_failure_msg "clevis: Interface ${device} did not appear in time"
+            ret=1
+        fi
+        log_end_msg
+    fi
+
+    wait_for_udev 10
+
+    return $ret
+}
+
+# Subshell, so that the lock is released on return
+do_configure_networking() (
+    local conf lock_fd
+
+    # Once per boot, shared by all clevis unlockers
+    exec {lock_fd}>/var/lock/clevis-network.lock
+    flock "${lock_fd}"
+    [ -f /tmp/clevis-network-attempted ] && return 0
+    : > /tmp/clevis-network-attempted
+
+    # Configured already, checked the same way as configure_networking does
+    for conf in /run/net-*.conf /run/net6-*.conf; do
+        [ -e "${conf}" ] && return 0
+    done
+
+    # Make sure networking is set up: if booting via nfs, it already is
+    if [ "$BOOT" != nfs ] && wait_for_device; then
+        clevis_net_cnt=$(clevis_all_netbootable_devices | tr ' ' '\n' | wc -l)
+        if [ -z "$IP" ] && [ "$clevis_net_cnt" -gt 1 ]; then
+            echo ""
+            echo "clevis: Warning: multiple network interfaces available but no ip= parameter provided."
+        fi
+        # Background processes must not inherit the lock
+        (exec {lock_fd}>&-; configure_networking)
+
+        # Add DNS servers from configure_networking to /etc/resolv.conf
+        if [ ! -e /etc/resolv.conf ]; then
+            touch /etc/resolv.conf
+            for intf in /run/net-*.conf; do
+                # shellcheck disable=SC1090 # The net-*.conf files come from configure_networking
+                . "${intf}"
+                if [ ! -z "${IPV4DNS0}" ] && [ "${IPV4DNS0}" != "0.0.0.0" ]; then
+                    echo nameserver "${IPV4DNS0}" >> /etc/resolv.conf
+                fi
+                if [ ! -z "${IPV4DNS1}" ] && [ "${IPV4DNS1}" != "0.0.0.0" ]; then
+                    echo nameserver "${IPV4DNS1}" >> /etc/resolv.conf
+                fi
+                if [ ! -z "${IPV6DNS0}" ]; then
+                    echo nameserver "${IPV6DNS0}" >> /etc/resolv.conf
+                fi
+            done
+        fi
+    fi
+)
+
+# Subshell, so that the lock is released on return
+do_configure_tpm1() (
+    local tcsd_output=
+    local lock_fd
+
+    [ -x @bindir@/clevis-decrypt-tpm1 ] && [ -f @libexecdir@/clevis-luks-tpm1-functions ] || return
+
+    # Once per boot, shared by all clevis unlockers
+    exec {lock_fd}>/var/lock/clevis-tcsd.lock
+    flock "${lock_fd}"
+    [ -f /tmp/clevis-tcsd-attempted ] && return
+    : > /tmp/clevis-tcsd-attempted
+
+    . @libexecdir@/clevis-luks-tpm1-functions
+
+    log_begin_msg "clevis: Starting TCSD daemon"
+
+    wait_for_udev 10
+
+    # shellcheck disable=SC2034 # setting default value
+    TCSD_NO_PRIVILEGE_DROP=0
+    [ -f /conf/conf.d/clevis ] && . /conf/conf.d/clevis
+
+    # The started TCSD must not inherit the lock
+    if ! tcsd_output=$(exec {lock_fd}>&-; start_tcsd 2>&1); then
+        if [ -n "$tcsd_output" ]; then
+            log_failure_msg "failed to start TCSD: $tcsd_output"
+        else
+            log_failure_msg "failed to start TCSD"
+        fi
+    fi
+
+    log_end_msg
+)

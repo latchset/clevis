@@ -114,10 +114,23 @@ automatically unlock your removable media in your desktop session.
 
 For more information, see link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)].
 
+== ZFS BINDING
+
+Clevis can also be used to bind an existing ZFS encryption root to its
+automation policy:
+
+    $ clevis zfs bind -d rpool tang '{"url":...}'
+
+The encryption root can then be unlocked with your existing passphrase as well
+as with the Clevis policy, see link:clevis-zfs-unlockers.7.adoc[*clevis-zfs-unlockers*(7)].
+
+For more information, see link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)].
+
 == SEE ALSO
 
 link:clevis-encrypt-tang.1.adoc[*clevis-encrypt-tang*(1)],
 link:clevis-encrypt-tpm2.1.adoc[*clevis-encrypt-tpm2*(1)],
 link:clevis-encrypt-sss.1.adoc[*clevis-encrypt-sss*(1)],
 link:clevis-luks-bind.1.adoc[*clevis-luks-bind*(1)],
+link:clevis-zfs-bind.1.adoc[*clevis-zfs-bind*(1)],
 link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

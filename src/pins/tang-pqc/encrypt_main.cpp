@@ -282,6 +282,10 @@ std::string readStdin()
         if (result.size() > maxSize)
             throw PinError("Input exceeds maximum size");
     }
+    // A read error mid-stream truncates the plaintext: the JWE must
+    // not be built from it.
+    if (std::cin.bad())
+        throw PinError("Error reading standard input");
     return result;
 }
 
@@ -300,6 +304,8 @@ std::string readBoundedFile(const std::string& path)
             throw PinError(
                 "File '" + path + "' exceeds maximum size");
     }
+    if (f.bad())
+        throw PinError("Error reading file '" + path + "'");
     return result;
 }
 
@@ -519,6 +525,13 @@ int main(int argc, char* argv[])
             config, jwks.get(), hasTangPub, plaintext);
 
         std::cout << result;
+        std::cout.flush();
+        // A truncated JWE on a failed write (full filesystem, EPIPE)
+        // must not be reported as success: the binding would silently
+        // hold partial data.
+        if (!std::cout)
+            throw PinError(
+                "Error writing the JWE to standard output");
         return 0;
 
     } catch (const PinError& e) {

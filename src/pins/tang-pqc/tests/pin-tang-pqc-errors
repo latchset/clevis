@@ -64,3 +64,13 @@ first="${tag:0:1}"
 if [ "$first" = "A" ]; then flip="B"; else flip="A"; fi
 tampered="${enc%.*}.${flip}${tag:1}"
 ! echo -n "$tampered" | clevis decrypt
+
+# A full stdout device must fail the encryption instead of exiting 0
+# with a silently truncated JWE: a LUKS binding could end up holding
+# partial data.
+! echo -n "disk full" | clevis encrypt tang-pqc "$cfg" > /dev/full
+
+# A full stdout device must fail the decryption instead of exiting 0
+# with a silently truncated key, which would surface later as a
+# wrong-key failure at boot.
+! echo -n "$enc" | clevis decrypt > /dev/full

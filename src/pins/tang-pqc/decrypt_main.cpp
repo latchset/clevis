@@ -389,6 +389,8 @@ std::string readCompactJwe()
         if (result.size() > maxSize)
             throw PinError("JWE input exceeds maximum size");
     }
+    if (std::cin.bad())
+        throw PinError("Error reading standard input");
     return result;
 }
 
@@ -524,6 +526,13 @@ int main(int argc, char* argv[])
         std::cout.write(
             reinterpret_cast<const char*>(plaintext.data()),
             static_cast<std::streamsize>(plaintext.size()));
+        std::cout.flush();
+        // A truncated key on a failed write (full filesystem, EPIPE)
+        // must not be reported as success: it would surface later as
+        // a wrong-key failure at boot.
+        if (!std::cout)
+            throw PinError(
+                "Error writing plaintext to standard output");
 
         return 0;
 

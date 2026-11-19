@@ -80,9 +80,12 @@ static std::string makeProtHeader(
     const std::string& suite = "ECMR+" + KEM_ALG,
     const std::string& kid = ECMR_KID,
     const std::string& kemKid = KEM_KID,
-    const std::string& msgDir = "tang-to-clevis")
+    const std::string& msgDir = "tang-to-clevis",
+    const std::string& alg = "dir",
+    const std::string& enc = "A256GCM")
 {
-    std::string hdr = "{\"alg\":\"dir\",\"enc\":\"A256GCM\"";
+    std::string hdr = "{\"alg\":\"" + alg
+        + "\",\"enc\":\"" + enc + "\"";
     if (!crit.empty())
         hdr += ",\"crit\":" + crit;
     if (!kemVer.empty())
@@ -98,6 +101,34 @@ static std::string makeProtHeader(
     return hdr + "}";
 }
 
+// Appends an extra member (raw JSON value) to a header built by
+// makeProtHeader().
+static std::string withExtraMember(
+    const std::string& hdrJson, const char* field, const char* rawValue)
+{
+    return hdrJson.substr(0, hdrJson.size() - 1)
+        + std::string(",\"") + field + "\":" + rawValue + "}";
+}
+
+// Builds a valid response JWE carrying the given 'encrypted_key'
+// member (nullptr: no member at all). Takes ownership of key.
+static JsonPtr makeResponseJweWithKey(json_t* encryptedKey)
+{
+    auto prot = makeProtHeader();
+    std::vector<uint8_t> bytes(prot.begin(), prot.end());
+    auto protB64 = JoseWrapper::base64UrlEncode(bytes);
+    auto jwe = makeJsonPtr(json_pack(
+        "{s:s, s:s, s:s, s:s}",
+        "protected", protB64.c_str(),
+        "iv", "",
+        "ciphertext", "",
+        "tag", ""));
+    if (encryptedKey)
+        jsonObjectSetChecked(
+            jwe.get(), "encrypted_key", encryptedKey);
+    return jwe;
+}
+
 template<typename Fn>
 static bool rejects(Fn&& fn)
 {
@@ -111,17 +142,21 @@ static bool rejects(Fn&& fn)
     return false;
 }
 
-static void checkAccepts(const std::string& hdrJson, const char* name)
+static void checkAcceptsJwe(const json_t* jwe, const char* name)
 {
     bool ok = true;
     try {
-        validateRecKemResponse(
-            makeResponseJwe(hdrJson).get(), defaultExpectations());
+        validateRecKemResponse(jwe, defaultExpectations());
     } catch (const std::exception& e) {
         std::cerr << "    unexpected error: " << e.what() << "\n";
         ok = false;
     }
     check(ok, name);
+}
+
+static void checkAccepts(const std::string& hdrJson, const char* name)
+{
+    checkAcceptsJwe(makeResponseJwe(hdrJson).get(), name);
 }
 
 static void checkRejects(const std::string& hdrJson, const char* name)
@@ -255,6 +290,72 @@ static void testCritValidation()
                  "null crit entry is rejected");
 }
 
+static void testAlgPinning()
+{
+    std::cerr << "== testAlgPinning ==\n";
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", "A128KW"),
+                 "alg substitution (A128KW) is rejected");
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", "A256KW"),
+                 "alg substitution (A256KW) is rejected");
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", ""),
+                 "missing 'alg' is rejected");
+}
+
+static void testEncPinning()
+{
+    std::cerr << "== testEncPinning ==\n";
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", "dir", "A128GCM"),
+                 "enc substitution (A128GCM) is rejected");
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", "dir", "A192GCM"),
+                 "enc substitution (A192GCM) is rejected");
+    checkRejects(makeProtHeader(CRIT_KNOWN, "hybrid-v1",
+                                "ECMR+" + KEM_ALG, ECMR_KID, KEM_KID,
+                                "tang-to-clevis", "dir", ""),
+                 "missing 'enc' is rejected");
+}
+
+static void testZipRejection()
+{
+    std::cerr << "== testZipRejection ==\n";
+    checkRejects(withExtraMember(makeProtHeader(), "zip", "\"DEF\""),
+                 "zip=DEF (decompression path) is rejected");
+    checkRejects(withExtraMember(makeProtHeader(), "zip", "\"GZIP\""),
+                 "zip with unknown value is rejected");
+}
+
+static void testEncryptedKeyPinning()
+{
+    std::cerr << "== testEncryptedKeyPinning ==\n";
+
+    checkAcceptsJwe(makeResponseJweWithKey(json_string("")).get(),
+                    "empty 'encrypted_key' is accepted");
+    checkAcceptsJwe(makeResponseJweWithKey(nullptr).get(),
+                    "absent 'encrypted_key' is accepted");
+
+    check(rejects([&] {
+        validateRecKemResponse(
+            makeResponseJweWithKey(
+                json_string("UkVXUkFQUEVE")).get(),
+            defaultExpectations());
+    }), "non-empty 'encrypted_key' (wrapped key material) is rejected");
+
+    check(rejects([&] {
+        validateRecKemResponse(
+            makeResponseJweWithKey(json_integer(42)).get(),
+            defaultExpectations());
+    }), "non-string 'encrypted_key' is rejected");
+}
+
 static void testMalformedResponses()
 {
     std::cerr << "== testMalformedResponses ==\n";
@@ -309,6 +410,10 @@ int main()
     testUnknownKemVer();
     testMissingFields();
     testCritValidation();
+    testAlgPinning();
+    testEncPinning();
+    testZipRejection();
+    testEncryptedKeyPinning();
     testMalformedResponses();
     testDeriveSuite();
 

@@ -83,6 +83,27 @@ void validateStringField(
             + "' (possible downgrade or MITM attack)");
 }
 
+void validateAbsentField(const json_t* hdr, const char* field)
+{
+    if (json_object_get(hdr, field))
+        throw PinError(
+            std::string("Rec-kem response: unexpected '")
+            + field + "' header");
+}
+
+void validateEmptyEncryptedKey(const json_t* responseJwe)
+{
+    auto ekey = json_object_get(responseJwe, "encrypted_key");
+    if (!ekey)
+        return;
+
+    auto val = json_string_value(ekey);
+    if (!val || std::strlen(val) != 0)
+        throw PinError(
+            "Rec-kem response: 'encrypted_key' must be empty for "
+            "'dir' encryption");
+}
+
 } // anonymous namespace
 
 std::string deriveRecKemSuite(const std::string& kemAlg)
@@ -114,6 +135,17 @@ void validateRecKemResponse(
     if (!json_is_object(hdr.get()))
         throw PinError(
             "Rec-kem response: protected header is not a JSON object");
+
+    // Pin the envelope exactly as the request side pins it by
+    // construction: fixed alg/enc, no compression, no wrapped key
+    // material. jose picks its decryption and decompression code
+    // paths from these header fields, so nothing the server sends
+    // may steer jose_jwe_dec anywhere the request contract does not
+    // go.
+    validateStringField(hdr.get(), "alg", REC_KEM_JWE_ALG);
+    validateStringField(hdr.get(), "enc", REC_KEM_JWE_ENC);
+    validateAbsentField(hdr.get(), "zip");
+    validateEmptyEncryptedKey(responseJwe);
 
     validateCritEntries(hdr.get());
     validateStringField(hdr.get(), "kem_ver", REC_KEM_VERSION);

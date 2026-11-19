@@ -29,6 +29,16 @@ inline constexpr const char* REC_KEM_SUITE_PREFIX = "ECMR+";
 inline constexpr const char* REC_KEM_MSG_DIR_REQUEST = "clevis-to-tang";
 inline constexpr const char* REC_KEM_MSG_DIR_RESPONSE = "tang-to-clevis";
 
+// JWE envelope of the hybrid exchange: the key material is sealed
+// with a directly held symmetric key. Every JWE clevis builds pins
+// these values by construction, and the /rec-kem response is
+// validated against them: jose selects its decryption and
+// decompression code paths from these header fields, so a response
+// must never steer jose_jwe_dec anywhere the request contract does
+// not go.
+inline constexpr const char* REC_KEM_JWE_ALG = "dir";
+inline constexpr const char* REC_KEM_JWE_ENC = "A256GCM";
+
 // Expected values for the /rec-kem response JWE protected header. Every
 // value MUST be derived locally by clevis -- from the verified
 // advertisement and the keys it selected -- and never taken from stored
@@ -51,8 +61,12 @@ std::string deriveRecKemSuite(const std::string& kemAlg);
 // strings drawn from the known extension parameters. 'crit' itself is
 // optional: only membership is checked, not presence or length. The
 // standard JOSE header 'kid' is not an extension parameter and is
-// never a valid crit entry. This MUST be called before the response
-// transport key or the recovered key are used in any way.
+// never a valid crit entry. The JWE envelope is pinned to the same
+// values clevis pins on its own requests ('alg' = dir, 'enc' =
+// A256GCM, no 'zip', empty 'encrypted_key'), closing the
+// algorithm-substitution and decompression paths before jose_jwe_dec
+// is reached. This MUST be called before the response transport key
+// or the recovered key are used in any way.
 void validateRecKemResponse(
     const json_t* responseJwe,
     const RecKemResponseExpectations& expected);

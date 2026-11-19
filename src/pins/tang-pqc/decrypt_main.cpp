@@ -321,8 +321,8 @@ CleansedString secureTransportRecover(
     std::string suite = deriveRecKemSuite(kemAlg);
     auto blobProt = makeJsonPtr(json_pack(
         "{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:[s,s,s,s]}",
-        "alg", "dir",
-        "enc", "A256GCM",
+        "alg", REC_KEM_JWE_ALG,
+        "enc", REC_KEM_JWE_ENC,
         "kem_ver", REC_KEM_VERSION,
         "suite", suite.c_str(),
         "kid", requestKid.c_str(),

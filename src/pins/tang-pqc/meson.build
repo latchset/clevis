@@ -12,9 +12,20 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
 
   tang_pqc_deps = [jansson, jose, libcrypto, libcurl]
 
+  # jose's public headers declare both the struct tag jose_cfg and the
+  # function jose_cfg(); in C++, gcc's -Wshadow reports the function as
+  # hiding the struct's constructor. Headers from a prefix-installed
+  # jose are reached through -I instead of a system include directory,
+  # so the warning is not suppressed there and -Werror fails the build.
+  # The collision is long-standing jose API shape and cannot be fixed
+  # without a jose API break, so keep -Wshadow but stop treating it as
+  # an error for this pin's C++ targets only.
+  tang_pqc_cpp_args = ['-Wno-error=shadow']
+
   executable('clevis-encrypt-tang-pqc',
     tang_pqc_common + ['encrypt_main.cpp'],
     dependencies: tang_pqc_deps,
+    cpp_args: tang_pqc_cpp_args,
     install_dir: bindir,
     install: true,
     override_options: ['cpp_std=c++17'],
@@ -25,6 +36,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
   executable('clevis-decrypt-tang-pqc',
     tang_pqc_common + ['decrypt_main.cpp'],
     dependencies: tang_pqc_deps,
+    cpp_args: tang_pqc_cpp_args,
     install_dir: bindir,
     install: true,
     override_options: ['cpp_std=c++17'],
@@ -35,6 +47,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
   test_jose_wrapper = executable('test-tang-pqc-jose-wrapper',
     ['jose_wrapper.cpp', 'test_jose_wrapper.cpp'],
     dependencies: tang_pqc_test_deps,
+    cpp_args: tang_pqc_cpp_args,
     override_options: ['cpp_std=c++17'],
     install: false,
   )
@@ -42,6 +55,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
   test_key_deriver = executable('test-tang-pqc-key-deriver',
     ['jose_wrapper.cpp', 'key_deriver.cpp', 'test_key_deriver.cpp'],
     dependencies: tang_pqc_test_deps,
+    cpp_args: tang_pqc_cpp_args,
     override_options: ['cpp_std=c++17'],
     install: false,
   )
@@ -49,6 +63,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
   test_ecmr_ops = executable('test-tang-pqc-ecmr-ops',
     ['jose_wrapper.cpp', 'ecmr_ops.cpp', 'test_ecmr_ops.cpp'],
     dependencies: tang_pqc_test_deps,
+    cpp_args: tang_pqc_cpp_args,
     override_options: ['cpp_std=c++17'],
     install: false,
   )
@@ -56,6 +71,7 @@ if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jo
   test_response_validator = executable('test-tang-pqc-response-validator',
     ['jose_wrapper.cpp', 'response_validator.cpp', 'test_response_validator.cpp'],
     dependencies: tang_pqc_test_deps,
+    cpp_args: tang_pqc_cpp_args,
     override_options: ['cpp_std=c++17'],
     install: false,
   )

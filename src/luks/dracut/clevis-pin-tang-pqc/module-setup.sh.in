@@ -51,7 +51,9 @@ EOF
         fi
     fi
 
-    inst_multiple \
-	clevis-encrypt-tang-pqc \
-	clevis-decrypt-tang-pqc
+    # The initramfs only ever unlocks: ship the decrypt binary alone,
+    # like the clevis-pin-tang module does. clevis-encrypt-tang-pqc is
+    # not needed there, and inst_multiple pulls in the binary's shared
+    # library dependencies automatically.
+    inst_multiple clevis-decrypt-tang-pqc
 }

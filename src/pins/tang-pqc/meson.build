@@ -1,7 +1,4 @@
-libcrypto = dependency('libcrypto', required: get_option('tang-pqc'))
-libcurl = dependency('libcurl', required: get_option('tang-pqc'))
-
-if have_cpp and jansson.found() and libcrypto.found() and libcurl.found() and jose.found()
+if build_tang_pqc
   tang_pqc_common = [
     'jose_wrapper.cpp',
     'key_deriver.cpp',

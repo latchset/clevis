@@ -43,6 +43,8 @@ add_project_arguments(
 
 jansson = dependency('jansson', version: '>=2.10', required: false)
 jose = dependency('jose', version: '>=8')
+libcrypto = dependency('libcrypto', required: get_option('tang-pqc'))
+libcurl = dependency('libcurl', required: get_option('tang-pqc'))
 
 has_kem_api = false
 if not get_option('tang-pqc').disabled() and jansson.found()
@@ -88,6 +90,15 @@ if has_kem_api
 elif get_option('tang-pqc').enabled()
   error('tang-pqc pin is enabled but jose lacks ML-KEM KEM API support')
 endif
+
+# Whether the tang-pqc pin is actually buildable: C++ (which implies
+# the jose KEM API) plus its libraries. The pin and everything that
+# ships its binaries -- the dracut module -- must be gated on this,
+# not on the feature option alone: with the default 'auto' and a jose
+# lacking the KEM API, the module would be installed without the
+# binaries and fail silently at dracut(8) image build time.
+build_tang_pqc = have_cpp and jansson.found() and jose.found() \
+  and libcrypto.found() and libcurl.found()
 
 a2x = find_program('a2x', required: false)
 

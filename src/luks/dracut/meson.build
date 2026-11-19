@@ -1,6 +1,6 @@
 subdir('clevis')
 subdir('clevis-pin-tang')
-if not get_option('tang-pqc').disabled()
+if build_tang_pqc
   subdir('clevis-pin-tang-pqc')
 endif
 if not get_option('tpm1').disabled()

@@ -344,8 +344,7 @@ std::string hybridEncrypt(
         throw PinError("ECDH result missing x-coordinate");
     CleansedString encEcXStr(encEcX);
 
-    auto [kemCt, kemSs_] = JoseWrapper::encapsulate(tangKemPub);
-    CleansedJsonPtr kemSs(kemSs_.release());
+    auto [kemCt, kemSs] = JoseWrapper::encapsulate(tangKemPub);
     auto kemK = json_string_value(
         json_object_get(kemSs.get(), "k"));
     if (!kemK)

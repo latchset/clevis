@@ -106,40 +106,68 @@ std::string responseExcerpt(const std::string& body)
                    + " (HTTP " + std::to_string(code) + ")");
 }
 
+// curl_easy_setopt rarely fails with well-formed arguments, but a
+// failed setopt would silently drop part of the configuration -- a
+// dropped CURLOPT_CAINFO or CURLOPT_SSLCERT would weaken the TLS
+// setup the caller asked for -- so every option is checked.
+template<typename T>
+void curlSetoptChecked(
+    CURL* curl, CURLoption option, T value, const char* name)
+{
+    if (curl_easy_setopt(curl, option, value) != CURLE_OK)
+        throw PinError(
+            std::string("curl: failed to set ") + name);
+}
+
 CurlPtr createCurl(const std::string& url, const TlsConfig& tls)
 {
     CurlPtr curl(curl_easy_init());
     if (!curl)
         throw PinError("Failed to initialize curl");
 
-    curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+    curlSetoptChecked(
+        curl.get(), CURLOPT_URL, url.c_str(), "CURLOPT_URL");
     // HTTP status codes are inspected manually after the transfer so
     // that error responses (e.g. 400 from /rec-kem) can be reported
     // with their status code and body instead of a generic failure.
-    curl_easy_setopt(curl.get(), CURLOPT_FAILONERROR, 0L);
-    curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 0L);
-    curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, 30L);
+    curlSetoptChecked(
+        curl.get(), CURLOPT_FAILONERROR, 0L, "CURLOPT_FAILONERROR");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_FOLLOWLOCATION, 0L,
+        "CURLOPT_FOLLOWLOCATION");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_CONNECTTIMEOUT, 10L,
+        "CURLOPT_CONNECTTIMEOUT");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_TIMEOUT, 30L, "CURLOPT_TIMEOUT");
 
-    curl_easy_setopt(curl.get(), CURLOPT_MAXFILESIZE_LARGE,
-                     static_cast<curl_off_t>(MAX_RESPONSE_SIZE));
+    curlSetoptChecked(
+        curl.get(), CURLOPT_MAXFILESIZE_LARGE,
+        static_cast<curl_off_t>(MAX_RESPONSE_SIZE),
+        "CURLOPT_MAXFILESIZE_LARGE");
 
 #if CURL_AT_LEAST_VERSION(7, 85, 0)
-    curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, "http,https");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_PROTOCOLS_STR, "http,https",
+        "CURLOPT_PROTOCOLS_STR");
 #else
-    curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS,
-                     CURLPROTO_HTTP | CURLPROTO_HTTPS);
+    curlSetoptChecked(
+        curl.get(), CURLOPT_PROTOCOLS,
+        CURLPROTO_HTTP | CURLPROTO_HTTPS, "CURLOPT_PROTOCOLS");
 #endif
 
     if (!tls.cacert.empty())
-        curl_easy_setopt(curl.get(), CURLOPT_CAINFO,
-                         tls.cacert.c_str());
+        curlSetoptChecked(
+            curl.get(), CURLOPT_CAINFO,
+            tls.cacert.c_str(), "CURLOPT_CAINFO");
     if (!tls.cert.empty())
-        curl_easy_setopt(curl.get(), CURLOPT_SSLCERT,
-                         tls.cert.c_str());
+        curlSetoptChecked(
+            curl.get(), CURLOPT_SSLCERT,
+            tls.cert.c_str(), "CURLOPT_SSLCERT");
     if (!tls.key.empty())
-        curl_easy_setopt(curl.get(), CURLOPT_SSLKEY,
-                         tls.key.c_str());
+        curlSetoptChecked(
+            curl.get(), CURLOPT_SSLKEY,
+            tls.key.c_str(), "CURLOPT_SSLKEY");
 
     return curl;
 }
@@ -157,8 +185,12 @@ std::string TangClient::httpGet(const std::string& path)
     auto curl = createCurl(fullUrl, tls_);
 
     std::string response;
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
+    curlSetoptChecked(
+        curl.get(), CURLOPT_WRITEFUNCTION, writeCallback,
+        "CURLOPT_WRITEFUNCTION");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_WRITEDATA, &response,
+        "CURLOPT_WRITEDATA");
 
     CURLcode res = curl_easy_perform(curl.get());
 
@@ -188,15 +220,24 @@ std::string TangClient::httpPost(
     SlistPtr headers(curl_slist_append(nullptr, ctHeader.c_str()));
     if (!headers)
         throw PinError("Failed to allocate HTTP header list");
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+    curlSetoptChecked(
+        curl.get(), CURLOPT_HTTPHEADER, headers.get(),
+        "CURLOPT_HTTPHEADER");
 
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, body.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE,
-                     static_cast<long>(body.size()));
+    curlSetoptChecked(
+        curl.get(), CURLOPT_POSTFIELDS, body.c_str(),
+        "CURLOPT_POSTFIELDS");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_POSTFIELDSIZE,
+        static_cast<long>(body.size()), "CURLOPT_POSTFIELDSIZE");
 
     std::string response;
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
+    curlSetoptChecked(
+        curl.get(), CURLOPT_WRITEFUNCTION, writeCallback,
+        "CURLOPT_WRITEFUNCTION");
+    curlSetoptChecked(
+        curl.get(), CURLOPT_WRITEDATA, &response,
+        "CURLOPT_WRITEDATA");
 
     CURLcode res = curl_easy_perform(curl.get());
 

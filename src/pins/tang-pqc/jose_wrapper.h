@@ -32,13 +32,17 @@ public:
     static JsonPtr keyExchange(const json_t* local, const json_t* remote);
     static JsonPtr ecmrExchange(const json_t* local, const json_t* remote);
 
+    // The KEM shared secret is base64url key material: it is handed
+    // out as a CleansedJsonPtr so it is wiped before it is freed no
+    // matter where the EncapResult ends up.
     struct EncapResult {
         std::string ct;
-        JsonPtr sharedSecret;
+        CleansedJsonPtr sharedSecret;
     };
 
     static EncapResult encapsulate(const json_t* pub);
-    static JsonPtr decapsulate(const json_t* priv, const std::string& ct);
+    static CleansedJsonPtr decapsulate(
+        const json_t* priv, const std::string& ct);
 
     static std::string thumbprint(
         const json_t* key, const std::string& alg = "S256");

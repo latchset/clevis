@@ -297,10 +297,8 @@ CleansedString secureTransportRecover(
             "Client KEM public key 'alg' does not match the tang KEM "
             "key algorithm (" + kemAlg + ")");
 
-    auto [clevisTransportCt, clevisTransportKey_] =
+    auto [clevisTransportCt, clevisTransportKey] =
         JoseWrapper::encapsulate(tangKemPub);
-    CleansedJsonPtr clevisTransportKey(
-        clevisTransportKey_.release());
 
     auto innerObj = makeJsonPtr(json_pack(
         "{s:s, s:O, s:s}",
@@ -360,7 +358,7 @@ CleansedString secureTransportRecover(
     CleansedJsonPtr tangTransportKey(
         JoseWrapper::decapsulate(
             clevisKemPriv.get(),
-            kemResp.tangTransportCt).release());
+            kemResp.tangTransportCt));
 
     CleansedVector<uint8_t> encKeyBytes(
         JoseWrapper::jweDecrypt(

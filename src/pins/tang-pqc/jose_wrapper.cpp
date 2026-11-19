@@ -80,17 +80,23 @@ JoseWrapper::EncapResult JoseWrapper::encapsulate(const json_t* pub)
     if (!ss)
         throw PinError("KEM encapsulation: missing ss");
 
-    return {std::string(ctVal), jsonDeepCopy(ss)};
+    // Detach the shared secret instead of copying it, and hand it
+    // out cleansed: the base64url secret must be wiped before it is
+    // freed, which plain JsonPtr destruction does not do. Destroying
+    // the result object afterwards only drops its reference count
+    // and does not touch the secret.
+    json_incref(ss);
+    return {std::string(ctVal), makeCleansedJsonPtr(ss)};
 }
 
-JsonPtr JoseWrapper::decapsulate(
+CleansedJsonPtr JoseWrapper::decapsulate(
     const json_t* priv, const std::string& ct)
 {
     auto ctJson = makeJsonPtr(json_string(ct.c_str()));
     auto ss = jose_jwk_kem_dec(nullptr, priv, ctJson.get());
     if (!ss)
         throw PinError("KEM decapsulation failed");
-    return makeJsonPtr(ss);
+    return makeCleansedJsonPtr(ss);
 }
 
 std::string JoseWrapper::thumbprint(
@@ -151,11 +157,19 @@ bool JoseWrapper::thumbprintMatch(
 std::string JoseWrapper::base64UrlEncode(
     const uint8_t* data, size_t len)
 {
-    auto b64 = jose_b64_enc(data, len);
-    if (!b64)
-        throw PinError("base64url encoding failed");
-    auto b64Ptr = makeJsonPtr(b64);
-    return json_string_value(b64);
+    // Encode into our own buffer, like thumbprint() does: the json_t
+    // convenience wrapper would leave the base64url secret -- the
+    // derived disk key, in production -- in jose-owned memory that is
+    // freed without cleansing.
+    size_t b64Len = jose_b64_enc_buf(nullptr, len, nullptr, 0);
+    if (b64Len == SIZE_MAX)
+        throw PinError("Failed to determine base64url size");
+
+    std::string result(b64Len, '\0');
+    if (jose_b64_enc_buf(data, len, &result[0], b64Len) != b64Len)
+        throw PinError("Failed to base64url-encode data");
+
+    return result;
 }
 
 std::string JoseWrapper::base64UrlEncode(

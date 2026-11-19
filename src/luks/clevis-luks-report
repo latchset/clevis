@@ -125,11 +125,24 @@ report_tang_pqc() {
         return 1
     fi
 
+    # The (m)TLS options are part of the binding: the advertisement
+    # fetches must present the client certificate against servers that
+    # require mutual TLS.
+    local cacert cert key
+    cacert="$(jose fmt --json="${content}" --get cacert --unquote=- 2>/dev/null)" || cacert=
+    cert="$(jose fmt --json="${content}" --get cert --unquote=- 2>/dev/null)" || cert=
+    key="$(jose fmt --json="${content}" --get key --unquote=- 2>/dev/null)" || key=
+
+    local -a curl_opts=()
+    [ -n "${cacert}" ] && curl_opts+=(--cacert "${cacert}")
+    [ -n "${cert}" ] && curl_opts+=(--cert "${cert}")
+    [ -n "${key}" ] && curl_opts+=(--key "${key}")
+
     # Fetch and validate the current advertisement; it provides both the
     # ECMR exchange keys and the signing keys used to validate the KEM
     # advertisement.
     local jws
-    if ! jws="$(curl -sfg "${url}/adv")"; then
+    if ! jws="$(curl -sfg ${curl_opts[@]+"${curl_opts[@]}"} "${url}/adv")"; then
         echo "Unable to fetch advertisement (${url}/adv)" >&2
         return 1
     fi
@@ -178,7 +191,7 @@ report_tang_pqc() {
     fi
     if [ -n "${kem_kid}" ]; then
         local kem_jws
-        if ! kem_jws="$(curl -sfg "${url}/adv-kem?alg=${alg}")"; then
+        if ! kem_jws="$(curl -sfg ${curl_opts[@]+"${curl_opts[@]}"} "${url}/adv-kem?alg=${alg}")"; then
             echo "Unable to fetch KEM advertisement (${url}/adv-kem?alg=${alg})" >&2
             return 1
         fi

@@ -203,16 +203,22 @@ clevis_luks_print_pin_config() {
         printf "tang '%s'" "${pin}"
         ;;
     tang-pqc)
-        local url
-        url="$(jose fmt -j- -g url -u- <<< "${content}")"
-        local alg
-        alg="$(jose fmt -j- -g alg -u- <<< "${content}" 2>/dev/null)" || alg=
-        if [ -n "${alg}" ]; then
-            pin=$(printf '{"url":"%s","alg":"%s"}' "${url}" "${alg}")
-        else
-            pin=$(printf '{"url":"%s"}' "${url}")
-        fi
-        printf "tang-pqc '%s'" "${pin}"
+        # Valid properties for the tang-pqc pin are the following:
+        # url, alg, and the optional (m)TLS options cacert, cert, key.
+        # Every stored field must be reprinted: clevis luks regen feeds
+        # this configuration back to clevis encrypt tang-pqc, and
+        # dropping the (m)TLS options would silently downgrade a
+        # mutual-TLS binding.
+        local key
+        local value
+        for key in 'url' 'alg' 'cacert' 'cert' 'key'; do
+            if value=$(jose fmt -j- -g "${key}" -u- <<< "${content}" 2>/dev/null); then
+                pin=$(printf '%s,"%s":"%s"' "${pin}" "${key}" "${value}")
+            fi
+        done
+        # Remove possible leading comma.
+        pin=${pin/#,/}
+        printf "tang-pqc '{%s}'" "${pin}"
         ;;
     tpm1)
         pcr_ids="$(jose fmt -j- -g pcr_ids -u- <<< "${content}")"

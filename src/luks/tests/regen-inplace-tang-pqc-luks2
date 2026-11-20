@@ -83,11 +83,12 @@ expect_single_clevis_slot() {
 }
 
 expect_hybrid_binding_listed() {
-    # `clevis luks list` reconstructs url and alg only; the trust
-    # thumbprint is intentionally not part of the rebinding config.
+    # `clevis luks list` reconstructs url, the pinned thp and alg; the
+    # trust thumbprint is part of the rebinding config so that regen
+    # keeps the pin.
     local expected listing
-    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"alg\":\"%s\"}'" \
-              "${SLOT}" "${binding_url}" "${KEM_ALG}")
+    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"thp\":\"%s\",\"alg\":\"%s\"}'" \
+              "${SLOT}" "${binding_url}" "${signing_key_thumbprint}" "${KEM_ALG}")
     if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
         error "${TEST}: Unable to list the bindings in ${DEV}."
     fi

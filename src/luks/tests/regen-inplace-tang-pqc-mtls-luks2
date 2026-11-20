@@ -82,11 +82,11 @@ remove_fallback_passphrase() {
 
 expect_hybrid_mtls_binding_listed() {
     # `clevis luks list` reconstructs the rebinding configuration, and
-    # it must include the (m)TLS fields: they are what regen feeds back
-    # to clevis encrypt tang-pqc.
+    # it must include the trust pin and the (m)TLS fields: they are
+    # what regen feeds back to clevis encrypt tang-pqc.
     local expected listing
-    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"alg\":\"%s\",\"cacert\":\"%s\",\"cert\":\"%s\",\"key\":\"%s\"}'" \
-              "${SLOT}" "${url}" "${KEM_ALG}" "${cacert}" "${cert}" "${key}")
+    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"thp\":\"%s\",\"alg\":\"%s\",\"cacert\":\"%s\",\"cert\":\"%s\",\"key\":\"%s\"}'" \
+              "${SLOT}" "${url}" "${signing_key_thumbprint}" "${KEM_ALG}" "${cacert}" "${cert}" "${key}")
     if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
         error "${TEST}: Unable to list the bindings in ${DEV}."
     fi

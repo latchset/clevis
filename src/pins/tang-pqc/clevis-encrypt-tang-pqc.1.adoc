@@ -98,6 +98,12 @@ This command uses the following configuration properties:
 * *adv_kem* (object) :
   A trusted KEM advertisement (raw JSON)
 
+The *adv* and *adv_kem* objects may be either a signed advertisement (JWS), as
+served by the Tang */adv* and */adv-kem* endpoints, or a bare JWKS key set,
+which is trusted as provided.  The latter is the form *clevis luks regen*
+feeds back from the advertisements stored in a binding, so that an
+offline-provisioned binding can also be regenerated offline.
+
 == CRYPTOGRAPHIC DETAILS
 
 The hybrid encryption scheme combines two independent key exchanges:

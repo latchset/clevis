@@ -154,8 +154,10 @@ new_device "luks2" "${DEV}"
 bind_hybrid_pin
 
 # Editing with the same (reconstructed) configuration must be refused.
-expect_edit_fails "$(printf '{"url":"%s","alg":"%s"}' \
-    "${binding_url}" "${KEM_ALG_DEFAULT}")"
+# The reconstructed configuration includes the stored trust pin, so
+# the no-op must carry it too.
+expect_edit_fails "$(printf '{"url":"%s","thp":"%s","alg":"%s"}' \
+    "${binding_url}" "${signing_key_thumbprint}" "${KEM_ALG_DEFAULT}")"
 
 # A malformed configuration must be refused.
 expect_edit_fails "$(printf '{"url&:"%s"}' "${binding_url}")"

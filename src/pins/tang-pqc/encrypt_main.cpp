@@ -316,6 +316,7 @@ std::string hybridEncrypt(
     const std::string& kemAlg,
     const Config& config,
     const json_t* jwks,
+    const json_t* advKem,
     bool hasTangPub,
     const std::string& plaintext)
 {
@@ -394,8 +395,23 @@ std::string hybridEncrypt(
         jsonObjectSetChecked(tang, "key",
             json_string(config.tls.key.c_str()));
 
+    // Persist the pinned thumbprint so that clevis luks regen can
+    // rebind with the same trust pin: a lost 'thp' silently unpins
+    // the binding.
+    if (!config.thp.empty() && config.thp != "any")
+        jsonObjectSetChecked(tang, "thp",
+            json_string(config.thp.c_str()));
+
     if (!hasTangPub && jwks)
         jsonObjectSetChecked(tang, "adv", json_deep_copy(jwks));
+
+    // Persist the KEM advertisement of offline-provisioned bindings
+    // so that clevis luks regen can rebind without network access.
+    // Its presence also marks the stored 'adv' as user-pinned rather
+    // than a decrypt-time cache of a live fetch.
+    if (advKem)
+        jsonObjectSetChecked(tang, "adv_kem",
+            json_deep_copy(advKem));
 
     if (!JoseWrapper::jweEncrypt(
             jwe.get(), encKey.get(),
@@ -444,11 +460,20 @@ int main(int argc, char* argv[])
             fetchedFromNetwork = true;
         }
 
-        auto jwks = JoseWrapper::jwsPayload(jws.get());
+        // An advertisement may come as a signed JWS or as a bare JWKS
+        // the caller already trusts -- the latter is the form clevis
+        // luks regen feeds back from the advertisements stored in a
+        // binding. Unwrap and verify the former, pass the latter
+        // through as trusted.
+        bool advSigned =
+            json_object_get(jws.get(), "payload") != nullptr;
+        auto jwks = advSigned
+            ? JoseWrapper::jwsPayload(jws.get())
+            : jsonDeepCopy(jws.get());
 
         auto verKeys = JoseWrapper::filterKeysByUse(
             jwks.get(), "verify");
-        if (!JoseWrapper::jwsVerify(
+        if (advSigned && !JoseWrapper::jwsVerify(
                 jws.get(), verKeys.get(), true))
             throw PinError("Advertisement is missing signatures!");
 
@@ -493,13 +518,19 @@ int main(int argc, char* argv[])
             kemJws = tang.fetchKemAdvertisement(config.kemAlg);
         }
 
-        if (!JoseWrapper::jwsVerify(
+        // Like 'adv' above, the KEM advertisement may be a signed JWS
+        // or a bare trusted JWKS.
+        bool kemSigned =
+            json_object_get(kemJws.get(), "payload") != nullptr;
+        if (kemSigned && !JoseWrapper::jwsVerify(
                 kemJws.get(), verKeys.get(), true))
             throw PinError(
                 "KEM advertisement signature verification "
                 "failed!");
 
-        auto kemJwks = JoseWrapper::jwsPayload(kemJws.get());
+        auto kemJwks = kemSigned
+            ? JoseWrapper::jwsPayload(kemJws.get())
+            : jsonDeepCopy(kemJws.get());
         auto tangKemPub = findKemKey(kemJwks.get(), config.kemAlg);
         if (!tangKemPub)
             throw PinError(
@@ -521,7 +552,9 @@ int main(int argc, char* argv[])
         CleansedString plaintext(readStdin());
         auto result = hybridEncrypt(
             tangEcPub.get(), tangKemPub.get(), kid, tangKemAlg,
-            config, jwks.get(), hasTangPub, plaintext);
+            config, jwks.get(),
+            advOffline ? kemJwks.get() : nullptr,
+            hasTangPub, plaintext);
 
         std::cout << result;
         std::cout.flush();

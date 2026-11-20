@@ -54,6 +54,13 @@ enc="$(echo -n "offline file" | clevis encrypt tang-pqc "$cfg")"
 dec="$(echo -n "$enc" | clevis decrypt)"
 test "$dec" == "offline file"
 
+# Both advertisements must be baked into the JWE (as trusted key
+# sets) so that clevis luks regen can rebind offline.
+hdr="$(echo -n "$enc" | cut -d. -f1)"
+jhd="$(jose b64 dec -i- <<< "$hdr")"
+jose fmt -j- -Og clevis -g tang-pqc -g adv -Oo- <<< "$jhd" | grep -q '"keys"'
+jose fmt -j- -Og clevis -g tang-pqc -g adv_kem -Oo- <<< "$jhd" | grep -q '"keys"'
+
 # Offline binding with inline JSON advertisements.
 adv_json="$(cat "$adv")"
 adv_kem_json="$(cat "$adv_kem")"
@@ -62,6 +69,17 @@ cfg="$(printf '{"url":"%s","adv":%s,"adv_kem":%s}' \
 enc="$(echo -n "offline inline" | clevis encrypt tang-pqc "$cfg")"
 dec="$(echo -n "$enc" | clevis decrypt)"
 test "$dec" == "offline inline"
+
+# A bare key set (JWKS) is also accepted for both advertisements: it
+# is the form clevis luks regen feeds back from the advertisements
+# stored in a binding.
+adv_keys="$(jose fmt --json="$(cat "$adv")" -Og payload -SyOo-)"
+adv_kem_keys="$(jose fmt --json="$(cat "$adv_kem")" -Og payload -SyOo-)"
+cfg="$(printf '{"url":"%s","adv":%s,"adv_kem":%s}' \
+       "$url" "$adv_keys" "$adv_kem_keys")"
+enc="$(echo -n "offline jwks" | clevis encrypt tang-pqc "$cfg")"
+dec="$(echo -n "$enc" | clevis decrypt)"
+test "$dec" == "offline jwks"
 
 # Providing adv only (without adv_kem) must fail.
 cfg="$(printf '{"url":"%s","adv":"%s"}' "$url" "$adv")"

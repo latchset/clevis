@@ -204,18 +204,31 @@ clevis_luks_print_pin_config() {
         ;;
     tang-pqc)
         # Valid properties for the tang-pqc pin are the following:
-        # url, alg, and the optional (m)TLS options cacert, cert, key.
-        # Every stored field must be reprinted: clevis luks regen feeds
-        # this configuration back to clevis encrypt tang-pqc, and
-        # dropping the (m)TLS options would silently downgrade a
-        # mutual-TLS binding.
+        # url, thp, alg, adv, adv_kem, and the optional (m)TLS options
+        # cacert, cert, key. Every rebinding-relevant field must be
+        # reprinted: clevis luks regen feeds this configuration back
+        # to clevis encrypt tang-pqc, and dropping a field silently
+        # downgrades the binding -- a lost 'thp' unpins the trusted
+        # signing key, lost 'adv'/'adv_kem' break offline regen, and
+        # lost (m)TLS options drop mutual TLS.
+        # The advertisements are reprinted only when both are stored:
+        # 'adv_kem' is stored for offline-provisioned bindings only,
+        # and a live-provisioned binding must regen against the
+        # server's current keys instead of the ones captured at
+        # binding time.
         local key
         local value
-        for key in 'url' 'alg' 'cacert' 'cert' 'key'; do
+        for key in 'url' 'thp' 'alg' 'cacert' 'cert' 'key'; do
             if value=$(jose fmt -j- -g "${key}" -u- <<< "${content}" 2>/dev/null); then
                 pin=$(printf '%s,"%s":"%s"' "${pin}" "${key}" "${value}")
             fi
         done
+        local adv
+        local adv_kem
+        if adv="$(jose fmt -j- -g adv -o- <<< "${content}" 2>/dev/null)" \
+                && adv_kem="$(jose fmt -j- -g adv_kem -o- <<< "${content}" 2>/dev/null)"; then
+            pin=$(printf '%s,"adv":%s,"adv_kem":%s' "${pin}" "${adv}" "${adv_kem}")
+        fi
         # Remove possible leading comma.
         pin=${pin/#,/}
         printf "tang-pqc '{%s}'" "${pin}"

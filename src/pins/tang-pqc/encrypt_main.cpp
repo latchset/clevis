@@ -26,6 +26,7 @@ extern "C" {
 }
 
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -283,8 +284,10 @@ std::string readStdin()
             throw PinError("Input exceeds maximum size");
     }
     // A read error mid-stream truncates the plaintext: the JWE must
-    // not be built from it.
-    if (std::cin.bad())
+    // not be built from it. std::cin is stdio-synced, so a read(2)
+    // error is reported as EOF and badbit is never set; ferror(3)
+    // is the discriminator between a clean EOF and an error.
+    if (ferror(stdin))
         throw PinError("Error reading standard input");
     return result;
 }
@@ -552,6 +555,8 @@ int main(int argc, char* argv[])
         std::string tangKemAlg = tangKemAlgVal;
 
         CleansedString plaintext(readStdin());
+        if (plaintext.empty())
+            throw PinError("Plaintext is empty");
         auto result = hybridEncrypt(
             tangEcPub.get(), tangKemPub.get(), kid, tangKemAlg,
             config, jwks.get(),

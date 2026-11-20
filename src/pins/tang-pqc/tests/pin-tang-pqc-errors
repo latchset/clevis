@@ -74,3 +74,12 @@ tampered="${enc%.*}.${flip}${tag:1}"
 # with a silently truncated key, which would surface later as a
 # wrong-key failure at boot.
 ! echo -n "$enc" | clevis decrypt > /dev/full
+
+# A read error on standard input must fail the encryption instead of
+# producing a JWE of the empty plaintext: reading a directory fd
+# fails with EISDIR, and a stdio-synced cin reports it as EOF.
+! clevis encrypt tang-pqc "$cfg" < /tmp
+
+# An empty plaintext is almost certainly a stdin plumbing error, and
+# must be rejected instead of encrypting nothing.
+! echo -n "" | clevis encrypt tang-pqc "$cfg"

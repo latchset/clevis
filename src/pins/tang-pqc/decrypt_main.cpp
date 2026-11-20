@@ -27,6 +27,7 @@ extern "C" {
 }
 
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -387,7 +388,11 @@ std::string readCompactJwe()
         if (result.size() > maxSize)
             throw PinError("JWE input exceeds maximum size");
     }
-    if (std::cin.bad())
+    // A read error mid-stream truncates the JWE. std::cin is
+    // stdio-synced, so a read(2) error is reported as EOF and badbit
+    // is never set; ferror(3) is the discriminator between a clean
+    // EOF and an error.
+    if (ferror(stdin))
         throw PinError("Error reading standard input");
     return result;
 }

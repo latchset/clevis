@@ -459,7 +459,7 @@ int main(int argc, char* argv[])
         if (config.inlineAdv) {
             jws = std::move(config.inlineAdv);
         } else if (!config.advFile.empty()) {
-            jws = jsonParse(readBoundedFile(config.advFile));
+            jws = jsonParseStrict(readBoundedFile(config.advFile));
         } else {
             jws = tang.fetchAdvertisement(config.thp);
             fetchedFromNetwork = true;
@@ -507,7 +507,7 @@ int main(int argc, char* argv[])
             if (config.inlineAdvKem) {
                 kemJws = std::move(config.inlineAdvKem);
             } else {
-                kemJws = jsonParse(
+                kemJws = jsonParseStrict(
                     readBoundedFile(config.advKemFile));
             }
         } else {

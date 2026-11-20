@@ -333,6 +333,16 @@ static void testZipRejection()
                  "zip with unknown value is rejected");
 }
 
+static void testDuplicateMembersRejection()
+{
+    std::cerr << "== testDuplicateMembersRejection ==\n";
+    // Duplicate object members resolve last-wins under json_loads;
+    // the response parser must reject them so the header cannot
+    // change meaning between the two ends of the protocol.
+    checkRejects(withExtraMember(makeProtHeader(), "alg", "\"dir\""),
+                 "duplicate header member is rejected");
+}
+
 static void testEncryptedKeyPinning()
 {
     std::cerr << "== testEncryptedKeyPinning ==\n";
@@ -413,6 +423,7 @@ int main()
     testAlgPinning();
     testEncPinning();
     testZipRejection();
+    testDuplicateMembersRejection();
     testEncryptedKeyPinning();
     testMalformedResponses();
     testDeriveSuite();

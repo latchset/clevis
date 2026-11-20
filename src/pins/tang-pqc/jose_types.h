@@ -80,6 +80,20 @@ class PinError : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+// Strict JSON parsing for data sourced from the network: parse the
+// exact length, so an embedded NUL fails instead of truncating the
+// input, and reject duplicate object members, which json_loads
+// resolves last-wins. The server hardened the same wire fields, and
+// both ends of the protocol must parse this data identically.
+inline JsonPtr jsonParseStrict(const std::string& str)
+{
+    auto j = json_loadb(
+        str.data(), str.size(), JSON_REJECT_DUPLICATES, nullptr);
+    if (!j)
+        throw PinError("Failed to parse JSON");
+    return makeJsonPtr(j);
+}
+
 inline void jsonObjectSetChecked(
     json_t* obj, const char* key, json_t* value)
 {

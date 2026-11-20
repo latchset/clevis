@@ -144,6 +144,46 @@ static void testBase64RoundTrip()
     check(result == original, "round trip preserves data");
 }
 
+static void testJsonParseStrict()
+{
+    std::cerr << "== testJsonParseStrict ==\n";
+    auto ok = jsonParseStrict("{\"a\":1}");
+    check(ok != nullptr, "valid JSON parses");
+
+    // json_loads resolves duplicate members last-wins; the network
+    // parser must reject them so both ends of the protocol parse
+    // wire data identically.
+    check(rejects([&] {
+        jsonParseStrict("{\"a\":1,\"a\":2}");
+    }), "duplicate members are rejected");
+
+    // An embedded NUL must fail the parse instead of truncating the
+    // input and silently accepting the leading document.
+    std::string withNul("{\"a\":1}");
+    withNul += '\0';
+    withNul += "{\"smuggled\":2}";
+    check(rejects([&] {
+        jsonParseStrict(withNul);
+    }), "data after an embedded NUL is rejected");
+}
+
+static void testJwsPayloadRejectsDuplicates()
+{
+    std::cerr << "== testJwsPayloadRejectsDuplicates ==\n";
+    std::string dupPayload =
+        "{\"keys\":[],\"keys\":[{\"kty\":\"oct\",\"k\":\"AAAA\"}]}";
+    auto b64 = JoseWrapper::base64UrlEncode(
+        std::vector<uint8_t>(dupPayload.begin(), dupPayload.end()));
+    auto jws = makeJsonPtr(json_pack(
+        "{s:s, s:s, s:s}",
+        "payload", b64.c_str(),
+        "protected", "",
+        "signature", ""));
+    check(rejects([&] {
+        JoseWrapper::jwsPayload(jws.get());
+    }), "JWS payload with duplicate members is rejected");
+}
+
 static void testJweRoundTrip()
 {
     std::cerr << "== testJweRoundTrip ==\n";
@@ -248,6 +288,8 @@ int main()
     testKeyExchange();
     testKemRoundTrip();
     testBase64RoundTrip();
+    testJsonParseStrict();
+    testJwsPayloadRejectsDuplicates();
     testJweRoundTrip();
     testThumbprint();
     testThumbprintRejectsInvalidKey();

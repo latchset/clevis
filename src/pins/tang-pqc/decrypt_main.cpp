@@ -367,7 +367,7 @@ CleansedString secureTransportRecover(
 
     CleansedString encKeyJson(
         encKeyBytes.begin(), encKeyBytes.end());
-    CleansedJsonPtr encKeyObj(jsonParse(encKeyJson).release());
+    CleansedJsonPtr encKeyObj(jsonParseStrict(encKeyJson).release());
     auto kVal = json_string_value(
         json_object_get(encKeyObj.get(), "k"));
     if (!kVal)

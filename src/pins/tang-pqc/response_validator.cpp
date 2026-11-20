@@ -126,7 +126,7 @@ void validateRecKemResponse(
     auto protBytes = JoseWrapper::base64UrlDecode(protB64);
     JsonPtr hdr;
     try {
-        hdr = jsonParse(
+        hdr = jsonParseStrict(
             std::string(protBytes.begin(), protBytes.end()));
     } catch (const std::exception&) {
         throw PinError(

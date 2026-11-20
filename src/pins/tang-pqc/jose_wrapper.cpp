@@ -353,8 +353,8 @@ JsonPtr JoseWrapper::jwsPayload(const json_t* jws)
     if (jose_b64_dec(b64Json.get(), buf.data(), len) != len)
         throw PinError("Failed to decode JWS payload");
 
-    auto payload = json_loadb(
-        reinterpret_cast<const char*>(buf.data()), len, 0, nullptr);
+    auto payload = json_loadb(reinterpret_cast<const char*>(buf.data()),
+                              len, JSON_REJECT_DUPLICATES, nullptr);
     if (!payload)
         throw PinError("JWS payload is not valid JSON");
     return makeJsonPtr(payload);

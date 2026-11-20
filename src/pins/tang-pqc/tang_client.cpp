@@ -262,7 +262,7 @@ JsonPtr TangClient::fetchAdvertisement(const std::string& thp)
         path += "/" + thp;
 
     auto body = httpGet(path);
-    return jsonParse(body);
+    return jsonParseStrict(body);
 }
 
 JsonPtr TangClient::fetchKemAdvertisement(const std::string& alg)
@@ -271,13 +271,13 @@ JsonPtr TangClient::fetchKemAdvertisement(const std::string& alg)
     if (!alg.empty())
         path += "?alg=" + alg;
     auto body = httpGet(path);
-    return jsonParse(body);
+    return jsonParseStrict(body);
 }
 
 JsonPtr TangClient::fetchKemKeyByThumbprint(const std::string& kemKid)
 {
     auto body = httpGet("/adv-kem/" + kemKid);
-    return jsonParse(body);
+    return jsonParseStrict(body);
 }
 
 VersionInfo TangClient::fetchVersion()
@@ -285,7 +285,7 @@ VersionInfo TangClient::fetchVersion()
     VersionInfo info;
     try {
         auto body = httpGet("/version");
-        auto json = jsonParse(body);
+        auto json = jsonParseStrict(body);
 
         auto features = json_object_get(json.get(), "features");
         if (!features)
@@ -310,7 +310,7 @@ JsonPtr TangClient::ecmrRecover(
     auto body = jsonDump(blindedKey, JSON_SORT_KEYS | JSON_COMPACT);
     auto response = httpPost(
         "/rec/" + kid, body.get(), "application/jwk+json");
-    return jsonParse(response);
+    return jsonParseStrict(response);
 }
 
 KemRecoveryResponse TangClient::kemRecover(
@@ -327,7 +327,7 @@ KemRecoveryResponse TangClient::kemRecover(
     auto response = httpPost(
         "/rec-kem/" + kemKid, body.get(), "application/json");
 
-    auto respJson = jsonParse(response);
+    auto respJson = jsonParseStrict(response);
 
     auto tangEncKey = json_string_value(
         json_object_get(respJson.get(), "tang_encrypted_key"));

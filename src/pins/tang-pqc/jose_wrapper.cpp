@@ -123,8 +123,14 @@ std::string JoseWrapper::thumbprint(
         throw PinError("Failed to determine thumbprint size");
 
     std::vector<uint8_t> hashBuf(hashLen);
-    if (!jose_jwk_thp_buf(
-            nullptr, key, alg.c_str(), hashBuf.data(), hashLen))
+    // jose_jwk_thp_buf returns SIZE_MAX on failure, which is truthy:
+    // an inverted check can never fire, and an invalid key would
+    // yield a zero-filled -- and therefore bogus -- thumbprint that
+    // looks like a different key. Compare the bytes written against
+    // the expected size instead
+    if (jose_jwk_thp_buf(
+            nullptr, key, alg.c_str(), hashBuf.data(), hashLen)
+            != hashLen)
         throw PinError("Failed to compute thumbprint hash");
 
     size_t b64Len = jose_b64_enc_buf(

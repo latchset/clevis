@@ -38,6 +38,19 @@ static void check(bool cond, const char* name)
     }
 }
 
+template<typename Fn>
+static bool rejects(Fn&& fn)
+{
+    try {
+        fn();
+    } catch (const PinError&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+    return false;
+}
+
 static void testGenerateEcKey()
 {
     std::cerr << "== testGenerateEcKey ==\n";
@@ -177,6 +190,19 @@ static void testThumbprint()
     check(thp1 != thp3, "different keys have different thumbprints");
 }
 
+static void testThumbprintRejectsInvalidKey()
+{
+    std::cerr << "== testThumbprintRejectsInvalidKey ==\n";
+    // jose_jwk_thp_buf reports failure with SIZE_MAX, which is
+    // truthy: without a length comparison, an invalid key yields a
+    // zero-filled -- and therefore bogus -- thumbprint that looks
+    // like a different key instead of an error.
+    auto notAKey = makeJsonPtr(json_pack("{s:i}", "foo", 1));
+    check(rejects([&] {
+        JoseWrapper::thumbprint(notAKey.get(), "S256");
+    }), "thumbprint of an invalid key is rejected");
+}
+
 static void testThumbprintMatch()
 {
     std::cerr << "== testThumbprintMatch ==\n";
@@ -224,6 +250,7 @@ int main()
     testBase64RoundTrip();
     testJweRoundTrip();
     testThumbprint();
+    testThumbprintRejectsInvalidKey();
     testThumbprintMatch();
     testFilterKeysByUse();
 

@@ -44,6 +44,12 @@ public:
     static CleansedJsonPtr decapsulate(
         const json_t* priv, const std::string& ct);
 
+    // Fails with a clear diagnostic when jose was built without
+    // ML-KEM support: the KEM entry points are exported
+    // unconditionally, so a jose without the implementation cannot
+    // be detected at build time.
+    static void requireKemSupport();
+
     static std::string thumbprint(
         const json_t* key, const std::string& alg = "S256");
     static bool thumbprintMatch(

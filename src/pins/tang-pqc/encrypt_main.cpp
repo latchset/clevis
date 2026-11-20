@@ -441,6 +441,8 @@ int main(int argc, char* argv[])
     }
 
     try {
+        JoseWrapper::requireKemSupport();
+
         bool autoTrust = (argc >= 3
                           && std::strcmp(argv[2], "-y") == 0);
         auto config = parseConfig(argv[1], autoTrust);

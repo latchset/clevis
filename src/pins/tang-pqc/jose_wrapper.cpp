@@ -99,6 +99,21 @@ CleansedJsonPtr JoseWrapper::decapsulate(
     return makeCleansedJsonPtr(ss);
 }
 
+void JoseWrapper::requireKemSupport()
+{
+    // jose_jwk_kem_enc/jose_jwk_kem_dec are exported even when jose
+    // is built with its 'mlkem' option disabled, and only fail at
+    // runtime: a build-time probe cannot catch a swapped-in or
+    // cross-compiled jose without the implementation.
+    auto probe = makeJsonPtr(
+        json_pack("{s:s}", "alg", "ML-KEM-768"));
+    if (!probe || !jose_jwk_gen(nullptr, probe.get()))
+        throw PinError(
+            "jose lacks ML-KEM support: it was probably built with "
+            "the 'mlkem' option disabled. Install a jose with "
+            "ML-KEM support.");
+}
+
 std::string JoseWrapper::thumbprint(
     const json_t* key, const std::string& alg)
 {

@@ -49,7 +49,7 @@ libcurl = dependency('libcurl', required: get_option('tang-pqc'))
 has_kem_api = false
 if not get_option('tang-pqc').disabled() and jansson.found()
   cc = meson.get_compiler('c')
-  has_kem_api = cc.links('''
+  kem_probe = '''
 #include <jose/jose.h>
 int main(void) {
     json_auto_t *j = json_pack("{s:s}", "alg", "ML-KEM-768");
@@ -58,7 +58,26 @@ int main(void) {
     json_auto_t *enc = jose_jwk_kem_enc(NULL, j);
     return enc ? 0 : 1;
 }
-''', dependencies: [jose, jansson], name: 'ML-KEM KEM API support in jose')
+'''
+  # jose exports jose_jwk_kem_enc/jose_jwk_kem_dec unconditionally:
+  # the ML-KEM implementation is compiled only when jose's own
+  # 'mlkem' option is enabled, and the entry points fail at runtime
+  # when it is disabled. A link-only probe reports support against
+  # such a jose, the pin would be built, and every bind would fail
+  # at runtime inside jose. Run the probe when possible (tang did
+  # the same in its 5b23287), and fall back to linking for cross
+  # builds, where the probe binary cannot be executed.
+  if meson.can_run_host_binaries()
+    has_kem_api = cc.run(kem_probe,
+      dependencies: [jose, jansson],
+      name: 'ML-KEM KEM API support in jose',
+    ).returncode() == 0
+  else
+    has_kem_api = cc.links(kem_probe,
+      dependencies: [jose, jansson],
+      name: 'ML-KEM KEM API support in jose (link-only, cross build)',
+    )
+  endif
 endif
 
 have_cpp = false

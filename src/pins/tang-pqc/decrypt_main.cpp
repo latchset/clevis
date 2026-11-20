@@ -408,6 +408,8 @@ int main(int argc, char* argv[])
     }
 
     try {
+        JoseWrapper::requireKemSupport();
+
         auto compactJwe = readCompactJwe();
         auto jwe = JoseWrapper::jweFromCompact(compactJwe);
 

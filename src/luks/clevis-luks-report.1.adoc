@@ -14,7 +14,7 @@ clevis-luks-report - Reports whether a pin bound to a LUKS1 or LUKS2 volume has 
 == OVERVIEW
 
 The *clevis luks report* command checks a given slot of a LUKS device and reports whether the pin bound to it
--- if any -- has been rotated.
+-- if any -- has been rotated. This command currently supports the _tang_ and _tang-pqc_ pins.
 
 == OPTIONS
 
@@ -38,4 +38,5 @@ The *clevis luks report* command checks a given slot of a LUKS device and report
 
 == SEE ALSO
 
-link:clevis-luks-regen.1.adoc[*clevis-luks-regen*(1)]
+link:clevis-luks-regen.1.adoc[*clevis-luks-regen*(1)],
+link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)]

@@ -1,0 +1,122 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies that `clevis luks regen` preserves the (m)TLS configuration
+# of a LUKS2 device bound with the hybrid (ECMR + ML-KEM) tang-pqc pin
+# over mutual TLS: `clevis luks list` must reprint cacert/cert/key so
+# that regen can feed them back, and the regenerated binding must
+# still decrypt through the client-certificate-required server.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+KEM_ALG="ML-KEM-768"
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+tang_pqc_sanity_check
+tang_mtls_sanity_check
+
+tang_generate_certs "${TMP}"
+tang_run_mtls "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" "${TMP}/ca.crt" "${TMP}/client.crt" \
+    "${TMP}/client.key" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+url="https://localhost:${port}"
+cacert="${TMP}/ca.crt"
+cert="${TMP}/client.crt"
+key="${TMP}/client.key"
+signing_key_thumbprint="$(jose jwk thp -i "${TMP}/db/sig.jwk")"
+
+bind_hybrid_mtls_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","thp":"%s","cacert":"%s","cert":"%s","key":"%s"}' \
+          "${url}" "${signing_key_thumbprint}" "${cacert}" "${cert}" "${key}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Bind with tang-pqc over mTLS should have succeeded."
+    fi
+}
+
+remove_fallback_passphrase() {
+    if ! cryptsetup luksRemoveKey --batch-mode "${DEV}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Error removing the default password from ${DEV}."
+    fi
+}
+
+expect_hybrid_mtls_binding_listed() {
+    # `clevis luks list` reconstructs the rebinding configuration, and
+    # it must include the trust pin and the (m)TLS fields: they are
+    # what regen feeds back to clevis encrypt tang-pqc.
+    local expected listing
+    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"thp\":\"%s\",\"alg\":\"%s\",\"cacert\":\"%s\",\"cert\":\"%s\",\"key\":\"%s\"}'" \
+              "${SLOT}" "${url}" "${signing_key_thumbprint}" "${KEM_ALG}" "${cacert}" "${cert}" "${key}")
+    if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
+        error "${TEST}: Unable to list the bindings in ${DEV}."
+    fi
+    if [ "${listing}" != "${expected}" ]; then
+        error "${TEST}: Expected listing [${expected}], got [${listing}]."
+    fi
+}
+
+passphrase_bound_to_slot() {
+    clevis_luks_unlock_device_by_slot "${DEV}" "${SLOT}"
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_hybrid_mtls_pin
+remove_fallback_passphrase
+
+expect_hybrid_mtls_binding_listed
+
+passphrase_before_regen="$(passphrase_bound_to_slot)"
+
+if ! clevis luks regen -q -d "${DEV}" -s "${SLOT}"; then
+    error "${TEST}: clevis luks regen over mTLS failed."
+fi
+
+expect_hybrid_mtls_binding_listed
+
+passphrase_after_regen="$(passphrase_bound_to_slot)"
+if [ "${passphrase_before_regen}" = "${passphrase_after_regen}" ]; then
+    error "${TEST}: The passphrases should be different."
+fi

@@ -26,6 +26,7 @@ env.prepend('PATH',
   join_paths(meson.source_root(), 'src', 'luks'),
   join_paths(meson.source_root(), 'src', 'pins', 'sss'),
   join_paths(meson.source_root(), 'src', 'pins', 'tang'),
+  join_paths(meson.source_root(), 'src', 'pins', 'tang-pqc'),
   join_paths(meson.source_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.source_root(), 'src', 'pins', 'tpm2'),
   meson.current_source_dir(),
@@ -35,6 +36,8 @@ env.prepend('PATH',
   join_paths(meson.build_root(), 'src', 'pins', 'sss'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang'),
   join_paths(meson.build_root(), 'src', 'pins', 'tang', 'tests'),
+  join_paths(meson.build_root(), 'src', 'pins', 'tang-pqc'),
+  join_paths(meson.build_root(), 'src', 'pins', 'tang-pqc', 'tests'),
   join_paths(meson.build_root(), 'src', 'pins', 'tpm1'),
   join_paths(meson.build_root(), 'src', 'pins', 'tpm2'),
   separator: ':'
@@ -102,9 +105,15 @@ if luksmeta_data.get('OLD_CRYPTSETUP') == '0'
   test('assume-yes-luks2', find_program('assume-yes-luks2'), env: env, timeout: 90)
   test('regen-inplace-luks2', find_program('regen-inplace-luks2'), env: env, timeout: 120)
   test('regen-not-inplace-luks2', find_program('regen-not-inplace-luks2'), env: env, timeout: 120)
+  test('regen-inplace-tang-pqc-luks2', find_program('regen-inplace-tang-pqc-luks2'), env: env, timeout: 120)
+  test('regen-inplace-tang-pqc-offline-luks2', find_program('regen-inplace-tang-pqc-offline-luks2'), env: env, timeout: 120)
+  test('regen-inplace-tang-pqc-mtls-luks2', find_program('regen-inplace-tang-pqc-mtls-luks2'), env: env, timeout: 120)
   test('report-tang-luks2', find_program('report-tang-luks2'), env: env, timeout: 120)
+  test('report-tang-pqc-luks2', find_program('report-tang-pqc-luks2'), env: env, timeout: 210)
+  test('report-tang-pqc-mtls-luks2', find_program('report-tang-pqc-mtls-luks2'), env: env, timeout: 210)
   test('report-sss-luks2', find_program('report-sss-luks2'), env: env, timeout: 120)
   test('edit-tang-luks2', find_program('edit-tang-luks2'), env: env, timeout: 210)
+  test('edit-tang-pqc-luks2', find_program('edit-tang-pqc-luks2'), env: env, timeout: 210)
 
   test('backup-restore-luks2', find_program('backup-restore-luks2'), env: env, timeout: 120)
   test('pass-tang-luks2', find_program('pass-tang-luks2'), env: env, timeout: 60)

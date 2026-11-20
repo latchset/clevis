@@ -202,6 +202,37 @@ clevis_luks_print_pin_config() {
         pin=$(printf '{"url":"%s"}' "${url}")
         printf "tang '%s'" "${pin}"
         ;;
+    tang-pqc)
+        # Valid properties for the tang-pqc pin are the following:
+        # url, thp, alg, adv, adv_kem, and the optional (m)TLS options
+        # cacert, cert, key. Every rebinding-relevant field must be
+        # reprinted: clevis luks regen feeds this configuration back
+        # to clevis encrypt tang-pqc, and dropping a field silently
+        # downgrades the binding -- a lost 'thp' unpins the trusted
+        # signing key, lost 'adv'/'adv_kem' break offline regen, and
+        # lost (m)TLS options drop mutual TLS.
+        # The advertisements are reprinted only when both are stored:
+        # 'adv_kem' is stored for offline-provisioned bindings only,
+        # and a live-provisioned binding must regen against the
+        # server's current keys instead of the ones captured at
+        # binding time.
+        local key
+        local value
+        for key in 'url' 'thp' 'alg' 'cacert' 'cert' 'key'; do
+            if value=$(jose fmt -j- -g "${key}" -u- <<< "${content}" 2>/dev/null); then
+                pin=$(printf '%s,"%s":"%s"' "${pin}" "${key}" "${value}")
+            fi
+        done
+        local adv
+        local adv_kem
+        if adv="$(jose fmt -j- -g adv -o- <<< "${content}" 2>/dev/null)" \
+                && adv_kem="$(jose fmt -j- -g adv_kem -o- <<< "${content}" 2>/dev/null)"; then
+            pin=$(printf '%s,"adv":%s,"adv_kem":%s' "${pin}" "${adv}" "${adv_kem}")
+        fi
+        # Remove possible leading comma.
+        pin=${pin/#,/}
+        printf "tang-pqc '{%s}'" "${pin}"
+        ;;
     tpm1)
         pcr_ids="$(jose fmt -j- -g pcr_ids -u- <<< "${content}")"
         pin=$(printf '"pcr_ids":"%s"' "${pcr_ids}")
@@ -271,6 +302,7 @@ clevis_luks_process_sss_pin() {
     local sss_null
     local sss_pkcs11
     local sss_tang
+    local sss_tang_pqc
     local sss_tpm1
     local sss_tpm2
     local sss_trustee
@@ -298,6 +330,9 @@ clevis_luks_process_sss_pin() {
         tang)
             sss_tang="${sss_tang},${cfg}"
             ;;
+        tang-pqc)
+            sss_tang_pqc="${sss_tang_pqc},${cfg}"
+            ;;
         tpm1)
             sss_tpm1="${sss_tpm1},${cfg}"
             ;;
@@ -320,6 +355,10 @@ clevis_luks_process_sss_pin() {
 
     if [ -n "${sss_tang}" ]; then
         cfg="${cfg},"$(clevis_luks_join_sss_cfg "tang" "${sss_tang}")
+    fi
+
+    if [ -n "${sss_tang_pqc}" ]; then
+        cfg="${cfg},"$(clevis_luks_join_sss_cfg "tang-pqc" "${sss_tang_pqc}")
     fi
 
     if [ -n "${sss_tpm1}" ]; then

@@ -151,4 +151,5 @@ server and automatically migrate to the new format when the server supports
 
 == SEE ALSO
 
+link:clevis-encrypt-tang-pqc.1.adoc[*clevis-encrypt-tang-pqc*(1)],
 link:clevis-decrypt.1.adoc[*clevis-decrypt*(1)]

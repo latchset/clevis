@@ -1,6 +1,17 @@
 #!/bin/bash -ex
 
-COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof procps ${CC}"
+# Dynamically pick the C++ package based on $CC and $DISTRO
+if [[ "${CC}" == *"clang"* ]]; then
+    CXX_PKG="clang"
+elif [[ "${DISTRO}" == *"debian"* ]] || [[ "${DISTRO}" == *"ubuntu"* ]]; then
+    CXX_PKG="g++"
+else
+    # Fedora and CentOS
+    CXX_PKG="gcc-c++"
+fi
+
+COMMON="meson curl git make file bzip2 jose tang cryptsetup keyutils jq socat lsof procps ${CC} ${CXX_PKG}"
+
 
 case "${DISTRO}" in
 debian:*|ubuntu:*)
@@ -36,7 +47,7 @@ debian:*|ubuntu:*)
     dnf -y install --allowerasing systemd awk
     dnf -y --setopt=deltarpm=0 update
     dnf -y install dnf-utils jq socat cryptsetup keyutils cracklib-dicts lsof \
-        opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers
+        opensc pcsc-lite softhsm swtpm-tools tpm-tools trousers ${CXX_PKG}
     command -v dnf5 && dnf5 -y install dnf5-command\(builddep\) \
         || dnf -y install dnf-command\(builddep\)
     dnf -y builddep clevis

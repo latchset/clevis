@@ -1,6 +1,6 @@
 project('clevis', 'c', license: 'GPL3+',
   version: '25',
-  default_options: 'c_std=c99'
+  default_options: ['c_std=c99']
 )
 
 libexecdir = join_paths(get_option('prefix'), get_option('libexecdir'))
@@ -43,6 +43,82 @@ add_project_arguments(
 
 jansson = dependency('jansson', version: '>=2.10', required: false)
 jose = dependency('jose', version: '>=8')
+libcrypto = dependency('libcrypto', required: get_option('tang-pqc'))
+libcurl = dependency('libcurl', required: get_option('tang-pqc'))
+
+has_kem_api = false
+if not get_option('tang-pqc').disabled() and jansson.found()
+  cc = meson.get_compiler('c')
+  kem_probe = '''
+#include <jose/jose.h>
+int main(void) {
+    json_auto_t *j = json_pack("{s:s}", "alg", "ML-KEM-768");
+    if (!jose_jwk_gen(NULL, j))
+        return 1;
+    json_auto_t *enc = jose_jwk_kem_enc(NULL, j);
+    return enc ? 0 : 1;
+}
+'''
+  # jose exports jose_jwk_kem_enc/jose_jwk_kem_dec unconditionally:
+  # the ML-KEM implementation is compiled only when jose's own
+  # 'mlkem' option is enabled, and the entry points fail at runtime
+  # when it is disabled. A link-only probe reports support against
+  # such a jose, the pin would be built, and every bind would fail
+  # at runtime inside jose. Run the probe when possible (tang did
+  # the same in its 5b23287), and fall back to linking for cross
+  # builds, where the probe binary cannot be executed.
+  if meson.can_run_host_binaries()
+    has_kem_api = cc.run(kem_probe,
+      dependencies: [jose, jansson],
+      name: 'ML-KEM KEM API support in jose',
+    ).returncode() == 0
+  else
+    has_kem_api = cc.links(kem_probe,
+      dependencies: [jose, jansson],
+      name: 'ML-KEM KEM API support in jose (link-only, cross build)',
+    )
+  endif
+endif
+
+have_cpp = false
+if has_kem_api
+  have_cpp = add_languages('cpp', required: get_option('tang-pqc'))
+  if have_cpp
+    add_project_arguments(
+      '-Wall',
+      '-Wextra',
+      '-Werror',
+      '-Wchar-subscripts',
+      '-Wformat-security',
+      '-Wpointer-arith',
+      '-Wshadow',
+      '-Wsign-compare',
+      '-Wtype-limits',
+      '-Wunused-function',
+      '-Wno-missing-field-initializers',
+      '-Wno-unused-parameter',
+      '-Wno-unknown-pragmas',
+      '-D_DEFAULT_SOURCE',
+      '-D_POSIX_C_SOURCE=200112L',
+      '-DBINDIR="' + bindir + '"',
+      '-DCLEVIS_USER="' + get_option('user') + '"',
+      '-DCLEVIS_GROUP="' + get_option('group') + '"',
+      language: 'cpp'
+    )
+  endif
+elif get_option('tang-pqc').enabled()
+  error('tang-pqc pin is enabled but jose lacks ML-KEM KEM API support')
+endif
+
+# Whether the tang-pqc pin is actually buildable: C++ (which implies
+# the jose KEM API) plus its libraries. The pin and everything that
+# ships its binaries -- the dracut module -- must be gated on this,
+# not on the feature option alone: with the default 'auto' and a jose
+# lacking the KEM API, the module would be installed without the
+# binaries and fail silently at dracut(8) image build time.
+build_tang_pqc = have_cpp and jansson.found() and jose.found() \
+  and libcrypto.found() and libcurl.found()
+
 a2x = find_program('a2x', required: false)
 
 bins = []
@@ -65,3 +141,4 @@ else
 endif
 
 summary('TPM 1.2 pin', get_option('tpm1'), section: 'Features')
+summary('Tang PQC pin', get_option('tang-pqc'), section: 'Features')

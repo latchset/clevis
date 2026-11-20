@@ -1,0 +1,131 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies `clevis luks report` on a LUKS2 device bound with the hybrid
+# (ECMR + ML-KEM) tang-pqc pin over mutual TLS: report must fetch the
+# advertisements presenting the client certificate (a bare fetch fails
+# against an mTLS-only server), rotating the server keys must be
+# reported, and report -r must regenerate the binding back to health.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+
+tang_pqc_sanity_check
+tang_mtls_sanity_check
+
+tang_generate_certs "${TMP}"
+tang_run_mtls "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" "${TMP}/ca.crt" "${TMP}/client.crt" \
+    "${TMP}/client.key" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+url="https://localhost:${port}"
+cacert="${TMP}/ca.crt"
+cert="${TMP}/client.crt"
+key="${TMP}/client.key"
+signing_key_thumbprint="$(jose jwk thp -i "${TMP}/db/sig.jwk")"
+
+bind_hybrid_mtls_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","thp":"%s","cacert":"%s","cert":"%s","key":"%s"}' \
+          "${url}" "${signing_key_thumbprint}" "${cacert}" "${cert}" "${key}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Bind with tang-pqc over mTLS should have succeeded."
+    fi
+}
+
+kid_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og kid -u-
+}
+
+kem_kid_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og kem_kid -u-
+}
+
+report_quietly() {
+    clevis luks report -q -d "${DEV}" -s "${SLOT}"
+}
+
+expect_report_clean() {
+    if ! report_quietly; then
+        error "${TEST}: Report should have succeeded; no keys were rotated."
+    fi
+}
+
+expect_report_lists_rotation_of() {
+    local expected_kid="${1}"
+    local output
+    if output="$(report_quietly 2>/dev/null)"; then
+        error "${TEST}: Report should have indicated keys were rotated."
+    fi
+    if ! grep -q "${expected_kid}" <<< "${output}"; then
+        error "${TEST}: Report should have listed ${expected_kid}."
+    fi
+}
+
+regenerate_binding_through_report() {
+    if ! clevis luks report -q -r -d "${DEV}" -s "${SLOT}"; then
+        error "${TEST}: Report with regen should have succeeded."
+    fi
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_hybrid_mtls_pin
+
+# A healthy binding reports no rotation; this requires fetching /adv
+# and /adv-kem with the client certificate.
+expect_report_clean
+
+# Rotating every server key reports both the ECMR key and the KEM key.
+kid="$(kid_of_binding)"
+kem_kid="$(kem_kid_of_binding)"
+tang_new_keys "${TMP}" "rotate-keys"
+expect_report_lists_rotation_of "${kid}"
+expect_report_lists_rotation_of "${kem_kid}"
+
+# Regenerating through the report restores a healthy binding; this
+# also exercises regen preserving the (m)TLS configuration.
+regenerate_binding_through_report
+expect_report_clean

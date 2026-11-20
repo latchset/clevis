@@ -1,0 +1,184 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies `clevis luks edit` on a LUKS2 device bound with the hybrid
+# (ECMR + ML-KEM) tang-pqc pin: no-op and malformed configurations are
+# refused, switching the KEM variant rebinds to the corresponding
+# server key, moving to another server works, and a failed edit leaves
+# the current binding intact.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+KEM_ALG_DEFAULT="ML-KEM-768"
+KEM_ALG_STRONGER="ML-KEM-1024"
+
+function on_exit() {
+    local d
+    for d in "${TMP}" "${TMP2}"; do
+        [ ! -d "${d}" ] && continue
+        tang_stop "${d}"
+        rm -rf "${d}"
+    done
+}
+
+trap 'on_exit' EXIT
+
+TMP="$(mktemp -d)"
+TMP2=""
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+binding_url="http://localhost:${port}"
+signing_key_thumbprint="$(jose jwk thp -i "${TMP}/db/sig.jwk")"
+
+bind_hybrid_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","thp":"%s"}' \
+          "${binding_url}" "${signing_key_thumbprint}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Bind with tang-pqc should have succeeded."
+    fi
+}
+
+expect_edit_succeeds() {
+    local cfg="${1}"
+    if ! clevis luks edit -d "${DEV}" -s "${SLOT}" -c "${cfg}"; then
+        error "${TEST}: Editing with config [${cfg}] should have succeeded."
+    fi
+}
+
+expect_edit_fails() {
+    local cfg="${1}"
+    if clevis luks edit -d "${DEV}" -s "${SLOT}" -c "${cfg}"; then
+        error "${TEST}: Editing with config [${cfg}] should have failed."
+    fi
+}
+
+expect_binding_decrypts() {
+    if ! clevis_luks_unlock_device_by_slot "${DEV}" "${SLOT}" >/dev/null; then
+        error "${TEST}: The binding in ${DEV}:${SLOT} should decrypt."
+    fi
+}
+
+kem_alg_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og clevis -g tang-pqc -g alg -u-
+}
+
+kem_kid_of_binding() {
+    clevis_luks_decode_jwe "$(clevis_luks_read_slot "${DEV}" "${SLOT}")" \
+        | jose fmt -j- -Og kem_kid -u-
+}
+
+thumbprint_of_server_kem_key() {
+    local wanted_alg="${1}"
+    local f alg
+    for f in "${TMP}"/db/*.jwk; do
+        alg="$(jose fmt -j "${f}" -Og alg -u- 2>/dev/null)" || continue
+        if [ "${alg}" = "${wanted_alg}" ]; then
+            jose jwk thp -i "${f}" -a S256
+            return 0
+        fi
+    done
+    return 1
+}
+
+expect_kem_alg_of_binding() {
+    local wanted_alg="${1}"
+    local alg
+    alg="$(kem_alg_of_binding)"
+    if [ "${alg}" != "${wanted_alg}" ]; then
+        error "${TEST}: Binding alg should be ${wanted_alg}, got ${alg}."
+    fi
+}
+
+expect_kem_kid_matches_server_key() {
+    local wanted_alg="${1}"
+    local kid
+    kid="$(kem_kid_of_binding)"
+    if [ "${kid}" != "$(thumbprint_of_server_kem_key "${wanted_alg}")" ]; then
+        error "${TEST}: Binding kem_kid should be the ${wanted_alg} key."
+    fi
+}
+
+expect_listing() {
+    local url="${1}"
+    local alg="${2}"
+    local expected listing
+    expected=$(printf "%s: tang-pqc '{\"url\":\"%s\",\"alg\":\"%s\"}'" \
+              "${SLOT}" "${url}" "${alg}")
+    if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
+        error "${TEST}: Unable to list the bindings in ${DEV}."
+    fi
+    if [ "${listing}" != "${expected}" ]; then
+        error "${TEST}: Expected listing [${expected}], got [${listing}]."
+    fi
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_hybrid_pin
+
+# Editing with the same (reconstructed) configuration must be refused.
+# The reconstructed configuration includes the stored trust pin, so
+# the no-op must carry it too.
+expect_edit_fails "$(printf '{"url":"%s","thp":"%s","alg":"%s"}' \
+    "${binding_url}" "${signing_key_thumbprint}" "${KEM_ALG_DEFAULT}")"
+
+# A malformed configuration must be refused.
+expect_edit_fails "$(printf '{"url&:"%s"}' "${binding_url}")"
+
+# Switching the KEM variant rebinds to the corresponding server key.
+expect_edit_succeeds "$(printf '{"url":"%s","alg":"%s"}' \
+    "${binding_url}" "${KEM_ALG_STRONGER}")"
+expect_listing "${binding_url}" "${KEM_ALG_STRONGER}"
+expect_kem_alg_of_binding "${KEM_ALG_STRONGER}"
+expect_kem_kid_matches_server_key "${KEM_ALG_STRONGER}"
+expect_binding_decrypts
+
+# Moving the binding to another tang instance.
+TMP2="$(mktemp -d)"
+tang_run "${TMP2}" sig exc
+second_binding_url="http://localhost:$(tang_get_port "${TMP2}")"
+expect_edit_succeeds "$(printf '{"url":"%s","alg":"%s"}' \
+    "${second_binding_url}" "${KEM_ALG_DEFAULT}")"
+expect_listing "${second_binding_url}" "${KEM_ALG_DEFAULT}"
+expect_binding_decrypts
+
+# A failed edit must leave the current binding intact.
+expect_edit_fails '{"url":"localhost:1","alg":"ML-KEM-768"}'
+expect_binding_decrypts

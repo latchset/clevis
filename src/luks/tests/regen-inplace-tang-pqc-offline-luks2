@@ -1,0 +1,155 @@
+#!/bin/bash -x
+# vim: set ts=8 shiftwidth=4 softtabstop=4 expandtab smarttab colorcolumn=80:
+#
+# Copyright (c) 2026 Red Hat, Inc.
+# Author: Sergio Arroutbi <sarroutb@redhat.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Verifies the offline round trip of a LUKS2 device bound with the
+# hybrid (ECMR + ML-KEM) tang-pqc pin: the advertisements pinned at
+# binding time are stored in the JWE and reprinted by `clevis luks
+# list`, so the rebinding configuration -- what clevis luks regen
+# feeds back to clevis encrypt tang-pqc -- must bind fully offline
+# (with the Tang server down), and the full `clevis luks regen` must
+# keep working when the server is reachable.
+#
+
+TEST="${0}"
+. luks-common-test-functions
+. clevis-luks-common-functions
+
+# The tang-pqc test harness only exists when the pin was built; skip
+# cleanly instead of running with missing helper functions.
+if ! . tang-pqc-common-test-functions 2>/dev/null; then
+    skip_test "tang-pqc pin is not built; test skipped"
+fi
+
+KEM_ALG="ML-KEM-768"
+
+function on_exit() {
+    [ -d "${TMP}" ] || return 0
+    tang_stop "${TMP}"
+    rm -rf "${TMP}"
+}
+
+trap 'on_exit' EXIT
+
+TMP=$(mktemp -d)
+
+tang_pqc_sanity_check
+
+tang_run "${TMP}" sig exc
+port=$(tang_get_port "${TMP}")
+
+tang_pqc_check_version "${port}" \
+    || skip_test "Tang server does not support hybrid PQC"
+
+url="http://localhost:${port}"
+adv="${TMP}/adv.jws"
+adv_kem="${TMP}/adv-kem.jws"
+
+# Save advertisements for offline provisioning.
+tang_get_adv "${port}" "${adv}"
+tang_pqc_get_adv_kem "${port}" "${adv_kem}" "${KEM_ALG}"
+
+bind_offline_pin() {
+    local cfg
+    cfg=$(printf '{"url":"%s","adv":"%s","adv_kem":"%s","alg":"%s"}' \
+          "${url}" "${adv}" "${adv_kem}" "${KEM_ALG}")
+    if ! clevis luks bind -f -d "${DEV}" tang-pqc "${cfg}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Offline bind with tang-pqc should have succeeded."
+    fi
+}
+
+remove_fallback_passphrase() {
+    if ! cryptsetup luksRemoveKey --batch-mode "${DEV}" \
+            <<< "${DEFAULT_PASS}"; then
+        error "${TEST}: Error removing the default password from ${DEV}."
+    fi
+}
+
+expect_offline_binding_listed() {
+    # The pinned advertisements must be reprinted in the rebinding
+    # configuration so that regen can rebind without network access.
+    local listing
+    if ! listing="$(clevis luks list -d "${DEV}" -s "${SLOT}")"; then
+        error "${TEST}: Unable to list the bindings in ${DEV}."
+    fi
+    grep -q "\"url\":\"${url}\"" <<< "${listing}" \
+        || error "${TEST}: Listing is missing the url: [${listing}]."
+    grep -q "\"alg\":\"${KEM_ALG}\"" <<< "${listing}" \
+        || error "${TEST}: Listing is missing the alg: [${listing}]."
+    grep -q '"adv":{"keys":' <<< "${listing}" \
+        || error "${TEST}: Listing is missing the pinned adv: [${listing}]."
+    grep -q '"adv_kem":{"keys":' <<< "${listing}" \
+        || error "${TEST}: Listing is missing the pinned adv_kem: [${listing}]."
+}
+
+restart_tang() {
+    # Restart the server on the same port and the same key database:
+    # tang_run would regenerate the keys and invalidate the binding.
+    "${SOCAT}" TCP4-LISTEN:${port},fork,reuseaddr \
+               exec:"${TANGD} ${TMP}/db" &
+    local pid=$!
+    echo "${pid}" > "${TMP}/tang.pid"
+    echo "${port}" > "${TMP}/tang.port"
+    process_wait_until_port_ready "${pid}" "tang"
+}
+
+passphrase_bound_to_slot() {
+    clevis_luks_unlock_device_by_slot "${DEV}" "${SLOT}"
+}
+
+DEV="${TMP}/luks2-device"
+SLOT=1
+
+new_device "luks2" "${DEV}"
+bind_offline_pin
+remove_fallback_passphrase
+
+expect_offline_binding_listed
+
+passphrase_before_regen="$(passphrase_bound_to_slot)"
+
+# Extract the rebinding configuration exactly the way clevis luks
+# regen does, and require it to bind fully offline: with the server
+# down, only the reprinted advertisements can answer the binding.
+pin_cfg="$(clevis luks list -d "${DEV}" -s "${SLOT}")"
+rebind_cfg="$(clevis_luks_extract_pin_config "${pin_cfg}")"
+tang_stop "${TMP}"
+if ! enc="$(echo -n "offline regen" \
+              | clevis encrypt tang-pqc "${rebind_cfg}")"; then
+    error "${TEST}: Reprinted config should bind with the server down."
+fi
+
+# The offline-rebound JWE must decrypt once the server is back.
+restart_tang
+dec="$(echo -n "$enc" | clevis decrypt)" \
+    || error "${TEST}: Offline-rebound JWE should decrypt."
+test "$dec" == "offline regen"
+
+# The full luks regen must keep working when the server is reachable:
+# the old binding is decrypted to recover the passphrase, and the new
+# binding is created from the reprinted configuration.
+if ! clevis luks regen -q -d "${DEV}" -s "${SLOT}"; then
+    error "${TEST}: clevis luks regen failed."
+fi
+expect_offline_binding_listed
+
+passphrase_after_regen="$(passphrase_bound_to_slot)"
+if [ "${passphrase_before_regen}" = "${passphrase_after_regen}" ]; then
+    error "${TEST}: The passphrases should be different."
+fi
